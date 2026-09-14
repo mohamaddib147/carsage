@@ -23,15 +23,21 @@ Format: `path/to/file — what this file does`
 - `frontend/package.json` — frontend dependencies and npm scripts (dev, build, test, lint).
 - `frontend/vite.config.js` — Vite build config and Vitest test config.
 - `frontend/.env.example` — required frontend environment variables (Supabase, API base URL).
-- `frontend/src/main.jsx` — React entry point, mounts `<App />` inside a `BrowserRouter`.
-- `frontend/src/App.jsx` — root component, defines the route table for all 7 screens.
-- `frontend/src/App.test.jsx` — routing tests: each screen renders at its route, plus the 404 edge case.
+- `frontend/src/main.jsx` — React entry point, mounts `<App />` inside a `BrowserRouter` and `AuthProvider`.
+- `frontend/src/App.jsx` — root component, defines the route table for all 7 screens; Dashboard, Car Profile, Trip Planner, and AI Advisor are wrapped in `ProtectedRoute`.
+- `frontend/src/App.test.jsx` — routing tests: public screens render at their route, protected screens redirect logged-out users to `/login`, plus the 404 edge case.
 - `frontend/src/index.css` — global design tokens (British Racing Green palette) and base styles.
 - `frontend/src/test/setup.js` — Vitest setup, wires up jest-dom matchers.
+- `frontend/src/lib/supabaseClient.js` — configures the shared Supabase client from `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`.
+- `frontend/src/auth/AuthContext.jsx` — React context holding the Supabase auth session (re-hydrated on mount so login persists across refresh) and exposing `signUp`/`signIn`/`signOut`.
+- `frontend/src/auth/AuthContext.test.jsx` — tests session re-hydration on mount (refresh persistence) and the logged-out edge case.
 - `frontend/src/components/PageShell.jsx` — shared placeholder layout (title + description) reused by every screen.
-- `frontend/src/components/SiteNav.jsx` — top nav bar linking to all 7 screens, for manual dev verification.
+- `frontend/src/components/SiteNav.jsx` — top nav bar linking to all 7 screens; shows a Log Out button when a user is signed in.
+- `frontend/src/components/ProtectedRoute.jsx` — route guard that redirects logged-out users to `/login`.
+- `frontend/src/components/ProtectedRoute.test.jsx` — tests the redirect (logged-out) and pass-through (logged-in) cases.
 - `frontend/src/pages/LandingPage.jsx` — Landing screen placeholder.
-- `frontend/src/pages/AuthPage.jsx` — combined Sign Up / Log In screen placeholder.
+- `frontend/src/pages/AuthPage.jsx` — combined Sign Up / Log In screen wired to Supabase Auth: client-side empty-field validation, calls `signUp`/`signIn`, shows a clear error on failure, redirects to the dashboard (or the originally-requested page) on success.
+- `frontend/src/pages/AuthPage.test.jsx` — tests valid login/signup, invalid password, duplicate email signup, and empty-field validation, with the Supabase client mocked.
 - `frontend/src/pages/DashboardPage.jsx` — Dashboard/Home screen placeholder.
 - `frontend/src/pages/CarOnboardingPage.jsx` — Car Onboarding screen placeholder (basic feature).
 - `frontend/src/pages/CarProfilePage.jsx` — Car Profile screen placeholder (basic feature), reads `carId` from the route.

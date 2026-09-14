@@ -1,24 +1,47 @@
-// Tests that routing renders the correct placeholder screen for each of
-// the 7 CarSage screens, plus the unknown-route (404) edge case.
+// Tests that routing renders the correct placeholder screen for each
+// public CarSage screen, redirects logged-out users away from protected
+// screens, and renders the 404 fallback for unknown routes.
 
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App.jsx";
+import { AuthProvider } from "./auth/AuthContext.jsx";
+import { supabase } from "./lib/supabaseClient.js";
+
+vi.mock("./lib/supabaseClient.js", () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn(),
+      onAuthStateChange: vi.fn(() => ({
+        data: { subscription: { unsubscribe: vi.fn() } },
+      })),
+      signOut: vi.fn(),
+    },
+  },
+}));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+});
 
 /**
- * Renders <App /> with the router's initial history set to the given path.
+ * Renders <App /> (wrapped with AuthProvider, logged-out by default) with
+ * the router's initial history set to the given path.
  * @param {string} path
  */
 function renderAtPath(path) {
   render(
     <MemoryRouter initialEntries={[path]}>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </MemoryRouter>,
   );
 }
 
-describe("App routing", () => {
+describe("App routing — public screens", () => {
   it("renders the Landing screen at /", () => {
     renderAtPath("/");
     expect(
@@ -38,38 +61,10 @@ describe("App routing", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the Dashboard screen at /dashboard", () => {
-    renderAtPath("/dashboard");
-    expect(
-      screen.getByRole("heading", { name: "Dashboard" }),
-    ).toBeInTheDocument();
-  });
-
   it("renders the Car Onboarding screen at /cars/new", () => {
     renderAtPath("/cars/new");
     expect(
       screen.getByRole("heading", { name: "Add a Car" }),
-    ).toBeInTheDocument();
-  });
-
-  it("renders the Car Profile screen with the id from the URL (edge case: route param)", () => {
-    renderAtPath("/cars/abc-123");
-    expect(
-      screen.getByText('View and edit specs for car "abc-123".'),
-    ).toBeInTheDocument();
-  });
-
-  it("renders the Trip Planner screen at /trip-planner", () => {
-    renderAtPath("/trip-planner");
-    expect(
-      screen.getByRole("heading", { name: "Trip Planner" }),
-    ).toBeInTheDocument();
-  });
-
-  it("renders the AI Advisor screen at /advisor", () => {
-    renderAtPath("/advisor");
-    expect(
-      screen.getByRole("heading", { name: "AI Advisor" }),
     ).toBeInTheDocument();
   });
 
@@ -84,5 +79,19 @@ describe("App routing", () => {
     renderAtPath("/");
     const nav = screen.getByRole("navigation");
     expect(nav.querySelectorAll("a")).toHaveLength(7);
+  });
+});
+
+describe("App routing — protected screens redirect logged-out users", () => {
+  it.each([
+    ["/dashboard"],
+    ["/cars/abc-123"],
+    ["/trip-planner"],
+    ["/advisor"],
+  ])("redirects %s to the Log In screen", async (path) => {
+    renderAtPath(path);
+    expect(
+      await screen.findByRole("heading", { name: "Log In" }),
+    ).toBeInTheDocument();
   });
 });

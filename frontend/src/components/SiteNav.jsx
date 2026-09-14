@@ -1,8 +1,9 @@
 // Top navigation bar linking to every screen. Temporary aid for manually
-// verifying routing during development; will be replaced by real
-// auth-aware navigation once the Dashboard and auth flows are built.
+// verifying routing during development; also shows Log In/Sign Up vs Log
+// Out depending on auth state.
 
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext.jsx";
 
 const NAV_LINKS = [
   { to: "/", label: "Landing" },
@@ -15,10 +16,19 @@ const NAV_LINKS = [
 ];
 
 /**
- * Renders the top-level navigation bar used to move between placeholder screens.
+ * Renders the top-level navigation bar used to move between placeholder
+ * screens, plus a Log Out action when a user is logged in.
  * @returns {JSX.Element}
  */
 function SiteNav() {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleLogOut() {
+    await signOut();
+    navigate("/login");
+  }
+
   return (
     <nav className="site-nav">
       <span className="site-nav__brand">CarSage</span>
@@ -31,6 +41,15 @@ function SiteNav() {
           </li>
         ))}
       </ul>
+      {user && (
+        <button
+          type="button"
+          className="site-nav__logout"
+          onClick={handleLogOut}
+        >
+          Log Out ({user.email})
+        </button>
+      )}
     </nav>
   );
 }

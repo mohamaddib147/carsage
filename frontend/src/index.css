@@ -118,3 +118,22 @@ button {
 .page-shell__description {
   max-width: 60ch;
 }
+
+.site-nav__logout {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: var(--radius-base);
+  color: #ffffff;
+  padding: calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 1.5);
+}
+
+.auth-form__error {
+  color: #b3261e;
+  font-weight: 600;
+}
+
+.auth-form__info {
+  color: var(--color-primary);
+  font-weight: 600;
+}

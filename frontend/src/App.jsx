@@ -2,6 +2,7 @@
 
 import { Route, Routes } from "react-router-dom";
 import SiteNav from "./components/SiteNav.jsx";
+import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import LandingPage from "./pages/LandingPage.jsx";
 import AuthPage from "./pages/AuthPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
@@ -24,11 +25,39 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<AuthPage />} />
           <Route path="/signup" element={<AuthPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/cars/new" element={<CarOnboardingPage />} />
-          <Route path="/cars/:carId" element={<CarProfilePage />} />
-          <Route path="/trip-planner" element={<TripPlannerPage />} />
-          <Route path="/advisor" element={<AIAdvisorPage />} />
+          <Route
+            path="/cars/:carId"
+            element={
+              <ProtectedRoute>
+                <CarProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/trip-planner"
+            element={
+              <ProtectedRoute>
+                <TripPlannerPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/advisor"
+            element={
+              <ProtectedRoute>
+                <AIAdvisorPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>
