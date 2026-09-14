@@ -10,7 +10,7 @@ const NAV_LINKS = [
   { to: "/login", label: "Sign Up / Log In" },
   { to: "/dashboard", label: "Dashboard" },
   { to: "/cars/new", label: "Car Onboarding" },
-  { to: "/cars/demo-car-id", label: "Car Profile" },
+  { to: "/cars/mine", label: "Car Profile" },
   { to: "/trip-planner", label: "Trip Planner" },
   { to: "/advisor", label: "AI Advisor" },
 ];

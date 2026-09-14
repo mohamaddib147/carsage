@@ -177,3 +177,26 @@ select:focus {
 .form-field label {
   font-weight: 600;
 }
+
+.car-profile__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 4);
+  max-width: 560px;
+  margin: calc(var(--spacing-unit) * 3) 0;
+}
+
+.car-profile__field dt {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.car-profile__field dd {
+  margin: 0;
+}
+
+.car-profile__actions {
+  display: flex;
+  gap: calc(var(--spacing-unit) * 2);
+  align-items: center;
+}

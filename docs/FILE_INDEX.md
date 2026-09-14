@@ -41,7 +41,8 @@ Format: `path/to/file — what this file does`
 - `frontend/src/pages/DashboardPage.jsx` — Dashboard/Home screen placeholder.
 - `frontend/src/pages/CarOnboardingPage.jsx` — Add Your Car screen (basic feature): manual entry form (Make, Model, Year, Engine Type, Fuel Type, License Plate, VIN), client-side validation on the required fields, inserts a new `cars` row scoped to the logged-in user, disabled "Scan Registration Card" placeholder.
 - `frontend/src/pages/CarOnboardingPage.test.jsx` — tests a valid submit (correct `user_id` on the inserted row, navigates to the new car's profile), missing required fields, an out-of-range year, and the insert-error case.
-- `frontend/src/pages/CarProfilePage.jsx` — Car Profile screen placeholder (basic feature), reads `carId` from the route.
+- `frontend/src/pages/CarProfilePage.jsx` — Car Profile screen (basic feature): displays all `cars` fields for the logged-in user's car (via `/cars/mine`, or a specific `/cars/:carId`), Edit mode updates any field via `cars` update, empty state (no car yet) links to Car Onboarding. Relies on RLS to scope view/edit to the owner.
+- `frontend/src/pages/CarProfilePage.test.jsx` — tests viewing all fields, the empty state, editing/saving a field (correct `id` scoping), edit validation, update failure, Cancel discarding changes, and that a car id the user doesn't own renders the same safe not-found state.
 - `frontend/src/pages/TripPlannerPage.jsx` — Trip Planner screen placeholder (core feature).
 - `frontend/src/pages/AIAdvisorPage.jsx` — AI Advisor screen placeholder (core feature).
 - `frontend/src/pages/NotFoundPage.jsx` — 404 fallback for unmatched routes.

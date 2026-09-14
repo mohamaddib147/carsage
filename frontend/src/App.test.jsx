@@ -79,6 +79,7 @@ describe("App routing — protected screens redirect logged-out users", () => {
   it.each([
     ["/dashboard"],
     ["/cars/new"],
+    ["/cars/mine"],
     ["/cars/abc-123"],
     ["/trip-planner"],
     ["/advisor"],

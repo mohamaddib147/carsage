@@ -42,6 +42,14 @@ function App() {
             }
           />
           <Route
+            path="/cars/mine"
+            element={
+              <ProtectedRoute>
+                <CarProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/cars/:carId"
             element={
               <ProtectedRoute>
