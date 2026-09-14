@@ -24,7 +24,7 @@ Format: `path/to/file — what this file does`
 - `frontend/vite.config.js` — Vite build config and Vitest test config.
 - `frontend/.env.example` — required frontend environment variables (Supabase, API base URL).
 - `frontend/src/main.jsx` — React entry point, mounts `<App />` inside a `BrowserRouter` and `AuthProvider`.
-- `frontend/src/App.jsx` — root component, defines the route table for all 7 screens; Dashboard, Car Profile, Trip Planner, and AI Advisor are wrapped in `ProtectedRoute`.
+- `frontend/src/App.jsx` — root component, defines the route table for all 7 screens; Dashboard, Car Onboarding, Car Profile, Trip Planner, and AI Advisor are wrapped in `ProtectedRoute`.
 - `frontend/src/App.test.jsx` — routing tests: public screens render at their route, protected screens redirect logged-out users to `/login`, plus the 404 edge case.
 - `frontend/src/index.css` — global design tokens (British Racing Green palette) and base styles.
 - `frontend/src/test/setup.js` — Vitest setup, wires up jest-dom matchers.
@@ -39,7 +39,8 @@ Format: `path/to/file — what this file does`
 - `frontend/src/pages/AuthPage.jsx` — combined Sign Up / Log In screen wired to Supabase Auth: client-side empty-field validation, calls `signUp`/`signIn`, shows a clear error on failure, redirects to the dashboard (or the originally-requested page) on success.
 - `frontend/src/pages/AuthPage.test.jsx` — tests valid login/signup, invalid password, duplicate email signup, and empty-field validation, with the Supabase client mocked.
 - `frontend/src/pages/DashboardPage.jsx` — Dashboard/Home screen placeholder.
-- `frontend/src/pages/CarOnboardingPage.jsx` — Car Onboarding screen placeholder (basic feature).
+- `frontend/src/pages/CarOnboardingPage.jsx` — Add Your Car screen (basic feature): manual entry form (Make, Model, Year, Engine Type, Fuel Type, License Plate, VIN), client-side validation on the required fields, inserts a new `cars` row scoped to the logged-in user, disabled "Scan Registration Card" placeholder.
+- `frontend/src/pages/CarOnboardingPage.test.jsx` — tests a valid submit (correct `user_id` on the inserted row, navigates to the new car's profile), missing required fields, an out-of-range year, and the insert-error case.
 - `frontend/src/pages/CarProfilePage.jsx` — Car Profile screen placeholder (basic feature), reads `carId` from the route.
 - `frontend/src/pages/TripPlannerPage.jsx` — Trip Planner screen placeholder (core feature).
 - `frontend/src/pages/AIAdvisorPage.jsx` — AI Advisor screen placeholder (core feature).

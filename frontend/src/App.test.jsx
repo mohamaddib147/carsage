@@ -61,13 +61,6 @@ describe("App routing — public screens", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the Car Onboarding screen at /cars/new", () => {
-    renderAtPath("/cars/new");
-    expect(
-      screen.getByRole("heading", { name: "Add a Car" }),
-    ).toBeInTheDocument();
-  });
-
   it("renders the Not Found screen for an unknown route (invalid input case)", () => {
     renderAtPath("/this-route-does-not-exist");
     expect(
@@ -85,6 +78,7 @@ describe("App routing — public screens", () => {
 describe("App routing — protected screens redirect logged-out users", () => {
   it.each([
     ["/dashboard"],
+    ["/cars/new"],
     ["/cars/abc-123"],
     ["/trip-planner"],
     ["/advisor"],

@@ -33,7 +33,14 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/cars/new" element={<CarOnboardingPage />} />
+          <Route
+            path="/cars/new"
+            element={
+              <ProtectedRoute>
+                <CarOnboardingPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/cars/:carId"
             element={
