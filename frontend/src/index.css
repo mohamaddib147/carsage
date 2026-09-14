@@ -200,3 +200,54 @@ select:focus {
   gap: calc(var(--spacing-unit) * 2);
   align-items: center;
 }
+
+.dashboard-section {
+  margin-top: calc(var(--spacing-unit) * 4);
+}
+
+.dashboard-car-list {
+  list-style: none;
+  margin: calc(var(--spacing-unit) * 2) 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 1);
+}
+
+.dashboard-car-list a {
+  display: inline-block;
+  padding: calc(var(--spacing-unit) * 1.5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  text-decoration: none;
+}
+
+.dashboard-modules {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: calc(var(--spacing-unit) * 3);
+  margin-top: calc(var(--spacing-unit) * 2);
+}
+
+.dashboard-module-card {
+  display: block;
+  padding: calc(var(--spacing-unit) * 3);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  text-decoration: none;
+  color: var(--color-text);
+}
+
+.dashboard-module-card:hover {
+  border-color: var(--color-primary);
+}
+
+.dashboard-module-card h3 {
+  margin-top: 0;
+}
+
+.dashboard-module-card p {
+  margin-bottom: 0;
+}

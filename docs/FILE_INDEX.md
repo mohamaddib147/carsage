@@ -38,7 +38,8 @@ Format: `path/to/file — what this file does`
 - `frontend/src/pages/LandingPage.jsx` — Landing screen placeholder.
 - `frontend/src/pages/AuthPage.jsx` — combined Sign Up / Log In screen wired to Supabase Auth: client-side empty-field validation, calls `signUp`/`signIn`, shows a clear error on failure, redirects to the dashboard (or the originally-requested page) on success.
 - `frontend/src/pages/AuthPage.test.jsx` — tests valid login/signup, invalid password, duplicate email signup, and empty-field validation, with the Supabase client mocked.
-- `frontend/src/pages/DashboardPage.jsx` — Dashboard/Home screen placeholder.
+- `frontend/src/pages/DashboardPage.jsx` — Dashboard/Home screen: shows the logged-in user's saved car(s) (or an empty state linking to Car Onboarding), an "Add Another Car" link, and two module cards linking to Trip Planner and AI Advisor.
+- `frontend/src/pages/DashboardPage.test.jsx` — tests the empty state, showing saved car(s), the Add Another Car link, a failed-load edge case falling back to the empty state, and the two module cards.
 - `frontend/src/pages/CarOnboardingPage.jsx` — Add Your Car screen (basic feature): manual entry form (Make, Model, Year, Engine Type, Fuel Type, License Plate, VIN), client-side validation on the required fields, inserts a new `cars` row scoped to the logged-in user, disabled "Scan Registration Card" placeholder.
 - `frontend/src/pages/CarOnboardingPage.test.jsx` — tests a valid submit (correct `user_id` on the inserted row, navigates to the new car's profile), missing required fields, an out-of-range year, and the insert-error case.
 - `frontend/src/pages/CarProfilePage.jsx` — Car Profile screen (basic feature): displays all `cars` fields for the logged-in user's car (via `/cars/mine`, or a specific `/cars/:carId`), Edit mode updates any field via `cars` update, empty state (no car yet) links to Car Onboarding. Relies on RLS to scope view/edit to the owner.
