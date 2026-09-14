@@ -47,4 +47,17 @@ Format: `path/to/file — what this file does`
 
 ## backend/
 
-*(nothing yet — added in CAR-10)*
+- `backend/README.md` — backend setup, run, test, and deployment reference.
+- `backend/requirements.txt` — pinned Python dependencies.
+- `backend/.env.example` — required backend environment variables (Supabase service key, API keys, CORS).
+- `backend/pyproject.toml` — pytest config (adds `backend/` to the Python path, sets the test dir).
+- `backend/conftest.py` — sets harmless default env vars so tests never need a real `.env` or real secrets.
+- `backend/Dockerfile` — container image for deploying the API to any Docker-based host.
+- `backend/.dockerignore` — excludes venv/tests/secrets from the built image.
+- `backend/app/main.py` — FastAPI app instance, CORS middleware (from `ALLOWED_ORIGINS`), route registration.
+- `backend/app/config.py` — loads and validates required env vars; fails fast with a clear error if a secret is missing.
+- `backend/app/supabase_client.py` — shared Supabase client using the service role key (server-side only, bypasses RLS).
+- `backend/app/routers/health.py` — `GET /health`, reports API status and DB reachability without leaking error detail.
+- `backend/tests/test_health.py` — tests the health endpoint's normal case (DB reachable) and the DB-unreachable edge case.
+- `backend/tests/test_main.py` — tests CORS allows the configured frontend origin and rejects an unlisted one.
+- `backend/tests/test_config.py` — tests `ALLOWED_ORIGINS` parsing (normal + empty) and that a missing required secret raises a clear error.
