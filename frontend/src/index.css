@@ -32,6 +32,9 @@ body {
   font-family: var(--font-family-base);
   background-color: var(--color-background);
   color: var(--color-text);
+  /* User-entered text (car specs, chat messages) can be arbitrarily long
+     with no spaces — wrap it instead of overflowing the layout. */
+  overflow-wrap: break-word;
 }
 
 h1,
@@ -193,6 +196,7 @@ select:focus {
 
 .car-profile__field dd {
   margin: 0;
+  overflow-wrap: break-word;
 }
 
 .car-profile__actions {
@@ -221,6 +225,7 @@ select:focus {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-base);
   text-decoration: none;
+  overflow-wrap: break-word;
 }
 
 .dashboard-modules {

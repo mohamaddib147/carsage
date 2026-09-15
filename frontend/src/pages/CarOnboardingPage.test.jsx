@@ -96,7 +96,7 @@ describe("CarOnboardingPage", () => {
     expect(supabase.from).not.toHaveBeenCalled();
   });
 
-  it("shows a validation error and does not submit for an out-of-range year (edge case)", async () => {
+  it("shows a validation error and does not submit for a too-old year (edge case)", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -107,6 +107,73 @@ describe("CarOnboardingPage", () => {
       await screen.findByText(/Enter a valid year between/),
     ).toBeInTheDocument();
     expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("shows a validation error and does not submit for a future year beyond next year (edge case)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const farFutureYear = String(new Date().getFullYear() + 10);
+    await fillRequiredFields(user, { year: farFutureYear });
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+    expect(
+      await screen.findByText(/Enter a valid year between/),
+    ).toBeInTheDocument();
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("does not accept non-numeric characters in the Year field (invalid input case)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const yearInput = screen.getByLabelText("Year *");
+    await user.type(yearInput, "abcd");
+
+    // The browser's number input itself rejects non-numeric keystrokes,
+    // so the field stays empty rather than accepting "abcd".
+    expect(yearInput).toHaveValue(null);
+  });
+
+  it("accepts and submits very long text in Make/Model unchanged (edge case)", async () => {
+    const user = userEvent.setup();
+    const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+    const select = vi.fn(() => ({ single }));
+    const insert = vi.fn(() => ({ select }));
+    supabase.from.mockReturnValue({ insert });
+
+    const longMake = "A".repeat(300);
+    const longModel = "B".repeat(300);
+
+    renderPage();
+    await user.type(screen.getByLabelText("Make *"), longMake);
+    await user.type(screen.getByLabelText("Model *"), longModel);
+    await user.type(screen.getByLabelText("Year *"), "2020");
+    await user.selectOptions(screen.getByLabelText("Fuel Type *"), "Gasoline");
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ make: longMake, model: longModel }),
+    );
+  });
+
+  it("accepts and submits special characters in VIN unchanged (edge case)", async () => {
+    const user = userEvent.setup();
+    const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+    const select = vi.fn(() => ({ single }));
+    const insert = vi.fn(() => ({ select }));
+    supabase.from.mockReturnValue({ insert });
+
+    const trickyVin = "<script>alert(1)</script>O'Brien\"; DROP TABLE cars;--";
+
+    renderPage();
+    await fillRequiredFields(user);
+    await user.type(screen.getByLabelText("VIN"), trickyVin);
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ vin: trickyVin }),
+    );
   });
 
   it("shows a clear error and does not navigate when the insert fails", async () => {

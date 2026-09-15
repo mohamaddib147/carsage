@@ -58,7 +58,7 @@ function mockCarsTable({ selectResult, updateResult }) {
 }
 
 function renderAt(path) {
-  render(
+  return render(
     <MemoryRouter initialEntries={[path]}>
       <AuthProvider>
         <Routes>
@@ -112,6 +112,20 @@ describe("CarProfilePage — viewing", () => {
     ).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "Add Your Car" });
     expect(link).toHaveAttribute("href", "/cars/new");
+  });
+
+  it("renders special characters in VIN as plain text, not as HTML (XSS edge case)", async () => {
+    const trickyVin = "<script>alert(1)</script>O'Brien\"; DROP TABLE cars;--";
+    mockCarsTable({
+      selectResult: { data: { ...SAMPLE_CAR, vin: trickyVin }, error: null },
+    });
+
+    const { container } = renderAt("/cars/mine");
+
+    expect(await screen.findByText(trickyVin)).toBeInTheDocument();
+    // React escapes text content by default; confirm no actual <script> tag
+    // was ever inserted into the rendered DOM.
+    expect(container.querySelector("script")).toBeNull();
   });
 
   it("shows the same safe not-found state for a car id this user can't see, instead of leaking or crashing (RLS edge case)", async () => {
