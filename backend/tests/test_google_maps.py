@@ -93,6 +93,89 @@ def test_raises_clear_error_for_an_unresolvable_address(monkeypatch):
         get_route_summary("Nowhere Land", "Also Nowhere")
 
 
+def test_raises_clear_error_when_there_is_no_drivable_route(monkeypatch):
+    # Distinct from an address that can't be geocoded at all (NOT_FOUND) —
+    # this is two valid, geocodable addresses with no route between them
+    # (e.g. separated by a body of water), which Google reports as
+    # ZERO_RESULTS on the element rather than the address itself.
+    payload = {
+        "status": "OK",
+        "rows": [{"elements": [{"status": "ZERO_RESULTS"}]}],
+    }
+    monkeypatch.setattr(
+        "app.services.google_maps.httpx.get",
+        lambda *args, **kwargs: _mock_response(payload),
+    )
+
+    with pytest.raises(GoogleMapsError, match="Could not find a route"):
+        get_route_summary("Beirut, Lebanon", "Nicosia, Cyprus")
+
+
+def test_handles_a_very_short_same_city_trip(monkeypatch):
+    payload = {
+        "status": "OK",
+        "rows": [
+            {
+                "elements": [
+                    {
+                        "status": "OK",
+                        "distance": {"text": "0.8 km", "value": 800},
+                        "duration": {"text": "3 mins", "value": 180},
+                        "duration_in_traffic": {"text": "4 mins", "value": 240},
+                    }
+                ]
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        "app.services.google_maps.httpx.get",
+        lambda *args, **kwargs: _mock_response(payload),
+    )
+
+    result = get_route_summary(
+        "Hamra Street, Beirut", "AUB Main Gate, Beirut"
+    )
+
+    assert result == {
+        "distance_km": 0.8,
+        "duration_min": 3,
+        "duration_in_traffic_min": 4,
+    }
+
+
+def test_handles_a_very_long_cross_country_trip(monkeypatch):
+    payload = {
+        "status": "OK",
+        "rows": [
+            {
+                "elements": [
+                    {
+                        "status": "OK",
+                        "distance": {"text": "215 km", "value": 215000},
+                        "duration": {"text": "3 hours", "value": 10800},
+                        "duration_in_traffic": {
+                            "text": "3 hours 45 mins",
+                            "value": 13500,
+                        },
+                    }
+                ]
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        "app.services.google_maps.httpx.get",
+        lambda *args, **kwargs: _mock_response(payload),
+    )
+
+    result = get_route_summary("Naqoura, Lebanon", "Arida, Lebanon")
+
+    assert result == {
+        "distance_km": 215.0,
+        "duration_min": 180,
+        "duration_in_traffic_min": 225,
+    }
+
+
 def test_raises_clear_error_when_top_level_status_is_not_ok(monkeypatch):
     payload = {"status": "REQUEST_DENIED"}
     monkeypatch.setattr(
