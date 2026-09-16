@@ -8,6 +8,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.fuel_prices import FuelPriceError
 from app.services.google_maps import GoogleMapsError
 
 client = TestClient(app)
@@ -74,3 +75,35 @@ def test_returns_a_clear_error_when_the_maps_lookup_fails():
     assert response.json() == {
         "detail": "Could not find a route between that origin and destination."
     }
+
+
+def test_returns_current_fuel_prices():
+    with patch("app.routers.trip_planner.get_current_fuel_prices") as mock_get_prices:
+        mock_get_prices.return_value = {
+            "95_octane": 86950.0,
+            "98_octane": 88850.0,
+            "diesel": 73300.0,
+        }
+
+        response = client.get("/trip-planner/fuel-prices")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "prices_per_liter_lbp": {
+            "95_octane": 86950.0,
+            "98_octane": 88850.0,
+            "diesel": 73300.0,
+        }
+    }
+
+
+def test_returns_a_clear_error_when_fuel_prices_are_unavailable():
+    with patch("app.routers.trip_planner.get_current_fuel_prices") as mock_get_prices:
+        mock_get_prices.side_effect = FuelPriceError(
+            "Could not reach the fuel price source."
+        )
+
+        response = client.get("/trip-planner/fuel-prices")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Could not reach the fuel price source."}

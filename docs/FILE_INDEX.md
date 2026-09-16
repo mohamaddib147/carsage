@@ -61,10 +61,12 @@ Format: `path/to/file — what this file does`
 - `backend/app/config.py` — loads and validates required env vars (`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_MAPS_API_KEY`); fails fast with a clear error if one is missing.
 - `backend/app/supabase_client.py` — shared Supabase client using the service role key (server-side only, bypasses RLS).
 - `backend/app/routers/health.py` — `GET /health`, reports API status and DB reachability without leaking error detail.
-- `backend/app/routers/trip_planner.py` — `POST /trip-planner/directions`: takes an origin/destination, returns distance + baseline/traffic-adjusted duration via Google Maps; 400 with a clear message if origin is missing or the route can't be resolved.
+- `backend/app/routers/trip_planner.py` — `POST /trip-planner/directions`: takes an origin/destination, returns distance + baseline/traffic-adjusted duration via Google Maps; `GET /trip-planner/fuel-prices`: current LBP/liter price per fuel type, for prefilling the Trip Planner form. Both return a clear error message, never a stack trace, on failure.
 - `backend/app/services/google_maps.py` — isolates the Google Maps Distance Matrix API call in one function (`get_route_summary`); raises `GoogleMapsError` with a safe, user-facing message on any failure.
+- `backend/app/services/fuel_prices.py` — scrapes Lebanon's weekly fuel prices from dgo.gov.lb (Directorate General of Oil), caches them in the `fuel_prices` table (at most weekly), and falls back to the last cached price if a re-scrape fails. Scraping approach and HTML structure documented in the module docstring.
 - `backend/tests/test_health.py` — tests the health endpoint's normal case (DB reachable) and the DB-unreachable edge case.
 - `backend/tests/test_main.py` — tests CORS allows the configured frontend origin and rejects an unlisted one.
 - `backend/tests/test_config.py` — tests `ALLOWED_ORIGINS` parsing (normal + empty) and that a missing required secret (Supabase or Google Maps) raises a clear error.
 - `backend/tests/test_google_maps.py` — tests a valid route lookup, the traffic-duration-absent fallback, an unresolvable address, a non-OK top-level API status, and a network failure (no leaked detail).
-- `backend/tests/test_trip_planner.py` — tests a valid directions request, a missing/empty destination (422), a missing origin (400), and a Google Maps failure surfacing as a clear 400.
+- `backend/tests/test_fuel_prices.py` — tests HTML parsing (valid block, skipping zero-placeholder blocks, no parseable block), and cache orchestration (fresh cache reused, stale cache triggers a re-scrape, a failed re-scrape falls back to stale cache, and no-cache-at-all raises).
+- `backend/tests/test_trip_planner.py` — tests a valid directions request, a missing/empty destination (422), a missing origin (400), a Google Maps failure surfacing as a clear 400, and the fuel-prices endpoint's normal/unavailable cases.

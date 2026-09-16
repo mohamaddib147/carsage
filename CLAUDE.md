@@ -46,6 +46,8 @@ Project: **CarSage** on Supabase (ref: `ehjvbkhoafldqfsivtrn`). Do not create ne
 
 Tables: `profiles`, `cars`, `trips`, `advisor_conversations`, `advisor_messages`. All have row-level security enabled — every policy scopes to `auth.uid()`. Never bypass RLS by using the service key from the frontend; the service key belongs in the FastAPI backend only.
 
+Also `fuel_prices` (added in CAR-35): an append-only cache of weekly-scraped Lebanon fuel prices (`fuel_type`, `price_per_liter_lbp`, `scraped_at`). RLS enabled with no policies — only the backend's service key reads/writes it; it's reference data, not user data.
+
 Full field-by-field definitions, types, and relationships are in `docs/CarSage_ERD.pdf`.
 
 **If a Supabase MCP connector is configured** in this environment (scoped to project ref `ehjvbkhoafldqfsivtrn`): use it to check the live schema and RLS policies directly before writing queries, instead of relying on the ERD PDF alone — the live database is always the source of truth if the two ever disagree. You can also use it to apply migrations if a task genuinely requires a schema change, but confirm with me first since the schema is meant to be finalized.
