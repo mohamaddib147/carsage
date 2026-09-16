@@ -29,6 +29,20 @@ const FIELD_LABELS = {
   vin: "VIN",
 };
 
+// Purely decorative row icons for the specifications list — aria-hidden,
+// never part of the field's text content, so they can't affect the
+// isolated per-field text nodes tests rely on.
+const FIELD_ICONS = {
+  make: "🚗",
+  model: "🏷️",
+  year: "📅",
+  engine_type: "🔧",
+  fuel_type: "⛽",
+  fuel_efficiency: "📊",
+  license_plate: "🪪",
+  vin: "🔢",
+};
+
 /** Converts a car row into edit-form string values (never null, for controlled inputs). */
 function toFormValues(car) {
   return {
@@ -215,86 +229,88 @@ function CarProfilePage() {
     return (
       <PageShell title="Edit Car" description={`${car.make} ${car.model}`}>
         <form onSubmit={handleSave} noValidate className="car-form">
-          <div className="form-field">
-            <label htmlFor="make">Make *</label>
-            <input id="make" type="text" value={form.make} onChange={handleChange("make")} />
-            {fieldErrors.make && (
-              <p role="alert" className="auth-form__error">{fieldErrors.make}</p>
-            )}
-          </div>
+          <div className="form-grid">
+            <div className="form-field">
+              <label htmlFor="make">Make *</label>
+              <input id="make" type="text" value={form.make} onChange={handleChange("make")} />
+              {fieldErrors.make && (
+                <p role="alert" className="auth-form__error">{fieldErrors.make}</p>
+              )}
+            </div>
 
-          <div className="form-field">
-            <label htmlFor="model">Model *</label>
-            <input id="model" type="text" value={form.model} onChange={handleChange("model")} />
-            {fieldErrors.model && (
-              <p role="alert" className="auth-form__error">{fieldErrors.model}</p>
-            )}
-          </div>
+            <div className="form-field">
+              <label htmlFor="model">Model *</label>
+              <input id="model" type="text" value={form.model} onChange={handleChange("model")} />
+              {fieldErrors.model && (
+                <p role="alert" className="auth-form__error">{fieldErrors.model}</p>
+              )}
+            </div>
 
-          <div className="form-field">
-            <label htmlFor="year">Year *</label>
-            <input id="year" type="number" value={form.year} onChange={handleChange("year")} />
-            {fieldErrors.year && (
-              <p role="alert" className="auth-form__error">{fieldErrors.year}</p>
-            )}
-          </div>
+            <div className="form-field">
+              <label htmlFor="year">Year *</label>
+              <input id="year" type="number" value={form.year} onChange={handleChange("year")} />
+              {fieldErrors.year && (
+                <p role="alert" className="auth-form__error">{fieldErrors.year}</p>
+              )}
+            </div>
 
-          <div className="form-field">
-            <label htmlFor="engine_type">Engine Type</label>
-            <input
-              id="engine_type"
-              type="text"
-              value={form.engine_type}
-              onChange={handleChange("engine_type")}
-            />
-          </div>
+            <div className="form-field">
+              <label htmlFor="engine_type">Engine Type</label>
+              <input
+                id="engine_type"
+                type="text"
+                value={form.engine_type}
+                onChange={handleChange("engine_type")}
+              />
+            </div>
 
-          <div className="form-field">
-            <label htmlFor="fuel_type">Fuel Type *</label>
-            <select
-              id="fuel_type"
-              value={form.fuel_type}
-              onChange={handleChange("fuel_type")}
-            >
-              <option value="">Select a fuel type</option>
-              {FUEL_TYPE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-            {fieldErrors.fuel_type && (
-              <p role="alert" className="auth-form__error">{fieldErrors.fuel_type}</p>
-            )}
-          </div>
+            <div className="form-field">
+              <label htmlFor="fuel_type">Fuel Type *</label>
+              <select
+                id="fuel_type"
+                value={form.fuel_type}
+                onChange={handleChange("fuel_type")}
+              >
+                <option value="">Select a fuel type</option>
+                {FUEL_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              {fieldErrors.fuel_type && (
+                <p role="alert" className="auth-form__error">{fieldErrors.fuel_type}</p>
+              )}
+            </div>
 
-          <div className="form-field">
-            <label htmlFor="fuel_efficiency">Fuel Efficiency (km/L)</label>
-            <input
-              id="fuel_efficiency"
-              type="number"
-              step="0.1"
-              value={form.fuel_efficiency}
-              onChange={handleChange("fuel_efficiency")}
-            />
-            {fieldErrors.fuel_efficiency && (
-              <p role="alert" className="auth-form__error">{fieldErrors.fuel_efficiency}</p>
-            )}
-          </div>
+            <div className="form-field">
+              <label htmlFor="fuel_efficiency">Fuel Efficiency (km/L)</label>
+              <input
+                id="fuel_efficiency"
+                type="number"
+                step="0.1"
+                value={form.fuel_efficiency}
+                onChange={handleChange("fuel_efficiency")}
+              />
+              {fieldErrors.fuel_efficiency && (
+                <p role="alert" className="auth-form__error">{fieldErrors.fuel_efficiency}</p>
+              )}
+            </div>
 
-          <div className="form-field">
-            <label htmlFor="license_plate">License Plate</label>
-            <input
-              id="license_plate"
-              type="text"
-              value={form.license_plate}
-              onChange={handleChange("license_plate")}
-            />
-          </div>
+            <div className="form-field">
+              <label htmlFor="license_plate">License Plate</label>
+              <input
+                id="license_plate"
+                type="text"
+                value={form.license_plate}
+                onChange={handleChange("license_plate")}
+              />
+            </div>
 
-          <div className="form-field">
-            <label htmlFor="vin">VIN</label>
-            <input id="vin" type="text" value={form.vin} onChange={handleChange("vin")} />
+            <div className="form-field">
+              <label htmlFor="vin">VIN</label>
+              <input id="vin" type="text" value={form.vin} onChange={handleChange("vin")} />
+            </div>
           </div>
 
           {saveError && (
@@ -314,20 +330,44 @@ function CarProfilePage() {
     );
   }
 
+  const headerMeta = [car.year, car.fuel_type].filter(Boolean).join(" · ");
+
   return (
-    <PageShell title="Car Profile" description={`${car.make} ${car.model}`}>
-      <dl className="car-profile__fields">
-        {Object.entries(FIELD_LABELS).map(([field, label]) => (
-          <div key={field} className="car-profile__field">
-            <dt>{label}</dt>
-            <dd>{car[field] === null || car[field] === "" ? "—" : car[field]}</dd>
-          </div>
-        ))}
-      </dl>
-      <button className="btn-primary" type="button" onClick={startEditing}>
-        Edit
-      </button>
-    </PageShell>
+    <div className="profile-page">
+      <div className="profile-header">
+        <span className="profile-header__icon" aria-hidden="true">
+          🚗
+        </span>
+        <div className="profile-header__info">
+          <h1 className="profile-header__title">
+            {car.make} {car.model}
+          </h1>
+          {headerMeta && <p className="profile-header__meta">{headerMeta}</p>}
+        </div>
+        <button className="btn-primary" type="button" onClick={startEditing}>
+          Edit
+        </button>
+      </div>
+
+      <div className="profile-specs-card">
+        <h2 className="profile-specs-card__title">Vehicle Specifications</h2>
+        <dl className="car-profile__fields">
+          {Object.entries(FIELD_LABELS).map(([field, label]) => (
+            <div key={field} className="car-profile__field">
+              <span className="car-profile__field-icon" aria-hidden="true">
+                {FIELD_ICONS[field]}
+              </span>
+              <div>
+                <dt>{label}</dt>
+                <dd>
+                  {car[field] === null || car[field] === "" ? "—" : car[field]}
+                </dd>
+              </div>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </div>
   );
 }
 
