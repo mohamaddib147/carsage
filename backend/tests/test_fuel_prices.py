@@ -13,8 +13,14 @@ import pytest
 from app.services.fuel_prices import (
     FuelPriceError,
     get_current_fuel_prices,
+    lbp_to_usd,
     scrape_fuel_prices,
 )
+
+
+def test_lbp_to_usd_converts_using_the_fixed_rate():
+    assert lbp_to_usd(89000) == 1.0
+    assert lbp_to_usd(0) == 0.0
 
 
 def _counter_block(octane_95, octane_98, gaz, diesel):

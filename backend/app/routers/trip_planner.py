@@ -1,12 +1,23 @@
-# Trip Planner endpoints: Google Maps route lookup (distance + duration)
-# and the current default fuel price; fuel cost calculation using the
-# car's fuel efficiency is a separate later task.
+# Trip Planner endpoints: Google Maps route lookup (distance + duration),
+# the current default fuel price, and the full cost-estimate flow that
+# ties a route + a car's fuel efficiency + a fuel price into a saved
+# trip. All monetary figures (fuel_price_used, estimated_cost, in both
+# `trips` and this router's responses) are LBP — the unit fuel_prices.py
+# standardizes on — since liters * LBP/liter = LBP; USD is a display-only
+# conversion, never the stored unit.
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.services.fuel_prices import FuelPriceError, get_current_fuel_prices
+from app.auth import get_current_user_id
+from app.services.fuel_prices import (
+    LBP_PER_USD,
+    FuelPriceError,
+    get_current_fuel_prices,
+    lbp_to_usd,
+)
 from app.services.google_maps import GoogleMapsError, get_route_summary
+from app.supabase_client import supabase
 
 router = APIRouter(prefix="/trip-planner", tags=["trip-planner"])
 
@@ -45,21 +56,171 @@ def post_directions(payload: DirectionsRequest):
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
+class FuelPrice(BaseModel):
+    lbp_per_liter: float
+    usd_per_liter: float
+
+
 class FuelPricesResponse(BaseModel):
-    prices_per_liter_lbp: dict[str, float]
+    prices: dict[str, FuelPrice]
+    lbp_per_usd: float
 
 
 @router.get("/fuel-prices", response_model=FuelPricesResponse)
 def get_fuel_prices():
     """
-    Returns the current default fuel price per liter (LBP) for each fuel
-    type (95_octane, 98_octane, diesel), used to prefill the Trip
+    Returns the current default fuel price per liter, in both LBP and
+    USD (fixed conversion rate — see fuel_prices.LBP_PER_USD), for each
+    fuel type (95_octane, 98_octane, diesel). Used to prefill the Trip
     Planner's user-overridable fuel price field. Cached weekly — see
     app/services/fuel_prices.py.
     """
     try:
-        prices = get_current_fuel_prices()
+        prices_lbp = get_current_fuel_prices()
     except FuelPriceError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
 
-    return {"prices_per_liter_lbp": prices}
+    return {
+        "prices": {
+            fuel_type: {
+                "lbp_per_liter": price,
+                "usd_per_liter": lbp_to_usd(price),
+            }
+            for fuel_type, price in prices_lbp.items()
+        },
+        "lbp_per_usd": LBP_PER_USD,
+    }
+
+
+def _price_bucket_for_car_fuel_type(car_fuel_type: str) -> str | None:
+    """
+    Maps a car's general fuel_type (from the Car Onboarding dropdown —
+    Gasoline, Diesel, Hybrid, Electric, Other) onto one of the 3 grades
+    fuel_prices.py actually tracks. Diesel maps directly; Electric has no
+    liquid-fuel cost at all (returns None); everything else (Gasoline,
+    Hybrid, Other) defaults to 95-octane, the common regular grade —
+    there's no more specific octane-preference field to go on.
+    """
+    normalized = car_fuel_type.strip().lower()
+    if normalized == "diesel":
+        return "diesel"
+    if normalized == "electric":
+        return None
+    return "95_octane"
+
+
+class EstimateTripRequest(BaseModel):
+    car_id: str
+    destination: str = Field(min_length=1)
+    origin: str | None = Field(default=None, min_length=1)
+    # Manual override for the fuel price, in LBP per liter. If omitted,
+    # the current scraped/cached default for the car's fuel grade is used.
+    fuel_price_per_liter_lbp: float | None = Field(default=None, gt=0)
+
+
+class EstimateTripResponse(BaseModel):
+    id: str
+    distance_km: float
+    duration_min: int
+    duration_in_traffic_min: int
+    fuel_price_used_lbp: float
+    estimated_cost_lbp: float
+    estimated_cost_usd: float
+
+
+@router.post("/estimate", response_model=EstimateTripResponse)
+def post_estimate(
+    payload: EstimateTripRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    The full Trip Planner flow: looks up the route via Google Maps,
+    computes estimated fuel cost as
+    (distance_km / car's fuel_efficiency) * fuel_price_per_liter,
+    and saves the result as a new row in `trips`.
+
+    Requires a valid Supabase session (Authorization: Bearer <jwt>) so
+    the trip can be attributed to the right user, and so `car_id` can be
+    checked against that user's own cars — the backend uses the service
+    role key elsewhere, which bypasses RLS, so this check is done
+    explicitly here rather than relied on implicitly.
+    """
+    if not payload.origin:
+        raise HTTPException(
+            status_code=400, detail="Origin is required to calculate a route."
+        )
+
+    car_result = (
+        supabase.table("cars")
+        .select("fuel_efficiency, fuel_type")
+        .eq("id", payload.car_id)
+        .eq("user_id", user_id)
+        .maybe_single()
+        .execute()
+    )
+    # supabase-py's maybe_single().execute() returns None outright (not a
+    # response object with .data = None) when nothing matches.
+    car_data = car_result.data if car_result else None
+    if not car_data:
+        raise HTTPException(status_code=404, detail="Car not found.")
+
+    fuel_efficiency = car_data.get("fuel_efficiency")
+    if not fuel_efficiency or fuel_efficiency <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "This car doesn't have a fuel efficiency (km/L) set yet. "
+                "Add it on the Car Profile page first."
+            ),
+        )
+
+    if payload.fuel_price_per_liter_lbp is not None:
+        fuel_price = payload.fuel_price_per_liter_lbp
+    else:
+        price_bucket = _price_bucket_for_car_fuel_type(
+            car_data.get("fuel_type") or ""
+        )
+        if price_bucket is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Fuel cost estimation isn't available for electric "
+                    "vehicles. Enter a fuel price manually if you'd like "
+                    "an estimate anyway."
+                ),
+            )
+        try:
+            fuel_price = get_current_fuel_prices()[price_bucket]
+        except FuelPriceError as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
+
+    try:
+        route = get_route_summary(payload.origin, payload.destination)
+    except GoogleMapsError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    liters_needed = route["distance_km"] / fuel_efficiency
+    estimated_cost_lbp = round(liters_needed * fuel_price, 0)
+
+    trip_row = {
+        "user_id": user_id,
+        "car_id": payload.car_id,
+        "origin": payload.origin,
+        "destination": payload.destination,
+        "distance_km": route["distance_km"],
+        "estimated_duration_min": route["duration_min"],
+        "traffic_duration_min": route["duration_in_traffic_min"],
+        "fuel_price_used": fuel_price,
+        "estimated_cost": estimated_cost_lbp,
+    }
+    inserted = supabase.table("trips").insert(trip_row).execute()
+
+    return {
+        "id": inserted.data[0]["id"],
+        "distance_km": route["distance_km"],
+        "duration_min": route["duration_min"],
+        "duration_in_traffic_min": route["duration_in_traffic_min"],
+        "fuel_price_used_lbp": fuel_price,
+        "estimated_cost_lbp": estimated_cost_lbp,
+        "estimated_cost_usd": lbp_to_usd(estimated_cost_lbp),
+    }

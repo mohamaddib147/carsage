@@ -24,7 +24,7 @@ const FIELD_LABELS = {
   year: "Year",
   engine_type: "Engine Type",
   fuel_type: "Fuel Type",
-  fuel_efficiency: "Fuel Efficiency (mpg)",
+  fuel_efficiency: "Fuel Efficiency (km/L)",
   license_plate: "License Plate",
   vin: "VIN",
 };
@@ -269,7 +269,7 @@ function CarProfilePage() {
           </div>
 
           <div className="form-field">
-            <label htmlFor="fuel_efficiency">Fuel Efficiency (mpg)</label>
+            <label htmlFor="fuel_efficiency">Fuel Efficiency (km/L)</label>
             <input
               id="fuel_efficiency"
               type="number"

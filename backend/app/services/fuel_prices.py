@@ -21,6 +21,10 @@
 #     use the first one where our 3 target fuels are all non-zero.
 #   - Prices are published per 20 liters (Lebanon's standard reporting
 #     unit for fuel), so we divide by 20 to store LBP per liter.
+#
+# USD figures shown alongside LBP (e.g. on the fuel-prices endpoint) use
+# a fixed LBP_PER_USD rate below rather than a live exchange-rate API —
+# see the comment on that constant.
 
 from datetime import datetime, timedelta, timezone
 
@@ -32,6 +36,13 @@ from app.supabase_client import supabase
 FUEL_PRICES_URL = "https://en.dgo.gov.lb/prices"
 LITERS_PER_PRICED_UNIT = 20
 CACHE_MAX_AGE = timedelta(days=7)
+
+# Lebanon has no stable official exchange rate; the parallel-market rate
+# is what actually applies to everyday prices like fuel, and it moves
+# often enough that a live-rate API would just be another point of
+# failure for a capstone-scale app. Fixed by request; update this
+# constant by hand if it drifts far from the real rate.
+LBP_PER_USD = 89000
 
 FUEL_TYPES = ("95_octane", "98_octane", "diesel")
 
@@ -167,3 +178,8 @@ def get_current_fuel_prices() -> dict[str, float]:
     ).execute()
 
     return fresh_prices
+
+
+def lbp_to_usd(amount_lbp: float) -> float:
+    """Converts an LBP amount to USD using the fixed rate above."""
+    return round(amount_lbp / LBP_PER_USD, 2)

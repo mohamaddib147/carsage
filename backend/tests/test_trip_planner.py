@@ -1,12 +1,14 @@
-# Tests the POST /trip-planner/directions endpoint: normal case, missing
-# required destination (schema validation), missing origin (business
-# rule), and a Google Maps failure surfacing as a clear 400, not a stack
-# trace.
+# Tests the Trip Planner endpoints: POST /directions (normal case,
+# missing required destination, missing origin, a Google Maps failure),
+# GET /fuel-prices, and POST /estimate — the full route+cost+save flow,
+# including authorization (a car that isn't the caller's own, and a
+# missing/invalid session).
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
+from app.auth import get_current_user_id
 from app.main import app
 from app.services.fuel_prices import FuelPriceError
 from app.services.google_maps import GoogleMapsError
@@ -77,10 +79,10 @@ def test_returns_a_clear_error_when_the_maps_lookup_fails():
     }
 
 
-def test_returns_current_fuel_prices():
+def test_returns_current_fuel_prices_in_lbp_and_usd():
     with patch("app.routers.trip_planner.get_current_fuel_prices") as mock_get_prices:
         mock_get_prices.return_value = {
-            "95_octane": 86950.0,
+            "95_octane": 89000.0,
             "98_octane": 88850.0,
             "diesel": 73300.0,
         }
@@ -88,12 +90,11 @@ def test_returns_current_fuel_prices():
         response = client.get("/trip-planner/fuel-prices")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "prices_per_liter_lbp": {
-            "95_octane": 86950.0,
-            "98_octane": 88850.0,
-            "diesel": 73300.0,
-        }
+    body = response.json()
+    assert body["lbp_per_usd"] == 89000
+    assert body["prices"]["95_octane"] == {
+        "lbp_per_liter": 89000.0,
+        "usd_per_liter": 1.0,
     }
 
 
@@ -107,3 +108,207 @@ def test_returns_a_clear_error_when_fuel_prices_are_unavailable():
 
     assert response.status_code == 503
     assert response.json() == {"detail": "Could not reach the fuel price source."}
+
+
+def _mock_supabase_for_estimate(car_data, trip_id="trip-1"):
+    """Mocks supabase.table("cars")...maybe_single() to return `car_data`,
+    and supabase.table("trips").insert(...) to echo back the inserted row
+    plus an id. Returns (mock_supabase, captured_insert_dict).
+
+    Matches supabase-py's real (surprising) behavior: maybe_single().execute()
+    returns None outright — not a response object with .data = None — when
+    nothing matches, which is why car_data=None here mocks execute() itself
+    returning None.
+    """
+    mock_supabase = MagicMock()
+
+    cars_table = MagicMock()
+    cars_table.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute.return_value = (
+        MagicMock(data=car_data) if car_data is not None else None
+    )
+
+    trips_table = MagicMock()
+    captured = {}
+
+    def insert(row):
+        captured["row"] = row
+        insert_result = MagicMock()
+        insert_result.execute.return_value = MagicMock(data=[{"id": trip_id, **row}])
+        return insert_result
+
+    trips_table.insert.side_effect = insert
+
+    mock_supabase.table.side_effect = lambda name: {
+        "cars": cars_table,
+        "trips": trips_table,
+    }[name]
+
+    return mock_supabase, captured
+
+
+class TestPostEstimate:
+    def setup_method(self):
+        app.dependency_overrides[get_current_user_id] = lambda: "user-123"
+
+    def teardown_method(self):
+        app.dependency_overrides.pop(get_current_user_id, None)
+
+    def test_estimates_cost_using_the_default_fuel_price_and_saves_the_trip(self):
+        mock_supabase, captured = _mock_supabase_for_estimate(
+            {"fuel_efficiency": 10, "fuel_type": "Gasoline"}
+        )
+        with patch("app.routers.trip_planner.supabase", mock_supabase), patch(
+            "app.routers.trip_planner.get_route_summary"
+        ) as mock_route, patch(
+            "app.routers.trip_planner.get_current_fuel_prices"
+        ) as mock_prices:
+            mock_route.return_value = {
+                "distance_km": 100.0,
+                "duration_min": 60,
+                "duration_in_traffic_min": 75,
+            }
+            mock_prices.return_value = {"95_octane": 90000.0}
+
+            response = client.post(
+                "/trip-planner/estimate",
+                json={
+                    "car_id": "car-1",
+                    "origin": "Beirut",
+                    "destination": "Tripoli",
+                },
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        # 100 km / 10 km/L = 10 L; 10 L * 90000 LBP/L = 900000 LBP.
+        assert body["estimated_cost_lbp"] == 900000.0
+        assert body["estimated_cost_usd"] == round(900000 / 89000, 2)
+        assert body["fuel_price_used_lbp"] == 90000.0
+        assert captured["row"]["user_id"] == "user-123"
+        assert captured["row"]["car_id"] == "car-1"
+        assert captured["row"]["estimated_cost"] == 900000.0
+
+    def test_uses_a_user_provided_fuel_price_override_instead_of_the_default(self):
+        mock_supabase, captured = _mock_supabase_for_estimate(
+            {"fuel_efficiency": 10, "fuel_type": "Gasoline"}
+        )
+        with patch("app.routers.trip_planner.supabase", mock_supabase), patch(
+            "app.routers.trip_planner.get_route_summary"
+        ) as mock_route, patch(
+            "app.routers.trip_planner.get_current_fuel_prices"
+        ) as mock_prices:
+            mock_route.return_value = {
+                "distance_km": 100.0,
+                "duration_min": 60,
+                "duration_in_traffic_min": 75,
+            }
+
+            response = client.post(
+                "/trip-planner/estimate",
+                json={
+                    "car_id": "car-1",
+                    "origin": "Beirut",
+                    "destination": "Tripoli",
+                    "fuel_price_per_liter_lbp": 100000,
+                },
+            )
+
+        assert response.status_code == 200
+        assert response.json()["fuel_price_used_lbp"] == 100000.0
+        assert response.json()["estimated_cost_lbp"] == 1000000.0
+        mock_prices.assert_not_called()
+
+    def test_maps_diesel_car_to_the_diesel_price(self):
+        mock_supabase, captured = _mock_supabase_for_estimate(
+            {"fuel_efficiency": 15, "fuel_type": "Diesel"}
+        )
+        with patch("app.routers.trip_planner.supabase", mock_supabase), patch(
+            "app.routers.trip_planner.get_route_summary"
+        ) as mock_route, patch(
+            "app.routers.trip_planner.get_current_fuel_prices"
+        ) as mock_prices:
+            mock_route.return_value = {
+                "distance_km": 30.0,
+                "duration_min": 20,
+                "duration_in_traffic_min": 25,
+            }
+            mock_prices.return_value = {"diesel": 73300.0}
+
+            response = client.post(
+                "/trip-planner/estimate",
+                json={"car_id": "car-1", "origin": "A", "destination": "B"},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["fuel_price_used_lbp"] == 73300.0
+
+    def test_returns_404_for_a_car_that_is_not_the_callers_own(self):
+        mock_supabase, _ = _mock_supabase_for_estimate(None)
+        with patch("app.routers.trip_planner.supabase", mock_supabase):
+            response = client.post(
+                "/trip-planner/estimate",
+                json={
+                    "car_id": "someone-elses-car",
+                    "origin": "Beirut",
+                    "destination": "Tripoli",
+                },
+            )
+
+        assert response.status_code == 404
+
+    def test_returns_400_when_the_car_has_no_fuel_efficiency_set(self):
+        mock_supabase, _ = _mock_supabase_for_estimate(
+            {"fuel_efficiency": None, "fuel_type": "Gasoline"}
+        )
+        with patch("app.routers.trip_planner.supabase", mock_supabase):
+            response = client.post(
+                "/trip-planner/estimate",
+                json={"car_id": "car-1", "origin": "A", "destination": "B"},
+            )
+
+        assert response.status_code == 400
+        assert "fuel efficiency" in response.json()["detail"].lower()
+
+    def test_returns_400_for_an_electric_car_with_no_manual_price_override(self):
+        mock_supabase, _ = _mock_supabase_for_estimate(
+            {"fuel_efficiency": 6, "fuel_type": "Electric"}
+        )
+        with patch("app.routers.trip_planner.supabase", mock_supabase):
+            response = client.post(
+                "/trip-planner/estimate",
+                json={"car_id": "car-1", "origin": "A", "destination": "B"},
+            )
+
+        assert response.status_code == 400
+        assert "electric" in response.json()["detail"].lower()
+
+    def test_returns_a_clear_error_when_the_maps_lookup_fails(self):
+        mock_supabase, _ = _mock_supabase_for_estimate(
+            {"fuel_efficiency": 10, "fuel_type": "Gasoline"}
+        )
+        with patch("app.routers.trip_planner.supabase", mock_supabase), patch(
+            "app.routers.trip_planner.get_route_summary"
+        ) as mock_route, patch(
+            "app.routers.trip_planner.get_current_fuel_prices"
+        ) as mock_prices:
+            mock_route.side_effect = GoogleMapsError("Could not find a route.")
+            mock_prices.return_value = {"95_octane": 90000.0}
+
+            response = client.post(
+                "/trip-planner/estimate",
+                json={"car_id": "car-1", "origin": "???", "destination": "!!!"},
+            )
+
+        assert response.status_code == 400
+        assert response.json() == {"detail": "Could not find a route."}
+
+
+def test_estimate_requires_authentication():
+    # No dependency override here — hits the real get_current_user_id,
+    # which requires a valid Authorization header.
+    response = client.post(
+        "/trip-planner/estimate",
+        json={"car_id": "car-1", "origin": "A", "destination": "B"},
+    )
+
+    assert response.status_code == 401
