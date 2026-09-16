@@ -511,26 +511,110 @@ select:focus {
   font-size: 0.875rem;
 }
 
-.trip-result {
+.route-params-card {
+  max-width: 480px;
+  margin-top: calc(var(--spacing-unit) * 3);
+  padding: calc(var(--spacing-unit) * 3);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+}
+
+.route-params-card .car-form {
+  max-width: none;
+  margin-top: calc(var(--spacing-unit) * 2);
+}
+
+.form-field__hint {
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.route-input-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.route-input-row__marker {
+  position: absolute;
+  left: calc(var(--spacing-unit) * 1.5);
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.route-input-row__marker--origin {
+  background-color: var(--color-accent);
+}
+
+.route-input-row__marker--destination {
+  background-color: var(--color-primary);
+  border-radius: 2px;
+}
+
+.route-input-row input {
+  padding-left: calc(var(--spacing-unit) * 4.5);
+}
+
+.trip-result-card {
+  max-width: 720px;
   margin-top: calc(var(--spacing-unit) * 4);
   padding: calc(var(--spacing-unit) * 3);
   background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-base);
-  max-width: 360px;
-  display: flex;
-  flex-direction: column;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+}
+
+.trip-result-card__route {
+  margin: 0 0 calc(var(--spacing-unit) * 2);
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  overflow-wrap: break-word;
+}
+
+.trip-result {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: calc(var(--spacing-unit) * 2);
+}
+
+.trip-result__field {
+  padding: calc(var(--spacing-unit) * 2);
+  background-color: var(--color-input-bg);
+  border-radius: var(--radius-base);
+}
+
+.trip-result__icon {
+  display: inline-flex;
+  margin-bottom: calc(var(--spacing-unit) * 1);
+  font-size: 1.125rem;
 }
 
 .trip-result__field dt {
   font-weight: 600;
-  color: var(--color-primary);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
 .trip-result__field dd {
-  margin: 0;
-  font-size: 1.25rem;
+  margin: 4px 0 0;
+  font-size: 1.375rem;
+  font-weight: 700;
+}
+
+.trip-result__caption {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
 }
 
 .auth-page {

@@ -2,6 +2,11 @@
 // cost + traffic-adjusted travel time out. No map UI, no route
 // modifiers, no car selector (MVP is one car per user — uses the
 // logged-in user's own car automatically, same as Dashboard/Car Profile).
+// Layout matches docs/stitch_carsage_landing_page/carsage_trip_planner
+// for the in-scope parts (route parameters card, 3-stat results row);
+// its car-switcher chip, weather widget, and route-recommendation
+// badges are out of scope (no multi-car selector, no live weather/route
+// data) and are omitted.
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -109,61 +114,104 @@ function TripPlannerPage() {
       title="Trip Planner"
       description="Enter a destination to get estimated fuel cost and travel time."
     >
-      <form onSubmit={handleSubmit} noValidate className="car-form">
-        <div className="form-field">
-          <label htmlFor="origin">Starting Location</label>
-          <input
-            id="origin"
-            type="text"
-            value={origin}
-            onChange={(event) => setOrigin(event.target.value)}
-          />
-        </div>
+      <div className="route-params-card">
+        <p className="form-section-label">Route Parameters</p>
 
-        <div className="form-field">
-          <label htmlFor="destination">Destination *</label>
-          <input
-            id="destination"
-            type="text"
-            value={destination}
-            onChange={(event) => setDestination(event.target.value)}
-          />
-          {destinationError && (
+        <form onSubmit={handleSubmit} noValidate className="car-form">
+          <div className="form-field">
+            <label htmlFor="origin">
+              Starting Location <span className="form-field__hint">Optional</span>
+            </label>
+            <div className="route-input-row">
+              <span
+                className="route-input-row__marker route-input-row__marker--origin"
+                aria-hidden="true"
+              />
+              <input
+                id="origin"
+                type="text"
+                placeholder="e.g. Beirut, Lebanon"
+                value={origin}
+                onChange={(event) => setOrigin(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="destination">Destination *</label>
+            <div className="route-input-row">
+              <span
+                className="route-input-row__marker route-input-row__marker--destination"
+                aria-hidden="true"
+              />
+              <input
+                id="destination"
+                type="text"
+                placeholder="e.g. Tripoli, Lebanon"
+                value={destination}
+                onChange={(event) => setDestination(event.target.value)}
+              />
+            </div>
+            {destinationError && (
+              <p role="alert" className="auth-form__error">
+                {destinationError}
+              </p>
+            )}
+          </div>
+
+          {submitError && (
             <p role="alert" className="auth-form__error">
-              {destinationError}
+              {submitError}
             </p>
           )}
-        </div>
 
-        {submitError && (
-          <p role="alert" className="auth-form__error">
-            {submitError}
-          </p>
-        )}
-
-        <button className="btn-primary" type="submit" disabled={submitting}>
-          {submitting ? "Planning..." : "Plan Trip"}
-        </button>
-      </form>
+          <button
+            className="btn-primary btn-block"
+            type="submit"
+            disabled={submitting}
+          >
+            {submitting ? "Planning..." : "Plan Trip"}
+            {!submitting && <span aria-hidden="true">→</span>}
+          </button>
+        </form>
+      </div>
 
       {result && (
-        <dl className="trip-result">
-          <div className="trip-result__field">
-            <dt>Fuel Cost</dt>
-            <dd>
-              ${result.estimated_cost_usd.toFixed(2)} (
-              {result.estimated_cost_lbp.toLocaleString()} LBP)
-            </dd>
-          </div>
-          <div className="trip-result__field">
-            <dt>Duration</dt>
-            <dd>{result.duration_in_traffic_min} min</dd>
-          </div>
-          <div className="trip-result__field">
-            <dt>Distance</dt>
-            <dd>{result.distance_km} km</dd>
-          </div>
-        </dl>
+        <div className="trip-result-card">
+          <p className="trip-result-card__route">
+            {origin ? `${origin} → ${destination}` : destination}
+          </p>
+          <dl className="trip-result">
+            <div className="trip-result__field">
+              <span className="trip-result__icon" aria-hidden="true">
+                ⛽
+              </span>
+              <dt>Fuel Cost</dt>
+              <dd>
+                ${result.estimated_cost_usd.toFixed(2)} (
+                {result.estimated_cost_lbp.toLocaleString()} LBP)
+              </dd>
+              <p className="trip-result__caption">
+                Based on {result.fuel_price_used_lbp.toLocaleString()} LBP/L
+              </p>
+            </div>
+            <div className="trip-result__field">
+              <span className="trip-result__icon" aria-hidden="true">
+                ⏱️
+              </span>
+              <dt>Duration</dt>
+              <dd>{result.duration_in_traffic_min} min</dd>
+              <p className="trip-result__caption">Traffic-adjusted estimate</p>
+            </div>
+            <div className="trip-result__field">
+              <span className="trip-result__icon" aria-hidden="true">
+                📍
+              </span>
+              <dt>Distance</dt>
+              <dd>{result.distance_km} km</dd>
+            </div>
+          </dl>
+        </div>
       )}
     </PageShell>
   );
