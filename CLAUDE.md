@@ -46,8 +46,6 @@ Project: **CarSage** on Supabase (ref: `ehjvbkhoafldqfsivtrn`). Do not create ne
 
 Tables: `profiles`, `cars`, `trips`, `advisor_conversations`, `advisor_messages`. All have row-level security enabled — every policy scopes to `auth.uid()`. Never bypass RLS by using the service key from the frontend; the service key belongs in the FastAPI backend only.
 
-Also `fuel_prices` (added in CAR-35): an append-only cache of weekly-scraped Lebanon fuel prices (`fuel_type`, `price_per_liter_lbp`, `scraped_at`). RLS enabled with no policies — only the backend's service key reads/writes it; it's reference data, not user data.
-
 Full field-by-field definitions, types, and relationships are in `docs/CarSage_ERD.pdf`.
 
 **If a Supabase MCP connector is configured** in this environment (scoped to project ref `ehjvbkhoafldqfsivtrn`): use it to check the live schema and RLS policies directly before writing queries, instead of relying on the ERD PDF alone — the live database is always the source of truth if the two ever disagree. You can also use it to apply migrations if a task genuinely requires a schema change, but confirm with me first since the schema is meant to be finalized.
@@ -86,10 +84,10 @@ Follow this exact loop for every single task. Do not skip or reorder steps.
    - Update `docs/FILE_INDEX.md` with one line per new or changed file, in the format: `path/to/file.ext — what this file does`. This is the project-wide map of what every file is for; keep it current every task, not just at the end.
 4. **Write unit test(s) and run them.** Cover the normal/expected case, invalid input, and at least one edge case. Actually run the test suite and show me the passing output — a task is not done until its tests are written *and* run *and* pass, not just written.
 5. **Commit and push to the current sprint branch.** One focused, meaningful commit (see Git & Commit Rules for the branch strategy). Never move to step 6 with uncommitted or unpushed work.
-6. **Update Jira, report back, and stop.** Transition the task's status and add a comment summarizing what was done directly in Jira via the connector. Then tell me:
+6. **Update Jira, report back, and stop.** Add a comment on the Jira task summarizing what was done, directly via the connector. Set the status to **In Progress** (or leave it as-is if already there) — **do not transition it to Done**. I log my own hours and mark tasks Done myself once I've verified and logged time. Then tell me:
    - What was built and which files changed.
    - The test results.
-   - What you just updated in Jira (status + comment text).
+   - What you just updated in Jira (comment text).
    - Then explicitly ask me to verify before continuing, and wait for my go-ahead. Do not start the next task in the sprint on your own.
 
 ## Git & Commit Rules
@@ -125,7 +123,7 @@ All work is tracked in Jira (project key `CAR`) via a connected Jira/Atlassian M
 
 Epics: Foundation (CAR-1), Onboarding & Profile (CAR-2), Trip Planner (CAR-3), AI Advisor (CAR-4), Security Review (CAR-5), Documentation & Submission (CAR-6), Project Planning (CAR-29). Each task has detailed acceptance criteria in Jira — read them directly via the connector at the start of each task and treat them as the source of truth for what "done" means.
 
-**Since the connector is live**: read each task's acceptance criteria directly from Jira rather than waiting for me to paste them. When a task is finished (step 6 of the task loop), update the Jira task yourself — transition its status and add a comment summarizing what was done — rather than just drafting text for me to paste. Still stop and tell me what you updated, and wait for my verification before starting the next task.
+**Since the connector is live**: read each task's acceptance criteria directly from Jira rather than waiting for me to paste them. When a task is finished (step 6 of the task loop), add a comment in Jira summarizing what was done and set status to In Progress — **never transition a task to Done yourself**. I log my own hours on each task and mark it Done myself once I've verified the work. Still stop and tell me what you updated, and wait for my verification before starting the next task.
 
 ## Reference Documents (in `docs/`)
 
