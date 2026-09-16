@@ -1,5 +1,10 @@
 // Car Onboarding screen — manual add-a-car form. The "scan registration
 // card" button is a disabled placeholder for MVP (OCR is a stretch goal).
+// Layout matches docs/stitch_carsage_landing_page/carsage_add_your_car
+// for the in-scope parts (scan card row, section divider, 2-column field
+// grid); its "Designate as Primary Vehicle" telemetry checkbox and
+// multi-step wizard chrome are out of scope (no OBD-II telemetry, no
+// multi-car "primary" concept) and are omitted.
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -124,101 +129,128 @@ function CarOnboardingPage() {
       title="Add Your Car"
       description="Enter your car's details manually, or scan your registration card (coming soon)."
     >
-      <button className="btn-accent" type="button" disabled>
-        Scan Registration Card (coming soon)
-      </button>
+      <div className="scan-card">
+        <span className="scan-card__icon" aria-hidden="true">
+          📷
+        </span>
+        <div className="scan-card__text">
+          <p className="scan-card__title">
+            Scan Registration Card
+            <span className="pill">Coming soon</span>
+          </p>
+          <p className="scan-card__desc">
+            Instant auto-fill from your registration document.
+          </p>
+        </div>
+        <button className="btn-accent" type="button" disabled>
+          Scan Document
+        </button>
+      </div>
+
+      <div className="form-divider">
+        <span>Or enter manually</span>
+      </div>
 
       <form onSubmit={handleSubmit} noValidate className="car-form">
-        <div className="form-field">
-          <label htmlFor="make">Make *</label>
-          <input
-            id="make"
-            name="make"
-            type="text"
-            value={form.make}
-            onChange={handleChange("make")}
-          />
-          {fieldErrors.make && (
-            <p role="alert" className="auth-form__error">
-              {fieldErrors.make}
-            </p>
-          )}
-        </div>
+        <p className="form-section-label">Core Specifications</p>
 
-        <div className="form-field">
-          <label htmlFor="model">Model *</label>
-          <input
-            id="model"
-            name="model"
-            type="text"
-            value={form.model}
-            onChange={handleChange("model")}
-          />
-          {fieldErrors.model && (
-            <p role="alert" className="auth-form__error">
-              {fieldErrors.model}
-            </p>
-          )}
-        </div>
+        <div className="form-grid">
+          <div className="form-field">
+            <label htmlFor="make">Make *</label>
+            <input
+              id="make"
+              name="make"
+              type="text"
+              placeholder="e.g. Toyota"
+              value={form.make}
+              onChange={handleChange("make")}
+            />
+            {fieldErrors.make && (
+              <p role="alert" className="auth-form__error">
+                {fieldErrors.make}
+              </p>
+            )}
+          </div>
 
-        <div className="form-field">
-          <label htmlFor="year">Year *</label>
-          <input
-            id="year"
-            name="year"
-            type="number"
-            value={form.year}
-            onChange={handleChange("year")}
-          />
-          {fieldErrors.year && (
-            <p role="alert" className="auth-form__error">
-              {fieldErrors.year}
-            </p>
-          )}
-        </div>
+          <div className="form-field">
+            <label htmlFor="model">Model *</label>
+            <input
+              id="model"
+              name="model"
+              type="text"
+              placeholder="e.g. Corolla"
+              value={form.model}
+              onChange={handleChange("model")}
+            />
+            {fieldErrors.model && (
+              <p role="alert" className="auth-form__error">
+                {fieldErrors.model}
+              </p>
+            )}
+          </div>
 
-        <div className="form-field">
-          <label htmlFor="engineType">Engine Type</label>
-          <input
-            id="engineType"
-            name="engineType"
-            type="text"
-            value={form.engineType}
-            onChange={handleChange("engineType")}
-          />
-        </div>
+          <div className="form-field">
+            <label htmlFor="year">Year *</label>
+            <input
+              id="year"
+              name="year"
+              type="number"
+              placeholder="e.g. 2020"
+              value={form.year}
+              onChange={handleChange("year")}
+            />
+            {fieldErrors.year && (
+              <p role="alert" className="auth-form__error">
+                {fieldErrors.year}
+              </p>
+            )}
+          </div>
 
-        <div className="form-field">
-          <label htmlFor="fuelType">Fuel Type *</label>
-          <select
-            id="fuelType"
-            name="fuelType"
-            value={form.fuelType}
-            onChange={handleChange("fuelType")}
-          >
-            <option value="">Select a fuel type</option>
-            {FUEL_TYPE_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-          {fieldErrors.fuelType && (
-            <p role="alert" className="auth-form__error">
-              {fieldErrors.fuelType}
-            </p>
-          )}
-        </div>
+          <div className="form-field">
+            <label htmlFor="engineType">Engine Type</label>
+            <input
+              id="engineType"
+              name="engineType"
+              type="text"
+              placeholder="e.g. 2.5L Inline-4"
+              value={form.engineType}
+              onChange={handleChange("engineType")}
+            />
+          </div>
 
-        <div className="form-field">
-          <label htmlFor="licensePlate">License Plate</label>
-          <input
-            id="licensePlate"
-            name="licensePlate"
-            type="text"
-            value={form.licensePlate}
-            onChange={handleChange("licensePlate")}
-          />
+          <div className="form-field">
+            <label htmlFor="fuelType">Fuel Type *</label>
+            <select
+              id="fuelType"
+              name="fuelType"
+              value={form.fuelType}
+              onChange={handleChange("fuelType")}
+            >
+              <option value="">Select a fuel type</option>
+              {FUEL_TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            {fieldErrors.fuelType && (
+              <p role="alert" className="auth-form__error">
+                {fieldErrors.fuelType}
+              </p>
+            )}
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="licensePlate">License Plate</label>
+            <input
+              id="licensePlate"
+              name="licensePlate"
+              type="text"
+              placeholder="e.g. 7XYZ890"
+              value={form.licensePlate}
+              onChange={handleChange("licensePlate")}
+            />
+          </div>
         </div>
 
         <div className="form-field">
@@ -227,6 +259,7 @@ function CarOnboardingPage() {
             id="vin"
             name="vin"
             type="text"
+            placeholder="e.g. 4S4BSANC8M3801249"
             value={form.vin}
             onChange={handleChange("vin")}
           />
@@ -238,8 +271,13 @@ function CarOnboardingPage() {
           </p>
         )}
 
-        <button className="btn-primary" type="submit" disabled={submitting}>
+        <button
+          className="btn-primary btn-block"
+          type="submit"
+          disabled={submitting}
+        >
           Add Car
+          <span aria-hidden="true">→</span>
         </button>
       </form>
     </PageShell>

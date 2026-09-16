@@ -169,7 +169,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: calc(var(--spacing-unit) * 2);
-  max-width: 420px;
+  max-width: 640px;
   margin-top: calc(var(--spacing-unit) * 3);
 }
 
@@ -180,6 +180,114 @@ select:focus {
 }
 
 .form-field label {
+  font-weight: 600;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 3);
+}
+
+@media (max-width: 520px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-section-label {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.form-divider {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 2);
+  margin: calc(var(--spacing-unit) * 3) 0;
+  max-width: 640px;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.form-divider::before,
+.form-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background-color: var(--color-border);
+}
+
+.scan-card {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 2);
+  max-width: 640px;
+  margin-top: calc(var(--spacing-unit) * 3);
+  padding: calc(var(--spacing-unit) * 2);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+  flex-wrap: wrap;
+}
+
+.scan-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--radius-base);
+  background-color: var(--color-input-bg);
+  font-size: 1.25rem;
+}
+
+.scan-card__text {
+  flex: 1;
+  min-width: 200px;
+}
+
+.scan-card__title {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1);
+  margin: 0;
+  font-weight: 700;
+}
+
+.scan-card__desc {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.pill {
+  padding: 2px calc(var(--spacing-unit) * 1);
+  border-radius: 999px;
+  background-color: var(--color-accent);
+  color: var(--color-text);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.btn-block {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--spacing-unit) * 1);
+  height: 48px;
+  border-radius: var(--radius-lg);
   font-weight: 600;
 }
 
