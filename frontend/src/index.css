@@ -1,0 +1,258 @@
+/* Global design tokens and base styles for CarSage — implements the
+   British Racing Green palette from the wireframe design system. */
+
+:root {
+  --color-primary: #00594c;
+  --color-background: #f5f1e8;
+  --color-text: #2b2b2b;
+  --color-accent: #c9a24b;
+
+  --color-primary-hover: #00473d;
+  --color-surface: #ffffff;
+  --color-border: #d8d2c2;
+
+  --font-family-base: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  --radius-base: 8px;
+  --spacing-unit: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family-base);
+  background-color: var(--color-background);
+  color: var(--color-text);
+  /* User-entered text (car specs, chat messages) can be arbitrarily long
+     with no spaces — wrap it instead of overflowing the layout. */
+  overflow-wrap: break-word;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--color-primary);
+  line-height: 1.2;
+}
+
+a {
+  color: var(--color-primary);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background-color: var(--color-primary);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-base);
+  padding: calc(var(--spacing-unit) * 1.5) calc(var(--spacing-unit) * 3);
+  font-size: 1rem;
+}
+
+.btn-primary:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.btn-accent {
+  background-color: var(--color-accent);
+  color: var(--color-text);
+  border: none;
+  border-radius: var(--radius-base);
+  padding: calc(var(--spacing-unit) * 1.5) calc(var(--spacing-unit) * 3);
+  font-size: 1rem;
+}
+
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 3);
+  padding: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 3);
+  background-color: var(--color-primary);
+  color: #ffffff;
+  flex-wrap: wrap;
+}
+
+.site-nav__brand {
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+.site-nav__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--spacing-unit) * 2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.site-nav__links a {
+  color: #ffffff;
+  text-decoration: none;
+  opacity: 0.85;
+}
+
+.site-nav__links a:hover,
+.site-nav__links a.active {
+  opacity: 1;
+  text-decoration: underline;
+  text-decoration-color: var(--color-accent);
+}
+
+.app-main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: calc(var(--spacing-unit) * 4) calc(var(--spacing-unit) * 3);
+}
+
+.page-shell__description {
+  max-width: 60ch;
+}
+
+.site-nav__logout {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: var(--radius-base);
+  color: #ffffff;
+  padding: calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 1.5);
+}
+
+.auth-form__error {
+  color: #b3261e;
+  font-weight: 600;
+}
+
+.auth-form__info {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+select {
+  font-family: inherit;
+  font-size: 1rem;
+  padding: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 1.25);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  width: 100%;
+  max-width: 360px;
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.car-form {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 2);
+  max-width: 420px;
+  margin-top: calc(var(--spacing-unit) * 3);
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 0.5);
+}
+
+.form-field label {
+  font-weight: 600;
+}
+
+.car-profile__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 4);
+  max-width: 560px;
+  margin: calc(var(--spacing-unit) * 3) 0;
+}
+
+.car-profile__field dt {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.car-profile__field dd {
+  margin: 0;
+  overflow-wrap: break-word;
+}
+
+.car-profile__actions {
+  display: flex;
+  gap: calc(var(--spacing-unit) * 2);
+  align-items: center;
+}
+
+.dashboard-section {
+  margin-top: calc(var(--spacing-unit) * 4);
+}
+
+.dashboard-car-list {
+  list-style: none;
+  margin: calc(var(--spacing-unit) * 2) 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 1);
+}
+
+.dashboard-car-list a {
+  display: inline-block;
+  padding: calc(var(--spacing-unit) * 1.5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  text-decoration: none;
+  overflow-wrap: break-word;
+}
+
+.dashboard-modules {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: calc(var(--spacing-unit) * 3);
+  margin-top: calc(var(--spacing-unit) * 2);
+}
+
+.dashboard-module-card {
+  display: block;
+  padding: calc(var(--spacing-unit) * 3);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  text-decoration: none;
+  color: var(--color-text);
+}
+
+.dashboard-module-card:hover {
+  border-color: var(--color-primary);
+}
+
+.dashboard-module-card h3 {
+  margin-top: 0;
+}
+
+.dashboard-module-card p {
+  margin-bottom: 0;
+}

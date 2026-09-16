@@ -34,9 +34,11 @@ If a feature isn't listed in "Project Overview" above, treat it as out of scope.
 - **Frontend**: React (web)
 - **Backend/DB**: Supabase (Postgres + Auth + Storage) — already provisioned and schema deployed
 - **AI/Logic service**: FastAPI (Python) — for Trip Planner cost calculation and AI Advisor
-- **AI model**: LLM API (e.g., Claude) — for the AI Advisor
+- **AI model**: Gemini (Google AI Studio free tier, e.g. `gemini-2.0-flash`) as primary, with automatic fallback to Groq's free tier (e.g. Llama 3.3 70B) if Gemini's rate limit is hit. Both have genuine free tiers with no credit card required. **Do not use xAI's Grok API** — it has no free tier and bills from the first call, so it doesn't serve the free-fallback purpose. The LLM call must be isolated in a single function/module so providers can be swapped without touching the rest of the codebase. See CAR-19.
 - **Maps**: Google Maps API (Directions + Distance Matrix)
-- **Fuel prices**: region-specific source (research and pick one; a reasonable static/regional default is acceptable for MVP)
+- **Car identification/specs**: NHTSA vPIC API (`https://vpic.nhtsa.dot.gov/api/`, free, no key, official) for make/model/year/VIN lookup, combined with API Ninjas Cars API (free tier, api-ninjas.com) for detailed specs (MPG, cylinders, drivetrain, transmission). See CAR-34.
+- **Vehicle safety data (AI Advisor enrichment)**: NHTSA Recalls API + Complaints API (`api.nhtsa.gov`, free, no key, official, US-market only) — cross-check user-described issues against real recalls/complaints before falling back to LLM-only classification. See CAR-36.
+- **Fuel prices**: no free live API covers Lebanon/Middle East (confirmed via research — GlobalPetrolPrices.com is paid, fuel-prices.eu only covers EU+UK). Built as a small scheduled scraper against Lebanon's Ministry of Energy and Water published weekly prices, cached in the database, with graceful fallback to the last known value and a user-overridable field on the Trip Planner form. See CAR-35.
 
 ## Database (already live in Supabase — see `docs/CarSage_ERD.pdf`)
 
@@ -46,13 +48,15 @@ Tables: `profiles`, `cars`, `trips`, `advisor_conversations`, `advisor_messages`
 
 Full field-by-field definitions, types, and relationships are in `docs/CarSage_ERD.pdf`.
 
+**If a Supabase MCP connector is configured** in this environment (scoped to project ref `ehjvbkhoafldqfsivtrn`): use it to check the live schema and RLS policies directly before writing queries, instead of relying on the ERD PDF alone — the live database is always the source of truth if the two ever disagree. You can also use it to apply migrations if a task genuinely requires a schema change, but confirm with me first since the schema is meant to be finalized.
+
 ## Environment Variables
 
 Create `.env` files (never commit them — see `.gitignore`) based on `frontend/.env.example` and `backend/.env.example`. Required variables:
 
 **Frontend**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_BASE_URL`
 
-**Backend**: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_MAPS_API_KEY`, `LLM_API_KEY`, `ALLOWED_ORIGINS`
+**Backend**: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_MAPS_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `API_NINJAS_KEY`, `ALLOWED_ORIGINS`
 
 ## Design System
 
@@ -62,7 +66,7 @@ British Racing Green (`#00594C`) primary, cream (`#F5F1E8`) background, dark gra
 
 1. **Never commit directly to `main` or `dev`.** All work happens on the current sprint branch (`sprint-1`, `sprint-2`, `sprint-3`), which merges into `dev` only when that sprint is complete. See Git & Commit Rules for the full branch strategy.
 2. **Meaningful, focused commits.** One logical change per commit, clear message.
-3. **Per feature**: implement → test → review for quality → merge to `development` → review again after merge → check for security issues. Don't skip steps or batch multiple features before testing.
+3. **Per feature**: implement → test → review for quality → merge to the current sprint branch → review again after merge → check for security issues. Don't skip steps or batch multiple features before testing.
 4. **Test every feature for**: the normal case, invalid inputs, edge cases, and authorization (can a different user see/edit this data? — test this directly, not just via the UI).
 5. **Security checklist for every feature**: input validation (client AND server side), auth/authorization via Supabase RLS + JWT verification in FastAPI, no hardcoded secrets, no SQL/NoSQL injection risk, no raw error/stack-trace leakage to the client.
 6. I (the developer) must be able to explain any code produced — don't generate code that can't be explained, debugged, or modified by hand.
