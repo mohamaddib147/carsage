@@ -55,3 +55,12 @@ def test_missing_required_secret_raises_a_clear_error(monkeypatch):
 
     with pytest.raises(RuntimeError, match="SUPABASE_URL"):
         _load_config_module(monkeypatch)
+
+
+def test_missing_google_maps_key_raises_a_clear_error(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "http://localhost:54321")
+    monkeypatch.setenv("SUPABASE_SERVICE_KEY", "test-key")
+    monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="GOOGLE_MAPS_API_KEY"):
+        _load_config_module(monkeypatch)

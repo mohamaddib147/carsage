@@ -58,9 +58,13 @@ Format: `path/to/file — what this file does`
 - `backend/Dockerfile` — container image for deploying the API to any Docker-based host.
 - `backend/.dockerignore` — excludes venv/tests/secrets from the built image.
 - `backend/app/main.py` — FastAPI app instance, CORS middleware (from `ALLOWED_ORIGINS`), route registration.
-- `backend/app/config.py` — loads and validates required env vars; fails fast with a clear error if a secret is missing.
+- `backend/app/config.py` — loads and validates required env vars (`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_MAPS_API_KEY`); fails fast with a clear error if one is missing.
 - `backend/app/supabase_client.py` — shared Supabase client using the service role key (server-side only, bypasses RLS).
 - `backend/app/routers/health.py` — `GET /health`, reports API status and DB reachability without leaking error detail.
+- `backend/app/routers/trip_planner.py` — `POST /trip-planner/directions`: takes an origin/destination, returns distance + baseline/traffic-adjusted duration via Google Maps; 400 with a clear message if origin is missing or the route can't be resolved.
+- `backend/app/services/google_maps.py` — isolates the Google Maps Distance Matrix API call in one function (`get_route_summary`); raises `GoogleMapsError` with a safe, user-facing message on any failure.
 - `backend/tests/test_health.py` — tests the health endpoint's normal case (DB reachable) and the DB-unreachable edge case.
 - `backend/tests/test_main.py` — tests CORS allows the configured frontend origin and rejects an unlisted one.
-- `backend/tests/test_config.py` — tests `ALLOWED_ORIGINS` parsing (normal + empty) and that a missing required secret raises a clear error.
+- `backend/tests/test_config.py` — tests `ALLOWED_ORIGINS` parsing (normal + empty) and that a missing required secret (Supabase or Google Maps) raises a clear error.
+- `backend/tests/test_google_maps.py` — tests a valid route lookup, the traffic-duration-absent fallback, an unresolvable address, a non-OK top-level API status, and a network failure (no leaked detail).
+- `backend/tests/test_trip_planner.py` — tests a valid directions request, a missing/empty destination (422), a missing origin (400), and a Google Maps failure surfacing as a clear 400.

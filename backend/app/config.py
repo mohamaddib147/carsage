@@ -21,6 +21,7 @@ def _require_env(name: str) -> str:
 
 SUPABASE_URL = _require_env("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = _require_env("SUPABASE_SERVICE_KEY")
+GOOGLE_MAPS_API_KEY = _require_env("GOOGLE_MAPS_API_KEY")
 
 # Comma-separated list of allowed frontend origins for CORS, e.g.
 # "http://localhost:5173,https://carsage.example.com"
@@ -30,6 +31,5 @@ ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 
-# Optional for this task — required once Trip Planner / AI Advisor are built.
-GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+# Optional for this task — required once the AI Advisor is built (CAR-19).
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
