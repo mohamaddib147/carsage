@@ -58,6 +58,22 @@ Create `.env` files (never commit them — see `.gitignore`) based on `frontend/
 
 **Backend**: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_MAPS_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `API_NINJAS_KEY`, `ALLOWED_ORIGINS`
 
+## Design Reference (in `docs/stitch_carsage_landing_page/`)
+
+This folder contains the actual Stitch-generated wireframes for every screen — the real visual source of truth, more detailed than the summary in `docs/CarSage_Wireframes.pdf`. Each subfolder has a `screen.png` (visual reference) and `code.html` (structure/layout reference) for one screen:
+
+- `carsage_modern_marketing_landing_page/` — Landing Page
+- `carsage_sign_up_authentication/` — Sign Up / Log In
+- `carsage_dashboard_vehicle_hub/` — Dashboard / Home
+- `carsage_add_your_car/` — Car Onboarding
+- `carsage_car_profile/` — Car Profile
+- `carsage_trip_planner/` — Trip Planner
+- `carsage_ai_advisor/` — AI Advisor
+- `carsage_logo/` — Logo
+- `carsage/` — overall design system reference (colors, typography, spacing)
+
+**Rule: before and while building or fixing any screen's UI, open the matching subfolder here and match its layout, spacing, and visual style** — not just the color palette from the Design System section below. If the built UI doesn't visually match its `screen.png`, that's a bug, not a style preference. Remember these are MVP-trimmed references (see "Explicitly OUT OF SCOPE" above) — match the visual style, not any out-of-scope features still visible in these images.
+
 ## Design System
 
 British Racing Green (`#00594C`) primary, cream (`#F5F1E8`) background, dark graphite (`#2B2B2B`) text, soft gold/amber (`#C9A24B`) accent. Full wireframes and screen-by-screen breakdown in `docs/CarSage_Wireframes.pdf`.
@@ -75,7 +91,7 @@ British Racing Green (`#00594C`) primary, cream (`#F5F1E8`) background, dark gra
 
 Follow this exact loop for every single task. Do not skip or reorder steps.
 
-1. **Check existing state first.** Before writing anything, review what's already in the repo (existing files, `docs/FILE_INDEX.md`, recent commits) so you don't duplicate work or contradict something already built. Read the task's acceptance criteria directly from Jira via the connector and restate them back before starting.
+1. **Check existing state first.** Before writing anything, review what's already in the repo (existing files, `docs/FILE_INDEX.md`, recent commits) so you don't duplicate work or contradict something already built. Read the task's acceptance criteria directly from Jira via the connector and restate them back before starting. **If the task touches UI, also open the matching subfolder in `docs/stitch_carsage_landing_page/` (see Design Reference below) and match it visually — do not guess the layout.**
 2. **Implement just this one task.** Nothing from later tasks, nothing "while I'm at it."
 3. **Document as you go:**
    - Every file starts with a header comment stating its purpose in one or two lines (e.g., "Handles Trip Planner cost calculation logic").
