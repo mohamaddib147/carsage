@@ -15,6 +15,7 @@ Format: `path/to/file — what this file does`
 - `docs/CarSage_ERD.pdf` — database schema and entity relationships.
 - `docs/CarSage_Wireframes.pdf` — UI screens and user flow.
 - `docs/FILE_INDEX.md` — this file.
+- `docs/stitch_carsage_landing_page/` — Stitch-generated design reference (screen.png + code.html per screen), the visual source of truth for UI alignment; see CLAUDE.md's Design Reference section.
 
 ## frontend/
 
@@ -26,7 +27,7 @@ Format: `path/to/file — what this file does`
 - `frontend/src/main.jsx` — React entry point, mounts `<App />` inside a `BrowserRouter` and `AuthProvider`.
 - `frontend/src/App.jsx` — root component, defines the route table for all 7 screens; Dashboard, Car Onboarding, Car Profile, Trip Planner, and AI Advisor are wrapped in `ProtectedRoute`.
 - `frontend/src/App.test.jsx` — routing tests: public screens render at their route, protected screens redirect logged-out users to `/login`, plus the 404 edge case.
-- `frontend/src/index.css` — global design tokens (British Racing Green palette) and base styles.
+- `frontend/src/index.css` — global design tokens (British Racing Green palette, filled/rounded input style) and base styles.
 - `frontend/src/test/setup.js` — Vitest setup, wires up jest-dom matchers.
 - `frontend/src/lib/supabaseClient.js` — configures the shared Supabase client from `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`.
 - `frontend/src/auth/AuthContext.jsx` — React context holding the Supabase auth session (re-hydrated on mount so login persists across refresh) and exposing `signUp`/`signIn`/`signOut`.
@@ -36,7 +37,7 @@ Format: `path/to/file — what this file does`
 - `frontend/src/components/ProtectedRoute.jsx` — route guard that redirects logged-out users to `/login`.
 - `frontend/src/components/ProtectedRoute.test.jsx` — tests the redirect (logged-out) and pass-through (logged-in) cases.
 - `frontend/src/pages/LandingPage.jsx` — Landing screen placeholder.
-- `frontend/src/pages/AuthPage.jsx` — combined Sign Up / Log In screen wired to Supabase Auth: client-side empty-field validation, calls `signUp`/`signIn`, shows a clear error on failure, redirects to the dashboard (or the originally-requested page) on success.
+- `frontend/src/pages/AuthPage.jsx` — combined Sign Up / Log In screen wired to Supabase Auth: client-side empty-field validation, calls `signUp`/`signIn`, shows a clear error on failure, redirects to the dashboard (or the originally-requested page) on success. Layout matches `docs/stitch_carsage_landing_page/carsage_sign_up_authentication`: centered card, segmented tab switcher, filled rounded inputs (SSO buttons, VIN quick-add, and trust-badge footer from that reference are out of scope, omitted).
 - `frontend/src/pages/AuthPage.test.jsx` — tests valid login/signup, invalid password, duplicate email signup, and empty-field validation, with the Supabase client mocked.
 - `frontend/src/pages/DashboardPage.jsx` — Dashboard/Home screen: shows the logged-in user's saved car(s) (or an empty state linking to Car Onboarding), an "Add Another Car" link, and two module cards linking to Trip Planner and AI Advisor.
 - `frontend/src/pages/DashboardPage.test.jsx` — tests the empty state, showing saved car(s), the Add Another Car link, a failed-load edge case falling back to the empty state, and the two module cards.
