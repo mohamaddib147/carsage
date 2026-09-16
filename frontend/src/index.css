@@ -256,3 +256,25 @@ select:focus {
 .dashboard-module-card p {
   margin-bottom: 0;
 }
+
+.trip-result {
+  margin-top: calc(var(--spacing-unit) * 4);
+  padding: calc(var(--spacing-unit) * 3);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 2);
+}
+
+.trip-result__field dt {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.trip-result__field dd {
+  margin: 0;
+  font-size: 1.25rem;
+}
