@@ -13,6 +13,7 @@ from app.config import API_NINJAS_KEY
 
 NHTSA_BASE_URL = "https://vpic.nhtsa.dot.gov/api/vehicles"
 API_NINJAS_URL = "https://api.api-ninjas.com/v1/cars"
+FUEL_ECONOMY_BASE_URL = "https://www.fueleconomy.gov/ws/rest/vehicle"
 
 # 1 mile = 1.60934 km, 1 US gallon = 3.78541 L, so mpg -> km/L is this factor.
 MPG_TO_KM_PER_LITER = 1.60934 / 3.78541
@@ -79,7 +80,12 @@ def lookup_api_ninjas(make: str, model: str, year: int) -> dict:
         (never raises) if API_NINJAS_KEY isn't configured, the API call
         fails, or there's no match for this make/model/year.
         fuel_efficiency is converted from the API's combined MPG figure
-        to km/L, matching the unit `cars.fuel_efficiency` is stored in.
+        to km/L, matching the unit `cars.fuel_efficiency` is stored in —
+        NOTE: API Ninjas' free tier gates all MPG fields behind a paid
+        plan (they come back as the literal string "this field is for
+        premium subscribers only" instead of a number), so this is
+        effectively always None on a free key; get_spec_suggestions()
+        falls back to lookup_fuel_economy() for this field instead.
     """
     empty = {
         "fuel_efficiency": None,
@@ -121,14 +127,110 @@ def lookup_api_ninjas(make: str, model: str, year: int) -> dict:
     }
 
 
+def _menu_items(payload: dict) -> list[dict]:
+    """
+    fueleconomy.gov's XML-to-JSON conversion collapses a <menuItem> list
+    with exactly one entry into a bare object instead of a one-item
+    array. This normalizes both shapes into a list, so callers never have
+    to special-case it.
+    """
+    items = payload.get("menuItem", [])
+    return [items] if isinstance(items, dict) else items
+
+
+def lookup_fuel_economy(make: str, model: str, year: int) -> float | None:
+    """
+    Looks up official EPA combined fuel economy from fueleconomy.gov
+    (free, no key, US government data) and converts it to km/L. Used
+    instead of API Ninjas for fuel_efficiency specifically, since API
+    Ninjas gates its MPG fields behind a paid tier (see lookup_api_ninjas).
+
+    The lookup is a 3-step menu walk (fueleconomy.gov has no direct
+    make/model/year -> MPG endpoint): find the exact model name for this
+    make/year, find a vehicle id for that model (the first trim/engine
+    option if there are several — good enough for an autofill suggestion
+    the user can always correct), then fetch that vehicle's combined MPG.
+
+    Returns:
+        The combined fuel economy in km/L, or None on any no-match or
+        failure at any step — never raises.
+    """
+    headers = {"Accept": "application/json"}
+
+    try:
+        models_response = httpx.get(
+            f"{FUEL_ECONOMY_BASE_URL}/menu/model",
+            params={"year": year, "make": make},
+            headers=headers,
+            timeout=8.0,
+        )
+        models_response.raise_for_status()
+        model_items = _menu_items(models_response.json())
+    except httpx.HTTPError:
+        return None
+
+    matched_model = next(
+        (
+            item["text"]
+            for item in model_items
+            if item.get("text", "").strip().lower() == model.strip().lower()
+        ),
+        None,
+    )
+    if not matched_model:
+        return None
+
+    try:
+        options_response = httpx.get(
+            f"{FUEL_ECONOMY_BASE_URL}/menu/options",
+            params={"year": year, "make": make, "model": matched_model},
+            headers=headers,
+            timeout=8.0,
+        )
+        options_response.raise_for_status()
+        option_items = _menu_items(options_response.json())
+    except httpx.HTTPError:
+        return None
+
+    if not option_items or not option_items[0].get("value"):
+        return None
+    vehicle_id = option_items[0]["value"]
+
+    try:
+        detail_response = httpx.get(
+            f"{FUEL_ECONOMY_BASE_URL}/{vehicle_id}",
+            headers=headers,
+            timeout=8.0,
+        )
+        detail_response.raise_for_status()
+        combined_mpg = detail_response.json().get("comb08")
+    except httpx.HTTPError:
+        return None
+
+    try:
+        combined_mpg = float(combined_mpg)
+    except (TypeError, ValueError):
+        return None
+    if combined_mpg <= 0:
+        return None
+
+    return round(combined_mpg * MPG_TO_KM_PER_LITER, 1)
+
+
 def get_spec_suggestions(make: str, model: str, year: int) -> dict:
     """
-    Combines the NHTSA and API Ninjas lookups into one autofill suggestion
-    for Car Onboarding. Always returns a complete shape (fields are None
-    when not found) — never raises, so a lookup failure never blocks the
-    user from completing onboarding manually.
+    Combines the NHTSA, API Ninjas, and fueleconomy.gov lookups into one
+    autofill suggestion for Car Onboarding. Always returns a complete
+    shape (fields are None when not found) — never raises, so a lookup
+    failure never blocks the user from completing onboarding manually.
+    fuel_efficiency prefers API Ninjas' figure (in case a paid key is
+    ever configured) and falls back to fueleconomy.gov, since API
+    Ninjas' free tier doesn't include it.
     """
-    return {
-        **lookup_nhtsa(make, model, year),
-        **lookup_api_ninjas(make, model, year),
-    }
+    nhtsa = lookup_nhtsa(make, model, year)
+    ninjas = lookup_api_ninjas(make, model, year)
+    fuel_efficiency = ninjas["fuel_efficiency"]
+    if fuel_efficiency is None:
+        fuel_efficiency = lookup_fuel_economy(make, model, year)
+
+    return {**nhtsa, **ninjas, "fuel_efficiency": fuel_efficiency}

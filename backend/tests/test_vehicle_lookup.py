@@ -1,7 +1,11 @@
-# Tests the NHTSA vPIC + API Ninjas spec-autofill lookups: a confirmed
-# vehicle with a resolvable vehicle type, an unrecognized model (no
-# match), a network failure, API Ninjas with/without a configured key,
-# no API Ninjas match, and the combined get_spec_suggestions merge. All
+# Tests the NHTSA vPIC + API Ninjas + fueleconomy.gov spec-autofill
+# lookups: a confirmed vehicle with a resolvable vehicle type, an
+# unrecognized model (no match), a network failure, API Ninjas with/
+# without a configured key, no API Ninjas match, fueleconomy.gov's menu
+# walk (normal case + its "single result collapses to an object, not a
+# list" quirk + no match), and the combined get_spec_suggestions merge
+# (including its API-Ninjas-then-fueleconomy.gov fallback for
+# fuel_efficiency, since API Ninjas gates MPG behind a paid tier). All
 # outbound httpx calls are mocked so these never hit the real APIs.
 
 from unittest.mock import MagicMock, patch
@@ -11,6 +15,7 @@ import httpx
 from app.services.vehicle_lookup import (
     get_spec_suggestions,
     lookup_api_ninjas,
+    lookup_fuel_economy,
     lookup_nhtsa,
 )
 
@@ -127,23 +132,67 @@ def test_lookup_api_ninjas_never_raises_on_a_network_failure(monkeypatch):
     }
 
 
-def test_get_spec_suggestions_merges_both_lookups():
+def test_lookup_fuel_economy_walks_the_menu_and_converts_to_km_per_liter():
+    models_response = _mock_response(
+        {"menuItem": [{"text": "C230", "value": "C230"}, {"text": "C280", "value": "C280"}]}
+    )
+    # A single matching trim/engine option collapses to a bare object
+    # (not a one-item list) in fueleconomy.gov's XML->JSON conversion.
+    options_response = _mock_response(
+        {"menuItem": {"text": "Auto 7-spd, 6 cyl, 2.5 L", "value": "21824"}}
+    )
+    detail_response = _mock_response({"comb08": 22})
+
+    with patch(
+        "app.services.vehicle_lookup.httpx.get",
+        side_effect=[models_response, options_response, detail_response],
+    ):
+        result = lookup_fuel_economy("Mercedes-Benz", "C230", 2006)
+
+    assert result == round(22 * 1.60934 / 3.78541, 1)
+
+
+def test_lookup_fuel_economy_returns_none_when_the_model_has_no_match():
+    models_response = _mock_response({"menuItem": [{"text": "C280", "value": "C280"}]})
+
+    with patch("app.services.vehicle_lookup.httpx.get", return_value=models_response):
+        result = lookup_fuel_economy("Mercedes-Benz", "NotARealModel", 2006)
+
+    assert result is None
+
+
+def test_lookup_fuel_economy_never_raises_on_a_network_failure():
+    with patch(
+        "app.services.vehicle_lookup.httpx.get",
+        side_effect=httpx.ConnectError("boom"),
+    ):
+        result = lookup_fuel_economy("Mercedes-Benz", "C230", 2006)
+
+    assert result is None
+
+
+def test_get_spec_suggestions_merges_all_lookups_and_falls_back_to_fueleconomy_gov():
     with patch(
         "app.services.vehicle_lookup.lookup_nhtsa",
         return_value={"vehicle_confirmed": True, "engine_type": "Passenger Car"},
     ) as mock_nhtsa, patch(
         "app.services.vehicle_lookup.lookup_api_ninjas",
+        # Matches real API Ninjas free-tier behavior: fuel_efficiency is
+        # None (MPG is paywalled) even though other fields come through.
         return_value={
-            "fuel_efficiency": 14.5,
+            "fuel_efficiency": None,
             "cylinders": 4,
             "drivetrain": "fwd",
             "transmission": "a",
         },
-    ) as mock_ninjas:
+    ) as mock_ninjas, patch(
+        "app.services.vehicle_lookup.lookup_fuel_economy", return_value=14.5
+    ) as mock_fuel_economy:
         result = get_spec_suggestions("Honda", "Civic", 2020)
 
     mock_nhtsa.assert_called_once_with("Honda", "Civic", 2020)
     mock_ninjas.assert_called_once_with("Honda", "Civic", 2020)
+    mock_fuel_economy.assert_called_once_with("Honda", "Civic", 2020)
     assert result == {
         "vehicle_confirmed": True,
         "engine_type": "Passenger Car",
@@ -152,3 +201,19 @@ def test_get_spec_suggestions_merges_both_lookups():
         "drivetrain": "fwd",
         "transmission": "a",
     }
+
+
+def test_get_spec_suggestions_prefers_api_ninjas_fuel_efficiency_when_present():
+    with patch("app.services.vehicle_lookup.lookup_nhtsa", return_value={}), patch(
+        "app.services.vehicle_lookup.lookup_api_ninjas",
+        return_value={
+            "fuel_efficiency": 20.0,
+            "cylinders": 4,
+            "drivetrain": "fwd",
+            "transmission": "a",
+        },
+    ), patch("app.services.vehicle_lookup.lookup_fuel_economy") as mock_fuel_economy:
+        result = get_spec_suggestions("Honda", "Civic", 2020)
+
+    mock_fuel_economy.assert_not_called()
+    assert result["fuel_efficiency"] == 20.0
