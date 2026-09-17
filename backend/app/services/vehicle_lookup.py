@@ -127,13 +127,16 @@ def lookup_api_ninjas(make: str, model: str, year: int) -> dict:
     }
 
 
-def _menu_items(payload: dict) -> list[dict]:
+def _menu_items(payload) -> list[dict]:
     """
     fueleconomy.gov's XML-to-JSON conversion collapses a <menuItem> list
     with exactly one entry into a bare object instead of a one-item
-    array. This normalizes both shapes into a list, so callers never have
-    to special-case it.
+    array, and returns the literal JSON body `null` (not an empty object)
+    for a make/year with no menu at all. This normalizes every shape into
+    a list, so callers never have to special-case any of it.
     """
+    if not isinstance(payload, dict):
+        return []
     items = payload.get("menuItem", [])
     return [items] if isinstance(items, dict) else items
 
@@ -169,16 +172,21 @@ def lookup_fuel_economy(make: str, model: str, year: int) -> float | None:
     except httpx.HTTPError:
         return None
 
-    matched_model = next(
-        (
-            item["text"]
-            for item in model_items
-            if item.get("text", "").strip().lower() == model.strip().lower()
-        ),
-        None,
-    )
-    if not matched_model:
+    # fueleconomy.gov often lists a model under a trim-qualified name (e.g.
+    # a 2005 "C230" is listed as "C230 Kompressor"), so an exact match is
+    # preferred but a "starts with the model name, then a space" match is
+    # accepted too — picking the shortest such match keeps the plainest
+    # trim (over e.g. a "(Wagon)" variant) as the autofill suggestion.
+    model_lower = model.strip().lower()
+    candidates = [
+        item["text"]
+        for item in model_items
+        if item.get("text", "").strip().lower() == model_lower
+        or item.get("text", "").strip().lower().startswith(f"{model_lower} ")
+    ]
+    if not candidates:
         return None
+    matched_model = min(candidates, key=len)
 
     try:
         options_response = httpx.get(
@@ -203,7 +211,10 @@ def lookup_fuel_economy(make: str, model: str, year: int) -> float | None:
             timeout=8.0,
         )
         detail_response.raise_for_status()
-        combined_mpg = detail_response.json().get("comb08")
+        detail_payload = detail_response.json()
+        combined_mpg = (
+            detail_payload.get("comb08") if isinstance(detail_payload, dict) else None
+        )
     except httpx.HTTPError:
         return None
 

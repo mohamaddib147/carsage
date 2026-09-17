@@ -161,6 +161,45 @@ def test_lookup_fuel_economy_returns_none_when_the_model_has_no_match():
     assert result is None
 
 
+def test_lookup_fuel_economy_matches_a_trim_qualified_model_name():
+    # fueleconomy.gov lists some years' trims under a longer name (e.g. a
+    # 2005 "C230" is listed as "C230 Kompressor") — a plain "C230" search
+    # must still find it via the startswith match, picking the shortest
+    # (plainest) candidate over e.g. a "(Wagon)" variant.
+    models_response = _mock_response(
+        {
+            "menuItem": [
+                {"text": "C230 Kompressor Sports Coupe", "value": "x"},
+                {"text": "C230 Kompressor", "value": "x"},
+                {"text": "C240 4matic", "value": "x"},
+            ]
+        }
+    )
+    options_response = _mock_response({"menuItem": {"text": "Auto 5-spd", "value": "999"}})
+    detail_response = _mock_response({"comb08": 22})
+
+    with patch(
+        "app.services.vehicle_lookup.httpx.get",
+        side_effect=[models_response, options_response, detail_response],
+    ) as mock_get:
+        result = lookup_fuel_economy("Mercedes-Benz", "C230", 2005)
+
+    assert result == round(22 * 1.60934 / 3.78541, 1)
+    assert mock_get.call_args_list[1].kwargs["params"]["model"] == "C230 Kompressor"
+
+
+def test_lookup_fuel_economy_returns_none_for_an_unrecognized_make_or_year():
+    # fueleconomy.gov's model-menu endpoint returns the literal JSON body
+    # `null` (not an empty object) when the make/year combo has no menu at
+    # all — this must not crash the lookup.
+    with patch(
+        "app.services.vehicle_lookup.httpx.get", return_value=_mock_response(None)
+    ):
+        result = lookup_fuel_economy("Mercedes", "C230", 2005)
+
+    assert result is None
+
+
 def test_lookup_fuel_economy_never_raises_on_a_network_failure():
     with patch(
         "app.services.vehicle_lookup.httpx.get",
