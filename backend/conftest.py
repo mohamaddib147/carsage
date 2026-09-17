@@ -8,4 +8,5 @@ import os
 os.environ.setdefault("SUPABASE_URL", "http://localhost:54321")
 os.environ.setdefault("SUPABASE_SERVICE_KEY", "test-service-key")
 os.environ.setdefault("GOOGLE_MAPS_API_KEY", "test-google-maps-key")
+os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
 os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost:5173")

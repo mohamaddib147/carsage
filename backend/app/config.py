@@ -31,8 +31,12 @@ ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 
-# Optional for this task — required once the AI Advisor is built (CAR-19).
-LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+# AI Advisor (CAR-19): Gemini is the primary provider (required). Groq is
+# an automatic fallback used only when Gemini rate-limits (429) — if it
+# isn't configured, that rare case surfaces as a clear error instead of
+# silently guessing.
+GEMINI_API_KEY = _require_env("GEMINI_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 # Optional: powers Car Onboarding's spec autofill (CAR-34). If unset, that
 # lookup just returns no API Ninjas data and the user fills specs manually

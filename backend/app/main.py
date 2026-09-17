@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import ALLOWED_ORIGINS
-from app.routers import car_specs, health, trip_planner
+from app.routers import ai_advisor, car_specs, health, trip_planner
 
 app = FastAPI(title="CarSage API")
 
@@ -22,3 +22,4 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(trip_planner.router)
 app.include_router(car_specs.router)
+app.include_router(ai_advisor.router)
