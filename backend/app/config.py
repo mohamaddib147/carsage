@@ -33,3 +33,8 @@ ALLOWED_ORIGINS = [
 
 # Optional for this task — required once the AI Advisor is built (CAR-19).
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+
+# Optional: powers Car Onboarding's spec autofill (CAR-34). If unset, that
+# lookup just returns no API Ninjas data and the user fills specs manually
+# — it must never block onboarding.
+API_NINJAS_KEY = os.environ.get("API_NINJAS_KEY", "")

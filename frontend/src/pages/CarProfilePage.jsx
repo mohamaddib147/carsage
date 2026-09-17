@@ -25,6 +25,9 @@ const FIELD_LABELS = {
   engine_type: "Engine Type",
   fuel_type: "Fuel Type",
   fuel_efficiency: "Fuel Efficiency (km/L)",
+  cylinders: "Cylinders",
+  drivetrain: "Drivetrain",
+  transmission: "Transmission",
   license_plate: "License Plate",
   vin: "VIN",
 };
@@ -39,6 +42,9 @@ const FIELD_ICONS = {
   engine_type: "🔧",
   fuel_type: "⛽",
   fuel_efficiency: "📊",
+  cylinders: "🛠️",
+  drivetrain: "⚙️",
+  transmission: "🔁",
   license_plate: "🪪",
   vin: "🔢",
 };
@@ -52,6 +58,9 @@ function toFormValues(car) {
     engine_type: car.engine_type ?? "",
     fuel_type: car.fuel_type ?? "",
     fuel_efficiency: car.fuel_efficiency == null ? "" : String(car.fuel_efficiency),
+    cylinders: car.cylinders == null ? "" : String(car.cylinders),
+    drivetrain: car.drivetrain ?? "",
+    transmission: car.transmission ?? "",
     license_plate: car.license_plate ?? "",
     vin: car.vin ?? "",
   };
@@ -82,6 +91,13 @@ function validate(form) {
     const efficiencyNumber = Number(form.fuel_efficiency);
     if (!Number.isFinite(efficiencyNumber) || efficiencyNumber <= 0) {
       errors.fuel_efficiency = "Fuel efficiency must be a positive number.";
+    }
+  }
+
+  if (form.cylinders.trim()) {
+    const cylindersNumber = Number(form.cylinders);
+    if (!Number.isInteger(cylindersNumber) || cylindersNumber <= 0) {
+      errors.cylinders = "Cylinders must be a positive whole number.";
     }
   }
 
@@ -189,6 +205,9 @@ function CarProfilePage() {
           fuel_efficiency: form.fuel_efficiency.trim()
             ? Number(form.fuel_efficiency)
             : null,
+          cylinders: form.cylinders.trim() ? Number(form.cylinders) : null,
+          drivetrain: form.drivetrain.trim() || null,
+          transmission: form.transmission.trim() || null,
           license_plate: form.license_plate.trim() || null,
           vin: form.vin.trim() || null,
         })
@@ -298,6 +317,39 @@ function CarProfilePage() {
             </div>
 
             <div className="form-field">
+              <label htmlFor="cylinders">Cylinders</label>
+              <input
+                id="cylinders"
+                type="number"
+                value={form.cylinders}
+                onChange={handleChange("cylinders")}
+              />
+              {fieldErrors.cylinders && (
+                <p role="alert" className="auth-form__error">{fieldErrors.cylinders}</p>
+              )}
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="drivetrain">Drivetrain</label>
+              <input
+                id="drivetrain"
+                type="text"
+                value={form.drivetrain}
+                onChange={handleChange("drivetrain")}
+              />
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="transmission">Transmission</label>
+              <input
+                id="transmission"
+                type="text"
+                value={form.transmission}
+                onChange={handleChange("transmission")}
+              />
+            </div>
+
+            <div className="form-field">
               <label htmlFor="license_plate">License Plate</label>
               <input
                 id="license_plate"
@@ -360,7 +412,7 @@ function CarProfilePage() {
               <div>
                 <dt>{label}</dt>
                 <dd>
-                  {car[field] === null || car[field] === "" ? "—" : car[field]}
+                  {car[field] == null || car[field] === "" ? "—" : car[field]}
                 </dd>
               </div>
             </div>

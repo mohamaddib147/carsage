@@ -23,6 +23,9 @@ const SAMPLE_CAR = {
   engine_type: "Inline-4",
   fuel_type: "Gasoline",
   fuel_efficiency: 32,
+  cylinders: 4,
+  drivetrain: "fwd",
+  transmission: "a",
   license_plate: "ABC-123",
   vin: "1HGCM82633A004352",
 };
@@ -90,8 +93,22 @@ describe("CarProfilePage — viewing", () => {
     expect(screen.getByText("Inline-4")).toBeInTheDocument();
     expect(screen.getByText("Gasoline")).toBeInTheDocument();
     expect(screen.getByText("32")).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+    expect(screen.getByText("fwd")).toBeInTheDocument();
+    expect(screen.getByText("a")).toBeInTheDocument();
     expect(screen.getByText("ABC-123")).toBeInTheDocument();
     expect(screen.getByText("1HGCM82633A004352")).toBeInTheDocument();
+  });
+
+  it("shows a placeholder dash for spec-autofill fields that were never set (edge case)", async () => {
+    const { cylinders, drivetrain, transmission, ...carWithoutAutofill } = SAMPLE_CAR;
+    mockCarsTable({ selectResult: { data: carWithoutAutofill, error: null } });
+
+    renderAt("/cars/mine");
+
+    expect(await screen.findByText("Toyota")).toBeInTheDocument();
+    const dashes = screen.getAllByText("—");
+    expect(dashes.length).toBeGreaterThanOrEqual(3);
   });
 
   it("displays a car looked up by id at /cars/:carId (normal case)", async () => {

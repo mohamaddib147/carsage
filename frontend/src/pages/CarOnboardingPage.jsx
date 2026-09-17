@@ -1,16 +1,27 @@
 // Car Onboarding screen — manual add-a-car form. The "scan registration
 // card" button is a disabled placeholder for MVP (OCR is a stretch goal).
+// Once Make, Model, and a valid Year are all filled in, a debounced
+// background lookup (CAR-34) queries NHTSA vPIC + API Ninjas via the
+// FastAPI backend and fills in Engine Type, Fuel Efficiency, Cylinders,
+// Drivetrain, and Transmission where they're still empty — the user can
+// always override any autofilled value, and a lookup that fails or finds
+// no match never blocks manual entry.
 // Layout matches docs/stitch_carsage_landing_page/carsage_add_your_car
 // for the in-scope parts (scan card row, section divider, 2-column field
 // grid); its "Designate as Primary Vehicle" telemetry checkbox and
 // multi-step wizard chrome are out of scope (no OBD-II telemetry, no
 // multi-car "primary" concept) and are omitted.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
+import { apiFetch } from "../lib/apiClient.js";
 import { supabase } from "../lib/supabaseClient.js";
+
+// How long to wait after the user stops typing Make/Model/Year before
+// firing the autofill lookup, so it doesn't fire on every keystroke.
+const SPEC_LOOKUP_DEBOUNCE_MS = 600;
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -30,6 +41,10 @@ const EMPTY_FORM = {
   fuelType: "",
   licensePlate: "",
   vin: "",
+  fuelEfficiency: "",
+  cylinders: "",
+  drivetrain: "",
+  transmission: "",
 };
 
 /**
@@ -77,6 +92,8 @@ function CarOnboardingPage() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [specNotice, setSpecNotice] = useState("");
+  const specLookupRanFor = useRef("");
 
   /** @param {keyof typeof EMPTY_FORM} field */
   function handleChange(field) {
@@ -84,6 +101,67 @@ function CarOnboardingPage() {
       setForm((previous) => ({ ...previous, [field]: event.target.value }));
     };
   }
+
+  // CAR-34: once Make/Model/Year are all valid, look up autofill
+  // suggestions in the background and fill in whichever of Engine Type,
+  // Fuel Efficiency, Cylinders, Drivetrain, and Transmission are still
+  // empty. Debounced so it only fires after the user pauses typing, and
+  // keyed by make|model|year so it never re-fires for the same values
+  // (e.g. after the lookup itself fills Engine Type).
+  useEffect(() => {
+    const make = form.make.trim();
+    const model = form.model.trim();
+    const yearNumber = Number(form.year);
+    const yearValid =
+      form.year.trim() &&
+      Number.isInteger(yearNumber) &&
+      yearNumber >= 1900 &&
+      yearNumber <= CURRENT_YEAR + 1;
+
+    if (!make || !model || !yearValid) return;
+
+    const lookupKey = `${make}|${model}|${yearNumber}`;
+    if (specLookupRanFor.current === lookupKey) return;
+
+    const timer = setTimeout(async () => {
+      specLookupRanFor.current = lookupKey;
+      try {
+        const suggestions = await apiFetch(
+          `/cars/spec-suggestions?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&year=${yearNumber}`,
+        );
+
+        setForm((previous) => ({
+          ...previous,
+          engineType: previous.engineType || suggestions.engine_type || "",
+          fuelEfficiency:
+            previous.fuelEfficiency ||
+            (suggestions.fuel_efficiency != null
+              ? String(suggestions.fuel_efficiency)
+              : ""),
+          cylinders:
+            previous.cylinders ||
+            (suggestions.cylinders != null ? String(suggestions.cylinders) : ""),
+          drivetrain: previous.drivetrain || suggestions.drivetrain || "",
+          transmission: previous.transmission || suggestions.transmission || "",
+        }));
+
+        if (
+          suggestions.engine_type ||
+          suggestions.fuel_efficiency != null ||
+          suggestions.cylinders != null ||
+          suggestions.drivetrain ||
+          suggestions.transmission
+        ) {
+          setSpecNotice("Some specs were auto-filled below — feel free to edit them.");
+        }
+      } catch {
+        // Best-effort autofill only — a failed lookup just leaves manual
+        // entry as the only option, silently.
+      }
+    }, SPEC_LOOKUP_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [form.make, form.model, form.year]);
 
   /** @param {import('react').FormEvent} event */
   async function handleSubmit(event) {
@@ -109,6 +187,12 @@ function CarOnboardingPage() {
           fuel_type: form.fuelType,
           license_plate: form.licensePlate.trim() || null,
           vin: form.vin.trim() || null,
+          fuel_efficiency: form.fuelEfficiency.trim()
+            ? Number(form.fuelEfficiency)
+            : null,
+          cylinders: form.cylinders.trim() ? Number(form.cylinders) : null,
+          drivetrain: form.drivetrain.trim() || null,
+          transmission: form.transmission.trim() || null,
         })
         .select()
         .single();
@@ -153,6 +237,7 @@ function CarOnboardingPage() {
 
       <form onSubmit={handleSubmit} noValidate className="car-form">
         <p className="form-section-label">Core Specifications</p>
+        {specNotice && <p className="form-hint">{specNotice}</p>}
 
         <div className="form-grid">
           <div className="form-field">
@@ -249,6 +334,55 @@ function CarOnboardingPage() {
               placeholder="e.g. 7XYZ890"
               value={form.licensePlate}
               onChange={handleChange("licensePlate")}
+            />
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="fuelEfficiency">Fuel Efficiency (km/L)</label>
+            <input
+              id="fuelEfficiency"
+              name="fuelEfficiency"
+              type="number"
+              step="0.1"
+              placeholder="Auto-filled if available"
+              value={form.fuelEfficiency}
+              onChange={handleChange("fuelEfficiency")}
+            />
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="cylinders">Cylinders</label>
+            <input
+              id="cylinders"
+              name="cylinders"
+              type="number"
+              placeholder="Auto-filled if available"
+              value={form.cylinders}
+              onChange={handleChange("cylinders")}
+            />
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="drivetrain">Drivetrain</label>
+            <input
+              id="drivetrain"
+              name="drivetrain"
+              type="text"
+              placeholder="e.g. fwd, rwd, awd"
+              value={form.drivetrain}
+              onChange={handleChange("drivetrain")}
+            />
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="transmission">Transmission</label>
+            <input
+              id="transmission"
+              name="transmission"
+              type="text"
+              placeholder="Auto-filled if available"
+              value={form.transmission}
+              onChange={handleChange("transmission")}
             />
           </div>
         </div>

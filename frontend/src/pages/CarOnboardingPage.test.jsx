@@ -1,7 +1,10 @@
 // Tests for the Add Your Car screen: required-field validation (normal
 // case + missing-field and invalid-year edge cases), a successful submit
-// writing the logged-in user's id onto the new row, and the insert-error
-// case. The Supabase client is mocked so no real network calls happen.
+// writing the logged-in user's id onto the new row, the insert-error
+// case, and the CAR-34 background spec-autofill lookup (fills empty
+// fields on success, leaves the form usable on failure). The Supabase
+// client and the backend apiFetch call are both mocked so no real
+// network calls happen.
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -9,7 +12,12 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import CarOnboardingPage from "./CarOnboardingPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
+import { apiFetch } from "../lib/apiClient.js";
 import { supabase } from "../lib/supabaseClient.js";
+
+vi.mock("../lib/apiClient.js", () => ({
+  apiFetch: vi.fn(),
+}));
 
 const LOGGED_IN_USER = { id: "user-123", email: "driver@example.com" };
 
@@ -51,6 +59,9 @@ beforeEach(() => {
   supabase.auth.getSession.mockResolvedValue({
     data: { session: { user: LOGGED_IN_USER } },
   });
+  // Default: no autofill data, so tests that don't care about CAR-34's
+  // lookup aren't affected by it running in the background.
+  apiFetch.mockResolvedValue({});
 });
 
 describe("CarOnboardingPage", () => {
@@ -197,4 +208,78 @@ describe("CarOnboardingPage", () => {
       screen.queryByText("Car profile placeholder"),
     ).not.toBeInTheDocument();
   });
+
+  it(
+    "auto-fills empty spec fields from the backend lookup and includes them in the insert (normal case)",
+    async () => {
+      const user = userEvent.setup();
+      apiFetch.mockResolvedValue({
+        vehicle_confirmed: true,
+        engine_type: "Passenger Car",
+        fuel_efficiency: 14.5,
+        cylinders: 4,
+        drivetrain: "fwd",
+        transmission: "a",
+      });
+      const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+      const select = vi.fn(() => ({ single }));
+      const insert = vi.fn(() => ({ select }));
+      supabase.from.mockReturnValue({ insert });
+
+      renderPage();
+      await fillRequiredFields(user);
+
+      await waitFor(
+        () =>
+          expect(screen.getByLabelText("Fuel Efficiency (km/L)")).toHaveValue(14.5),
+        { timeout: 3000 },
+      );
+      expect(apiFetch).toHaveBeenCalledWith(
+        expect.stringContaining("/cars/spec-suggestions?make=Toyota&model=Corolla&year=2020"),
+      );
+
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+      expect(insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          engine_type: "Passenger Car",
+          fuel_efficiency: 14.5,
+          cylinders: 4,
+          drivetrain: "fwd",
+          transmission: "a",
+        }),
+      );
+    },
+    10000,
+  );
+
+  it(
+    "leaves spec fields blank and still submits normally when the lookup fails (edge case)",
+    async () => {
+      const user = userEvent.setup();
+      apiFetch.mockRejectedValue(new Error("Could not reach the server."));
+      const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+      const select = vi.fn(() => ({ single }));
+      const insert = vi.fn(() => ({ select }));
+      supabase.from.mockReturnValue({ insert });
+
+      renderPage();
+      await fillRequiredFields(user);
+
+      await waitFor(() => expect(apiFetch).toHaveBeenCalled(), { timeout: 3000 });
+
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+      expect(insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          engine_type: null,
+          fuel_efficiency: null,
+          cylinders: null,
+          drivetrain: null,
+          transmission: null,
+        }),
+      );
+    },
+    10000,
+  );
 });
