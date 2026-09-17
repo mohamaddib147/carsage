@@ -1,12 +1,15 @@
 // Trip Planner screen (core feature) — destination in, estimated fuel
 // cost + traffic-adjusted travel time out. No map UI, no route
-// modifiers, no car selector (MVP is one car per user — uses the
-// logged-in user's own car automatically, same as Dashboard/Car Profile).
-// Layout matches docs/stitch_carsage_landing_page/carsage_trip_planner
-// for the in-scope parts (route parameters card, 3-stat results row);
-// its car-switcher chip, weather widget, and route-recommendation
-// badges are out of scope (no multi-car selector, no live weather/route
-// data) and are omitted.
+// modifiers. Loads all of the logged-in user's cars; if there's more
+// than one, a plain <select> lets the user pick which one to plan the
+// trip with (CAR-37) — with exactly one car it's used automatically, same
+// as before. Layout matches
+// docs/stitch_carsage_landing_page/carsage_trip_planner for the in-scope
+// parts (route parameters card, 3-stat results row); its weather widget
+// and route-recommendation badges are out of scope (no live weather/
+// route data) and are omitted — the car selector here is a plain <select>
+// rather than that reference's chip-style switcher, since CAR-37 only
+// asked for a way to choose the car, not to match that specific control.
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -25,8 +28,9 @@ import { apiFetch } from "../lib/apiClient.js";
 function TripPlannerPage() {
   const { user, session } = useAuth();
 
-  const [car, setCar] = useState(null);
+  const [cars, setCars] = useState([]);
   const [loadingCar, setLoadingCar] = useState(true);
+  const [selectedCarId, setSelectedCarId] = useState("");
 
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
@@ -40,22 +44,22 @@ function TripPlannerPage() {
 
     let cancelled = false;
 
-    async function loadCar() {
+    async function loadCars() {
       setLoadingCar(true);
       const { data } = await supabase
         .from("cars")
-        .select("id")
+        .select("id, make, model, year")
         .eq("user_id", user.id)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+        .order("created_at", { ascending: true });
 
       if (cancelled) return;
-      setCar(data ?? null);
+      const loadedCars = data ?? [];
+      setCars(loadedCars);
+      setSelectedCarId(loadedCars[0]?.id ?? "");
       setLoadingCar(false);
     }
 
-    loadCar();
+    loadCars();
     return () => {
       cancelled = true;
     };
@@ -79,7 +83,7 @@ function TripPlannerPage() {
         method: "POST",
         accessToken: session.access_token,
         body: {
-          car_id: car.id,
+          car_id: selectedCarId,
           destination: destination.trim(),
           origin: origin.trim() || undefined,
         },
@@ -96,7 +100,7 @@ function TripPlannerPage() {
     return <PageShell title="Trip Planner" description="Loading your car..." />;
   }
 
-  if (!car) {
+  if (cars.length === 0) {
     return (
       <PageShell
         title="Trip Planner"
@@ -118,6 +122,25 @@ function TripPlannerPage() {
         <p className="form-section-label">Route Parameters</p>
 
         <form onSubmit={handleSubmit} noValidate className="car-form">
+          {cars.length > 1 && (
+            <div className="form-field">
+              <label htmlFor="carId">Car</label>
+              <select
+                id="carId"
+                value={selectedCarId}
+                onChange={(event) => setSelectedCarId(event.target.value)}
+              >
+                {cars.map((carOption) => (
+                  <option key={carOption.id} value={carOption.id}>
+                    {[carOption.year, carOption.make, carOption.model]
+                      .filter(Boolean)
+                      .join(" ")}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="form-field">
             <label htmlFor="origin">
               Starting Location <span className="form-field__hint">Optional</span>

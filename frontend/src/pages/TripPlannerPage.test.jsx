@@ -1,7 +1,8 @@
 // Tests for the Trip Planner screen: the empty state (no car yet),
 // required-destination validation, a successful trip (loading state +
 // results card), the clear-error case when the backend rejects the
-// trip, and that Starting Location really is optional.
+// trip, that Starting Location really is optional, and the CAR-37 car
+// selector (hidden with 0-1 cars, shown and switchable with 2+).
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -31,10 +32,10 @@ vi.mock("../lib/apiClient.js", () => ({
   apiFetch: vi.fn(),
 }));
 
-function mockCarLookup(carRow) {
-  const maybeSingle = vi.fn().mockResolvedValue({ data: carRow, error: null });
-  const limit = vi.fn(() => ({ maybeSingle }));
-  const order = vi.fn(() => ({ limit }));
+/** Wires supabase.from("cars").select().eq().order() to resolve to the
+ * given list of the user's cars (CAR-37 loads all of them, not just one). */
+function mockCarsLookup(carsArray) {
+  const order = vi.fn().mockResolvedValue({ data: carsArray, error: null });
   const eq = vi.fn(() => ({ order }));
   const select = vi.fn(() => ({ eq }));
   supabase.from.mockReturnValue({ select });
@@ -60,7 +61,7 @@ beforeEach(() => {
 
 describe("TripPlannerPage — no car yet", () => {
   it("shows an empty state linking to Car Onboarding (edge case)", async () => {
-    mockCarLookup(null);
+    mockCarsLookup([]);
 
     renderPage();
 
@@ -75,7 +76,7 @@ describe("TripPlannerPage — no car yet", () => {
 describe("TripPlannerPage — planning a trip", () => {
   it("requires a destination before submitting (invalid input case)", async () => {
     const user = userEvent.setup();
-    mockCarLookup({ id: "car-1" });
+    mockCarsLookup([{ id: "car-1" }]);
 
     renderPage();
     await user.click(await screen.findByRole("button", { name: "Plan Trip" }));
@@ -88,7 +89,7 @@ describe("TripPlannerPage — planning a trip", () => {
 
   it("shows a loading state, then the results card, on a successful trip (normal case)", async () => {
     const user = userEvent.setup();
-    mockCarLookup({ id: "car-1" });
+    mockCarsLookup([{ id: "car-1" }]);
 
     let resolveFetch;
     apiFetch.mockReturnValue(
@@ -122,7 +123,7 @@ describe("TripPlannerPage — planning a trip", () => {
 
   it("submits without a Starting Location, since it's optional", async () => {
     const user = userEvent.setup();
-    mockCarLookup({ id: "car-1" });
+    mockCarsLookup([{ id: "car-1" }]);
     apiFetch.mockResolvedValue({
       distance_km: 10,
       duration_min: 10,
@@ -155,7 +156,7 @@ describe("TripPlannerPage — planning a trip", () => {
 
   it("shows a clear error message when the trip can't be planned", async () => {
     const user = userEvent.setup();
-    mockCarLookup({ id: "car-1" });
+    mockCarsLookup([{ id: "car-1" }]);
     apiFetch.mockRejectedValue(
       new Error(
         "Could not find a route between that origin and destination. Check that both addresses are valid.",
@@ -173,5 +174,48 @@ describe("TripPlannerPage — planning a trip", () => {
       "Could not find a route between that origin and destination.",
     );
     expect(screen.queryByText("Fuel Cost")).not.toBeInTheDocument();
+  });
+});
+
+describe("TripPlannerPage — car selector (CAR-37)", () => {
+  it("does not show a selector with only one car (normal case)", async () => {
+    mockCarsLookup([{ id: "car-1", make: "Toyota", model: "Corolla", year: 2020 }]);
+
+    renderPage();
+
+    await screen.findByLabelText("Destination *");
+    expect(screen.queryByLabelText("Car")).not.toBeInTheDocument();
+  });
+
+  it("shows a selector defaulting to the first car when there are multiple (normal case)", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([
+      { id: "car-1", make: "Toyota", model: "Corolla", year: 2020 },
+      { id: "car-2", make: "Mercedes-Benz", model: "C230", year: 2005 },
+    ]);
+    apiFetch.mockResolvedValue({
+      distance_km: 10,
+      duration_min: 10,
+      duration_in_traffic_min: 12,
+      fuel_price_used_lbp: 90000,
+      estimated_cost_lbp: 50000,
+      estimated_cost_usd: 0.56,
+    });
+
+    renderPage();
+    const carSelect = await screen.findByLabelText("Car");
+    expect(carSelect).toHaveValue("car-1");
+
+    await user.selectOptions(carSelect, "car-2");
+    await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    await waitFor(() => expect(apiFetch).toHaveBeenCalled());
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/trip-planner/estimate",
+      expect.objectContaining({
+        body: expect.objectContaining({ car_id: "car-2" }),
+      }),
+    );
   });
 });

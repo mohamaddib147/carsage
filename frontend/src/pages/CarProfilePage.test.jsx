@@ -43,8 +43,9 @@ vi.mock("../lib/supabaseClient.js", () => ({
 }));
 
 /** Wires supabase.from("cars") to resolve `selectResult` for both the
- * by-id and "mine" query shapes, and `updateResult` for update(). */
-function mockCarsTable({ selectResult, updateResult }) {
+ * by-id and "mine" query shapes, `updateResult` for update(), and
+ * `deleteResult` for delete() (CAR-38). */
+function mockCarsTable({ selectResult, updateResult, deleteResult }) {
   const maybeSingle = vi.fn().mockResolvedValue(selectResult);
   const limit = vi.fn(() => ({ maybeSingle }));
   const order = vi.fn(() => ({ limit }));
@@ -56,8 +57,11 @@ function mockCarsTable({ selectResult, updateResult }) {
   const eqForUpdate = vi.fn(() => ({ select: selectAfterUpdate }));
   const update = vi.fn(() => ({ eq: eqForUpdate }));
 
-  supabase.from.mockReturnValue({ select, update });
-  return { eqForSelect, eqForUpdate, update };
+  const eqForDelete = vi.fn().mockResolvedValue(deleteResult ?? { error: null });
+  const carDelete = vi.fn(() => ({ eq: eqForDelete }));
+
+  supabase.from.mockReturnValue({ select, update, delete: carDelete });
+  return { eqForSelect, eqForUpdate, update, eqForDelete, delete: carDelete };
 }
 
 function renderAt(path) {
@@ -68,6 +72,7 @@ function renderAt(path) {
           <Route path="/cars/mine" element={<CarProfilePage />} />
           <Route path="/cars/:carId" element={<CarProfilePage />} />
           <Route path="/cars/new" element={<p>Car onboarding placeholder</p>} />
+          <Route path="/dashboard" element={<p>Dashboard placeholder</p>} />
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
@@ -234,5 +239,52 @@ describe("CarProfilePage — editing", () => {
 
     expect(screen.getByText("Corolla")).toBeInTheDocument();
     expect(screen.queryByText("Discarded")).not.toBeInTheDocument();
+  });
+});
+
+describe("CarProfilePage — deleting (CAR-38)", () => {
+  it("deletes the car and navigates to the Dashboard after confirming (normal case)", async () => {
+    const user = userEvent.setup();
+    const { eqForDelete } = mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+    });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Delete Car" }));
+    await user.click(screen.getByRole("button", { name: "Yes, Delete" }));
+
+    expect(eqForDelete).toHaveBeenCalledWith("id", "car-456");
+    await waitFor(() =>
+      expect(screen.getByText("Dashboard placeholder")).toBeInTheDocument(),
+    );
+  });
+
+  it("does not delete when the confirmation is cancelled (edge case)", async () => {
+    const user = userEvent.setup();
+    const { delete: carDelete } = mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+    });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Delete Car" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(carDelete).not.toHaveBeenCalled();
+    expect(screen.getByText("Corolla")).toBeInTheDocument();
+  });
+
+  it("shows a clear error and stays on the page when the delete fails", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      deleteResult: { error: { message: "new row violates row-level security policy" } },
+    });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Delete Car" }));
+    await user.click(screen.getByRole("button", { name: "Yes, Delete" }));
+
+    expect(await screen.findByText("new row violates row-level security policy")).toBeInTheDocument();
+    expect(screen.getByText("Corolla")).toBeInTheDocument();
   });
 });

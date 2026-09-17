@@ -1,11 +1,15 @@
 // Car Profile screen — displays a saved car's specs and lets the owner
-// edit them. Reached either as /cars/mine (the logged-in user's own car,
-// looked up by user_id — MVP is one car per user) or /cars/:carId (a
-// specific car, e.g. right after onboarding). Both paths rely on the
-// `cars` RLS policies to keep this scoped to the owner.
+// edit or delete it. Reached either as /cars/mine (the logged-in user's
+// own car, looked up by user_id — MVP is one car per user) or
+// /cars/:carId (a specific car, e.g. right after onboarding, or from the
+// Dashboard's car list once a user has more than one). Both paths rely
+// on the `cars` RLS policies to keep this scoped to the owner. Deleting
+// a car cascades to its `trips` rows and nulls out any
+// `advisor_conversations.car_id` referencing it (CAR-38) — both handled
+// by the DB's own foreign key rules, not application code.
 
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
@@ -113,6 +117,7 @@ function validate(form) {
 function CarProfilePage() {
   const { carId } = useParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [car, setCar] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -122,6 +127,9 @@ function CarProfilePage() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     // Guards against rendering before the auth session has resolved. In
@@ -172,6 +180,25 @@ function CarProfilePage() {
 
   function cancelEditing() {
     setIsEditing(false);
+  }
+
+  /** Deletes the current car (CAR-38). The `trips_car_id_fkey` and
+   * `advisor_conversations_car_id_fkey` foreign keys are CASCADE / SET
+   * NULL respectively, so this car's trip history goes with it — the
+   * confirmation copy below says so. */
+  async function handleDelete() {
+    setDeleteError("");
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from("cars").delete().eq("id", car.id);
+      if (error) {
+        setDeleteError(error.message);
+        return;
+      }
+      navigate("/dashboard", { replace: true });
+    } finally {
+      setDeleting(false);
+    }
   }
 
   /** @param {keyof typeof FIELD_LABELS} field */
@@ -419,6 +446,45 @@ function CarProfilePage() {
           ))}
         </dl>
       </div>
+
+      {confirmingDelete ? (
+        <div className="profile-delete-confirm">
+          <p role="alert">
+            Delete this car? Its trip history will be deleted too, and this
+            can't be undone.
+          </p>
+          {deleteError && (
+            <p role="alert" className="auth-form__error">
+              {deleteError}
+            </p>
+          )}
+          <div className="car-profile__actions">
+            <button
+              className="btn-primary"
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting..." : "Yes, Delete"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          className="profile-delete-trigger"
+          type="button"
+          onClick={() => setConfirmingDelete(true)}
+        >
+          Delete Car
+        </button>
+      )}
     </div>
   );
 }
