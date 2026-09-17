@@ -5,10 +5,13 @@
 
 /**
  * The icon-only mark: a mountain-and-sun glyph in a rounded green badge.
- * @param {{ size?: number }} props
+ * On a background that's the same green (e.g. the site header), the
+ * badge gets a faint light ring so its edge stays visible — otherwise
+ * it disappears into the background.
+ * @param {{ size?: number, onDark?: boolean }} props
  * @returns {JSX.Element}
  */
-function LogoMark({ size = 32 }) {
+function LogoMark({ size = 32, onDark = false }) {
   return (
     <svg
       width={size}
@@ -18,7 +21,14 @@ function LogoMark({ size = 32 }) {
       aria-hidden="true"
       className="logo__mark"
     >
-      <rect width="32" height="32" rx="10" fill="#00594C" />
+      <rect
+        width="32"
+        height="32"
+        rx="10"
+        fill="#00594C"
+        stroke={onDark ? "rgba(255,255,255,0.35)" : "none"}
+        strokeWidth={onDark ? 1 : 0}
+      />
       <path
         d="M9 22L16 12L23 22H9Z"
         fill="#C9A24B"
@@ -45,7 +55,7 @@ function LogoMark({ size = 32 }) {
 function Logo({ size = 32, onDark = false, className = "" }) {
   return (
     <span className={`logo ${onDark ? "logo--on-dark" : ""} ${className}`}>
-      <LogoMark size={size} />
+      <LogoMark size={size} onDark={onDark} />
       <span className="logo__wordmark">CarSage</span>
     </span>
   );

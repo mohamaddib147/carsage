@@ -1,13 +1,13 @@
-// Top navigation bar linking to every screen. Temporary aid for manually
-// verifying routing during development; also shows Log In/Sign Up vs Log
-// Out depending on auth state.
+// Top navigation bar shown on every screen: the CarSage brand mark on
+// the left (click to go to the Landing page), links to every screen
+// centered, and auth actions (Sign Up/Log In, or Log Out once signed
+// in) on the right.
 
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
+import Logo from "./Logo.jsx";
 
-const NAV_LINKS = [
-  { to: "/", label: "Landing" },
-  { to: "/login", label: "Sign Up / Log In" },
+const CENTER_LINKS = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/cars/new", label: "Car Onboarding" },
   { to: "/cars/mine", label: "Car Profile" },
@@ -16,8 +16,8 @@ const NAV_LINKS = [
 ];
 
 /**
- * Renders the top-level navigation bar used to move between placeholder
- * screens, plus a Log Out action when a user is logged in.
+ * Renders the top-level navigation bar: brand (left), screen links
+ * (center), and auth actions (right).
  * @returns {JSX.Element}
  */
 function SiteNav() {
@@ -31,25 +31,32 @@ function SiteNav() {
 
   return (
     <nav className="site-nav">
-      <span className="site-nav__brand">CarSage</span>
+      <NavLink to="/" end className="site-nav__brand">
+        <Logo onDark size={28} />
+      </NavLink>
+
       <ul className="site-nav__links">
-        {NAV_LINKS.map((link) => (
+        {CENTER_LINKS.map((link) => (
           <li key={link.to}>
-            <NavLink to={link.to} end={link.to === "/"}>
-              {link.label}
-            </NavLink>
+            <NavLink to={link.to}>{link.label}</NavLink>
           </li>
         ))}
       </ul>
-      {user && (
-        <button
-          type="button"
-          className="site-nav__logout"
-          onClick={handleLogOut}
-        >
-          Log Out ({user.email})
-        </button>
-      )}
+
+      <div className="site-nav__actions">
+        <NavLink to="/login" className="site-nav__auth-link">
+          Sign Up / Log In
+        </NavLink>
+        {user && (
+          <button
+            type="button"
+            className="site-nav__logout"
+            onClick={handleLogOut}
+          >
+            Log Out ({user.email})
+          </button>
+        )}
+      </div>
     </nav>
   );
 }

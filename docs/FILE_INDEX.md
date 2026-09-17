@@ -33,7 +33,7 @@ Format: `path/to/file — what this file does`
 - `frontend/src/auth/AuthContext.jsx` — React context holding the Supabase auth session (re-hydrated on mount so login persists across refresh) and exposing `signUp`/`signIn`/`signOut`.
 - `frontend/src/auth/AuthContext.test.jsx` — tests session re-hydration on mount (refresh persistence) and the logged-out edge case.
 - `frontend/src/components/PageShell.jsx` — shared placeholder layout (title + description) reused by every screen.
-- `frontend/src/components/SiteNav.jsx` — top nav bar linking to all 7 screens; shows a Log Out button when a user is signed in.
+- `frontend/src/components/SiteNav.jsx` — global header shown on every screen: the clickable `Logo` (links to Landing) on the left, links to every screen centered, and Sign Up/Log In (plus a Log Out button when signed in) on the right — matches the Stitch reference's header layout.
 - `frontend/src/components/ProtectedRoute.jsx` — route guard that redirects logged-out users to `/login`.
 - `frontend/src/components/ProtectedRoute.test.jsx` — tests the redirect (logged-out) and pass-through (logged-in) cases.
 - `frontend/src/components/Logo.jsx` — the CarSage brand mark (`LogoMark` icon + wordmark, `Logo` combines them), matching `docs/stitch_carsage_landing_page/carsage_logo`; the wordmark's color adapts via CSS (an `onDark` prop) so it reads on both light and dark backgrounds.
