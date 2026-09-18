@@ -1292,30 +1292,79 @@ select:focus {
   display: flex;
   align-items: center;
   gap: calc(var(--spacing-unit) * 1.5);
-  margin-top: calc(var(--spacing-unit) * 1.5);
-  padding: calc(var(--spacing-unit) * 1);
-  background-color: rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-base);
+  margin-top: calc(var(--spacing-unit) * 2.5);
+  padding: calc(var(--spacing-unit) * 1.25);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   text-decoration: none;
-  color: #ffffff;
+  color: var(--color-text);
+  box-shadow: 0 1px 4px rgba(43, 43, 43, 0.06);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
 .advisor-video-card:hover {
-  background-color: rgba(255, 255, 255, 0.16);
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 12px rgba(43, 43, 43, 0.12);
+}
+
+.advisor-video-card__thumbnail-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 120px;
+  height: 68px;
 }
 
 .advisor-video-card__thumbnail {
-  width: 96px;
-  height: 54px;
+  display: block;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  border-radius: 4px;
-  flex-shrink: 0;
+  border-radius: var(--radius-base);
+}
+
+.advisor-video-card__play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.55);
+  color: #ffffff;
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+
+.advisor-video-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 .advisor-video-card__title {
   font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.advisor-video-card__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
   font-weight: 600;
-  line-height: 1.4;
+  color: var(--color-primary);
 }
 
 .advisor-input-row {

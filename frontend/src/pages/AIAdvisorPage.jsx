@@ -321,14 +321,24 @@ function AIAdvisorPage() {
                   rel="noopener noreferrer"
                 >
                   {youtubeThumbnailUrl(message.videoUrl) && (
-                    <img
-                      className="advisor-video-card__thumbnail"
-                      src={youtubeThumbnailUrl(message.videoUrl)}
-                      alt=""
-                    />
+                    <span className="advisor-video-card__thumbnail-wrap">
+                      <img
+                        className="advisor-video-card__thumbnail"
+                        src={youtubeThumbnailUrl(message.videoUrl)}
+                        alt=""
+                      />
+                      <span className="advisor-video-card__play" aria-hidden="true">
+                        ▶
+                      </span>
+                    </span>
                   )}
-                  <span className="advisor-video-card__title">
-                    ▶ {message.videoTitle}
+                  <span className="advisor-video-card__body">
+                    <span className="advisor-video-card__title">
+                      {message.videoTitle}
+                    </span>
+                    <span className="advisor-video-card__cta">
+                      ▶ Watch on YouTube
+                    </span>
                   </span>
                 </a>
               )}
