@@ -3,7 +3,9 @@
 # appending to an existing conversation, a conversation that isn't the
 # caller's own, a car that isn't the caller's own, the user's message
 # still being saved when the LLM service fails (surfacing a clear 503),
-# missing/empty description validation, and missing authentication.
+# missing/empty description validation, missing authentication, and the
+# CAR-40 YouTube video wiring (saved + returned on a 'diy' match, absent
+# on no match, and never even looked up for 'mechanic').
 
 from unittest.mock import MagicMock, patch
 
@@ -22,12 +24,13 @@ def _build_mock_supabase(
     """
     Mocks supabase.table(...) for "cars" (ownership check),
     "advisor_conversations" (lookup-by-id for an existing conversation,
-    or insert for a new one), and "advisor_messages" (insert, capturing
-    every inserted row). Matches supabase-py's real behavior where
+    or insert for a new one), and "advisor_messages" (insert and update,
+    each capturing every row). Matches supabase-py's real behavior where
     maybe_single().execute() returns None outright (not a response
     object with .data=None) when nothing matches.
 
-    Returns (mock_supabase, captured_messages).
+    Returns (mock_supabase, captured_inserts, captured_updates) — each
+    captured_updates entry is {"id": <message id>, **update_fields}.
     """
     mock_supabase = MagicMock()
 
@@ -47,15 +50,35 @@ def _build_mock_supabase(
     )
 
     messages_table = MagicMock()
-    captured_messages = []
+    captured_inserts = []
+    captured_updates = []
+    counter = {"n": 0}
 
     def insert_message(row):
-        captured_messages.append(row)
+        captured_inserts.append(row)
+        counter["n"] += 1
+        message_id = f"msg-{counter['n']}"
         result = MagicMock()
-        result.execute.return_value = MagicMock(data=[{"id": "msg-1", **row}])
+        result.execute.return_value = MagicMock(data=[{"id": message_id, **row}])
         return result
 
     messages_table.insert.side_effect = insert_message
+
+    def update_message(row):
+        update_builder = MagicMock()
+
+        def eq(_field, message_id):
+            captured_updates.append({"id": message_id, **row})
+            eq_builder = MagicMock()
+            eq_builder.execute.return_value = MagicMock(
+                data=[{"id": message_id, **row}]
+            )
+            return eq_builder
+
+        update_builder.eq.side_effect = eq
+        return update_builder
+
+    messages_table.update.side_effect = update_message
 
     mock_supabase.table.side_effect = lambda name: {
         "cars": cars_table,
@@ -63,7 +86,7 @@ def _build_mock_supabase(
         "advisor_messages": messages_table,
     }[name]
 
-    return mock_supabase, captured_messages
+    return mock_supabase, captured_inserts, captured_updates
 
 
 class TestPostClassify:
@@ -76,12 +99,14 @@ class TestPostClassify:
     def test_returns_the_classification_and_persists_both_messages_in_a_new_conversation(
         self,
     ):
-        mock_supabase, captured = _build_mock_supabase(
+        mock_supabase, captured, _ = _build_mock_supabase(
             {"make": "Toyota", "model": "Corolla", "year": 2020}
         )
         with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
             "app.routers.ai_advisor.classify_issue"
-        ) as mock_classify:
+        ) as mock_classify, patch(
+            "app.routers.ai_advisor.search_diy_video", return_value=None
+        ):
             mock_classify.return_value = {
                 "recommendation": "diy",
                 "guidance": "Top up the washer fluid.",
@@ -97,6 +122,8 @@ class TestPostClassify:
             "conversation_id": "conv-1",
             "recommendation": "diy",
             "guidance": "Top up the washer fluid.",
+            "video_title": None,
+            "video_url": None,
         }
         mock_classify.assert_called_once_with(
             "Washer fluid light is on",
@@ -117,7 +144,7 @@ class TestPostClassify:
         ]
 
     def test_appends_to_an_existing_conversation_when_conversation_id_is_provided(self):
-        mock_supabase, captured = _build_mock_supabase(
+        mock_supabase, captured, _ = _build_mock_supabase(
             {"make": "Honda"}, conversation_lookup_data={"id": "conv-2"}
         )
         with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
@@ -144,7 +171,7 @@ class TestPostClassify:
         mock_supabase.table("advisor_conversations").insert.assert_not_called()
 
     def test_returns_404_for_a_conversation_that_is_not_the_callers_own(self):
-        mock_supabase, _ = _build_mock_supabase(
+        mock_supabase, _, _ = _build_mock_supabase(
             {"make": "Honda"}, conversation_lookup_data=None
         )
         with patch("app.routers.ai_advisor.supabase", mock_supabase):
@@ -160,7 +187,7 @@ class TestPostClassify:
         assert response.status_code == 404
 
     def test_returns_404_for_a_car_that_is_not_the_callers_own(self):
-        mock_supabase, _ = _build_mock_supabase(None)
+        mock_supabase, _, _ = _build_mock_supabase(None)
         with patch("app.routers.ai_advisor.supabase", mock_supabase):
             response = client.post(
                 "/ai-advisor/classify",
@@ -170,7 +197,7 @@ class TestPostClassify:
         assert response.status_code == 404
 
     def test_saves_the_user_message_even_when_the_llm_service_fails(self):
-        mock_supabase, captured = _build_mock_supabase({"make": "Toyota"})
+        mock_supabase, captured, _ = _build_mock_supabase({"make": "Toyota"})
         with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
             "app.routers.ai_advisor.classify_issue"
         ) as mock_classify:
@@ -198,6 +225,101 @@ class TestPostClassify:
         )
 
         assert response.status_code == 422
+
+
+class TestYouTubeVideoWiring:
+    """CAR-40: a matching video is saved onto the AI message row and
+    returned, a diy recommendation with no match returns no video
+    fields, and a mechanic recommendation never triggers the lookup."""
+
+    def setup_method(self):
+        app.dependency_overrides[get_current_user_id] = lambda: "user-123"
+
+    def teardown_method(self):
+        app.dependency_overrides.pop(get_current_user_id, None)
+
+    def test_saves_and_returns_a_video_when_diy_and_a_match_is_found(self):
+        mock_supabase, _, updates = _build_mock_supabase({"make": "Honda"})
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.classify_issue"
+        ) as mock_classify, patch(
+            "app.routers.ai_advisor.search_diy_video"
+        ) as mock_search:
+            mock_classify.return_value = {
+                "recommendation": "diy",
+                "guidance": "Top up the washer fluid.",
+            }
+            mock_search.return_value = {
+                "video_title": "How to Top Up Washer Fluid",
+                "video_url": "https://www.youtube.com/watch?v=abc123",
+            }
+
+            response = client.post(
+                "/ai-advisor/classify",
+                json={"car_id": "car-1", "description": "Washer fluid light is on"},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["video_title"] == "How to Top Up Washer Fluid"
+        assert body["video_url"] == "https://www.youtube.com/watch?v=abc123"
+        mock_search.assert_called_once_with(
+            {"make": "Honda"}, "Washer fluid light is on"
+        )
+        # The video was saved onto the AI message row (the 2nd insert).
+        assert len(updates) == 1
+        assert updates[0] == {
+            "id": "msg-2",
+            "video_title": "How to Top Up Washer Fluid",
+            "video_url": "https://www.youtube.com/watch?v=abc123",
+        }
+
+    def test_returns_no_video_fields_when_diy_and_no_match_is_found(self):
+        mock_supabase, _, updates = _build_mock_supabase({"make": "Honda"})
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.classify_issue"
+        ) as mock_classify, patch(
+            "app.routers.ai_advisor.search_diy_video", return_value=None
+        ):
+            mock_classify.return_value = {
+                "recommendation": "diy",
+                "guidance": "Top up the washer fluid.",
+            }
+
+            response = client.post(
+                "/ai-advisor/classify",
+                json={"car_id": "car-1", "description": "Washer fluid light is on"},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["video_title"] is None
+        assert body["video_url"] is None
+        assert updates == []
+
+    def test_does_not_look_up_a_video_for_a_mechanic_recommendation(self):
+        mock_supabase, _, updates = _build_mock_supabase({"make": "Honda"})
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.classify_issue"
+        ) as mock_classify, patch(
+            "app.routers.ai_advisor.search_diy_video"
+        ) as mock_search:
+            mock_classify.return_value = {
+                "recommendation": "mechanic",
+                "guidance": "See a mechanic.",
+            }
+
+            response = client.post(
+                "/ai-advisor/classify",
+                json={"car_id": "car-1", "description": "Brakes are grinding"},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["video_title"] is None
+        assert body["video_url"] is None
+        mock_search.assert_not_called()
+        assert updates == []
 
 
 def test_classify_requires_authentication():

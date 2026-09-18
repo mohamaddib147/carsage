@@ -303,3 +303,75 @@ describe("AIAdvisorPage — conversation history (CAR-21)", () => {
     );
   });
 });
+
+describe("AIAdvisorPage — DIY video suggestion (CAR-40)", () => {
+  it("shows a video card linking out to YouTube when the response includes one (normal case)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      recommendation: "diy",
+      guidance: "Top it up.",
+      video_title: "How to Top Up Washer Fluid",
+      video_url: "https://www.youtube.com/watch?v=abc123",
+    });
+
+    renderPage();
+    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    await user.type(input, "Washer fluid light is on");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    const videoLink = await screen.findByRole("link", {
+      name: /How to Top Up Washer Fluid/,
+    });
+    expect(videoLink).toHaveAttribute(
+      "href",
+      "https://www.youtube.com/watch?v=abc123",
+    );
+    expect(videoLink).toHaveAttribute("target", "_blank");
+    expect(videoLink.querySelector("img")).toHaveAttribute(
+      "src",
+      "https://img.youtube.com/vi/abc123/hqdefault.jpg",
+    );
+  });
+
+  it("shows no video card when the response has no video (edge case)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({ recommendation: "diy", guidance: "Top it up." });
+
+    renderPage();
+    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    await user.type(input, "Washer fluid light is on");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await screen.findByText("DIY Fixable");
+    expect(screen.queryByRole("link", { name: /Top it up/ })).not.toBeInTheDocument();
+  });
+
+  it("shows a saved video from a reloaded conversation", async () => {
+    mockSupabaseTables({
+      cars: [{ id: "car-1" }],
+      conversation: { id: "conv-1" },
+      messages: [
+        { sender: "user", message_text: "Washer fluid light is on", recommendation: null },
+        {
+          sender: "ai",
+          message_text: "Top it up.",
+          recommendation: "diy",
+          video_title: "How to Top Up Washer Fluid",
+          video_url: "https://www.youtube.com/watch?v=abc123",
+        },
+      ],
+    });
+
+    renderPage();
+
+    const videoLink = await screen.findByRole("link", {
+      name: /How to Top Up Washer Fluid/,
+    });
+    expect(videoLink).toHaveAttribute(
+      "href",
+      "https://www.youtube.com/watch?v=abc123",
+    );
+  });
+});

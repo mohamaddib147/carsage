@@ -13,6 +13,13 @@
 // directly against Supabase (RLS-protected, same pattern as the
 // Dashboard's car list) rather than via a backend endpoint, since it's
 // a plain read already scoped to the caller.
+// DIY video suggestions (CAR-40): a 'diy' response may come back with a
+// video_title/video_url (a backend-side YouTube search, skipped for
+// 'mechanic' recommendations); when present it's shown as a thumbnail +
+// title linking out to YouTube in a new tab, below the numbered steps.
+// The thumbnail URL is derived from the video id in video_url (YouTube's
+// predictable img.youtube.com pattern) rather than stored, since only
+// video_title/video_url are persisted columns.
 // Layout matches docs/stitch_carsage_landing_page/carsage_ai_advisor for
 // the in-scope parts (chat bubbles, quick-start prompt chips, badge +
 // numbered steps on a DIY response); its left sidebar nav, "telemetry"
@@ -41,6 +48,17 @@ function guidanceSteps(guidance) {
     .split(/(?<=[.!?])\s+/)
     .map((sentence) => sentence.trim())
     .filter(Boolean);
+}
+
+/** Derives a YouTube thumbnail URL from a watch URL's video id, or null
+ * if it isn't a recognizable YouTube watch URL. */
+function youtubeThumbnailUrl(videoUrl) {
+  try {
+    const videoId = new URL(videoUrl).searchParams.get("v");
+    return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -118,7 +136,7 @@ function AIAdvisorPage() {
 
       const { data: rows } = await supabase
         .from("advisor_messages")
-        .select("sender, message_text, recommendation")
+        .select("sender, message_text, recommendation, video_title, video_url")
         .eq("conversation_id", conversation.id)
         .order("created_at", { ascending: true });
 
@@ -133,6 +151,8 @@ function AIAdvisorPage() {
                 role: "assistant",
                 recommendation: row.recommendation,
                 guidance: row.message_text,
+                videoTitle: row.video_title,
+                videoUrl: row.video_url,
               },
         ),
       );
@@ -180,6 +200,8 @@ function AIAdvisorPage() {
           role: "assistant",
           recommendation: result.recommendation,
           guidance: result.guidance,
+          videoTitle: result.video_title,
+          videoUrl: result.video_url,
         },
       ]);
     } catch (submitError) {
@@ -290,6 +312,25 @@ function AIAdvisorPage() {
                 </ol>
               ) : (
                 <p className="advisor-guidance-text">{message.guidance}</p>
+              )}
+              {message.videoUrl && (
+                <a
+                  className="advisor-video-card"
+                  href={message.videoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {youtubeThumbnailUrl(message.videoUrl) && (
+                    <img
+                      className="advisor-video-card__thumbnail"
+                      src={youtubeThumbnailUrl(message.videoUrl)}
+                      alt=""
+                    />
+                  )}
+                  <span className="advisor-video-card__title">
+                    ▶ {message.videoTitle}
+                  </span>
+                </a>
               )}
             </div>
           ),

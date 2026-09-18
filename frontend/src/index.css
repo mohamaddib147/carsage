@@ -1288,6 +1288,36 @@ select:focus {
   margin: 0;
 }
 
+.advisor-video-card {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin-top: calc(var(--spacing-unit) * 1.5);
+  padding: calc(var(--spacing-unit) * 1);
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-base);
+  text-decoration: none;
+  color: #ffffff;
+}
+
+.advisor-video-card:hover {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+
+.advisor-video-card__thumbnail {
+  width: 96px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.advisor-video-card__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .advisor-input-row {
   display: flex;
   gap: calc(var(--spacing-unit) * 1.5);

@@ -42,3 +42,8 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 # lookup just returns no API Ninjas data and the user fills specs manually
 # — it must never block onboarding.
 API_NINJAS_KEY = os.environ.get("API_NINJAS_KEY", "")
+
+# Optional: powers AI Advisor's DIY video suggestions (CAR-40). If unset,
+# that lookup just returns no video — it must never block or break a
+# classification response.
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
