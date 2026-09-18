@@ -3,8 +3,16 @@
 // Loads all of the logged-in user's cars and, with more than one, shows
 // a selector (same pattern as Trip Planner's CAR-37 fix) so the right
 // car's context is sent — picking the wrong car silently here would be
-// the same class of bug CAR-37 fixed. No persistence yet (the
-// conversation resets on refresh) — that's CAR-21.
+// the same class of bug CAR-37 fixed.
+// Conversation persistence (CAR-21): on mount, loads the user's most
+// recent advisor_conversations row (if any) and its advisor_messages,
+// hydrating the transcript so returning to this screen picks up where
+// you left off. The backend creates a new conversation on the first
+// message (returning its id) and every later message in the same page
+// session passes that id back to append to it. Reading history is done
+// directly against Supabase (RLS-protected, same pattern as the
+// Dashboard's car list) rather than via a backend endpoint, since it's
+// a plain read already scoped to the caller.
 // Layout matches docs/stitch_carsage_landing_page/carsage_ai_advisor for
 // the in-scope parts (chat bubbles, quick-start prompt chips, badge +
 // numbered steps on a DIY response); its left sidebar nav, "telemetry"
@@ -49,11 +57,13 @@ function AIAdvisorPage() {
   const [selectedCarId, setSelectedCarId] = useState("");
 
   const [messages, setMessages] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   const nextMessageId = useRef(0);
+  const conversationIdRef = useRef(null);
   const transcriptEndRef = useRef(null);
 
   useEffect(() => {
@@ -83,6 +93,59 @@ function AIAdvisorPage() {
   }, [user]);
 
   useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+
+    async function loadHistory() {
+      setLoadingHistory(true);
+      const { data: conversation } = await supabase
+        .from("advisor_conversations")
+        .select("id")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (!conversation) {
+        setLoadingHistory(false);
+        return;
+      }
+
+      conversationIdRef.current = conversation.id;
+
+      const { data: rows } = await supabase
+        .from("advisor_messages")
+        .select("sender, message_text, recommendation")
+        .eq("conversation_id", conversation.id)
+        .order("created_at", { ascending: true });
+
+      if (cancelled) return;
+
+      setMessages(
+        (rows ?? []).map((row) =>
+          row.sender === "user"
+            ? { id: nextMessageId.current++, role: "user", text: row.message_text }
+            : {
+                id: nextMessageId.current++,
+                role: "assistant",
+                recommendation: row.recommendation,
+                guidance: row.message_text,
+              },
+        ),
+      );
+      setLoadingHistory(false);
+    }
+
+    loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
     transcriptEndRef.current?.scrollIntoView?.({ behavior: "smooth" });
   }, [messages, submitting]);
 
@@ -103,8 +166,13 @@ function AIAdvisorPage() {
       const result = await apiFetch("/ai-advisor/classify", {
         method: "POST",
         accessToken: session.access_token,
-        body: { car_id: selectedCarId, description: trimmed },
+        body: {
+          car_id: selectedCarId,
+          description: trimmed,
+          conversation_id: conversationIdRef.current ?? undefined,
+        },
       });
+      conversationIdRef.current = result.conversation_id;
       setMessages((previous) => [
         ...previous,
         {
@@ -127,7 +195,7 @@ function AIAdvisorPage() {
     sendMessage(description);
   }
 
-  if (loadingCars) {
+  if (loadingCars || loadingHistory) {
     return <PageShell title="AI Advisor" description="Loading your car..." />;
   }
 

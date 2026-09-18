@@ -38,6 +38,7 @@ If a feature isn't listed in "Project Overview" above, treat it as out of scope.
 - **Maps**: Google Maps API (Directions + Distance Matrix)
 - **Car identification/specs**: NHTSA vPIC API (`https://vpic.nhtsa.dot.gov/api/`, free, no key, official) for make/model/year/VIN lookup, combined with API Ninjas Cars API (free tier, api-ninjas.com) for detailed specs (MPG, cylinders, drivetrain, transmission). See CAR-34.
 - **Vehicle safety data (AI Advisor enrichment)**: NHTSA Recalls API + Complaints API (`api.nhtsa.gov`, free, no key, official, US-market only) — cross-check user-described issues against real recalls/complaints before falling back to LLM-only classification. See CAR-36.
+- **DIY video suggestions (AI Advisor enrichment)**: YouTube Data API v3 (`search.list`), free — 10,000 quota units/day, a search costs 100 units (~100 searches/day free). Only called when the recommendation is 'diy'. Requires two new nullable columns on `advisor_messages` (`video_url`, `video_title`) — a genuine schema change, apply via the Supabase MCP connector and note it needs reflecting in `docs/CarSage_ERD.pdf` afterward. See CAR-40.
 - **Fuel prices**: no free live API covers Lebanon/Middle East (confirmed via research — GlobalPetrolPrices.com is paid, fuel-prices.eu only covers EU+UK). Built as a small scheduled scraper against Lebanon's Ministry of Energy and Water published weekly prices, cached in the database, with graceful fallback to the last known value and a user-overridable field on the Trip Planner form. See CAR-35.
 
 ## Database (already live in Supabase — see `docs/CarSage_ERD.pdf`)
@@ -56,7 +57,7 @@ Create `.env` files (never commit them — see `.gitignore`) based on `frontend/
 
 **Frontend**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_BASE_URL`
 
-**Backend**: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_MAPS_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `API_NINJAS_KEY`, `ALLOWED_ORIGINS`
+**Backend**: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_MAPS_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `API_NINJAS_KEY`, `YOUTUBE_API_KEY`, `ALLOWED_ORIGINS`
 
 ## Design Reference (in `docs/stitch_carsage_landing_page/`)
 
