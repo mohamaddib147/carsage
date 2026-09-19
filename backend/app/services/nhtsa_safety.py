@@ -27,7 +27,9 @@
 #      counts when it is in the same system AND its text shares specific
 #      symptom words with the description (at least two, or the only one
 #      if that is all the description has), and it takes several such
-#      complaints (COMPLAINT_PATTERN_THRESHOLD) to call it a pattern.
+#      complaints (COMPLAINT_PATTERN_THRESHOLD) to call it a pattern —
+#      twice as many when only a single symptom word is shared, since one
+#      shared word is weak evidence.
 #
 # Design note: NHTSA's Recalls/Complaints APIs give no way to tell "this
 # vehicle isn't in our system" apart from "this vehicle has a clean
@@ -204,13 +206,14 @@ def check_safety_data(make: str, model: str, year: int, description: str) -> dic
 
     if systems and symptoms:
         needed = min(2, len(symptoms))
+        threshold = COMPLAINT_PATTERN_THRESHOLD * (2 if needed == 1 else 1)
         matching_complaints = [
             complaint
             for complaint in complaints
             if _in_system(complaint.get("components", ""), systems)
             and _shared_symptoms(complaint.get("summary"), symptoms) >= needed
         ]
-        if len(matching_complaints) >= COMPLAINT_PATTERN_THRESHOLD:
+        if len(matching_complaints) >= threshold:
             return {
                 "status": "complaint_pattern",
                 "count": len(matching_complaints),

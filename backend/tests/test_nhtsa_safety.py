@@ -54,19 +54,22 @@ def test_returns_recall_match_when_a_recall_matches_the_description():
 
 
 def test_returns_complaint_pattern_when_matches_meet_the_threshold():
-    matching_complaint = {"components": "BRAKES", "summary": "Brakes grind loudly."}
+    # Two shared symptom words (grinding + vibrating) -> 3 complaints is enough.
+    matching_complaint = {"components": "BRAKES", "summary": "Brakes grind loudly and vibrate."}
     recalls = _recalls([])
     complaints = _complaints([matching_complaint] * 3)
 
     with patch(
         "app.services.nhtsa_safety.httpx.get", side_effect=[recalls, complaints]
     ):
-        result = check_safety_data("Honda", "Civic", 2015, "Brakes are grinding")
+        result = check_safety_data(
+            "Honda", "Civic", 2015, "Brakes are grinding and vibrating"
+        )
 
     assert result == {
         "status": "complaint_pattern",
         "count": 3,
-        "summary": "Brakes grind loudly.",
+        "summary": "Brakes grind loudly and vibrate.",
     }
 
 
@@ -301,3 +304,14 @@ def test_recognizes_the_safety_critical_systems_from_everyday_wording(descriptio
     from app.services.nhtsa_safety import _systems_in
 
     assert expected_system in [entry[0] for entry in _systems_in(description)]
+
+
+def test_a_single_shared_symptom_word_takes_twice_the_complaints_to_count_as_a_pattern():
+    complaint = {"components": "SERVICE BRAKES", "summary": "Brakes squeal when applied."}
+
+    # Description has ONE symptom word ("squeal"): 3-5 complaints isn't enough...
+    assert _check([], [complaint] * 5, "My brakes squeal") == {"status": "no_match"}
+    # ...but 6 (twice the threshold) is.
+    result = _check([], [complaint] * 6, "My brakes squeal")
+    assert result["status"] == "complaint_pattern"
+    assert result["count"] == 6
