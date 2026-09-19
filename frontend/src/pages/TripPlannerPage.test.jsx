@@ -10,7 +10,9 @@
 // degrade to the original single "Fuel Cost" stat), and CAR-49 (the Tank
 // Size field/Full Tank Cost use the selected car's own
 // fuel_tank_capacity_liters — no hardcoded default; switching cars
-// changes it; a car with no tank size gets a clear "not set" message).
+// changes it; a car with no tank size gets a clear "not set" message), and
+// the polish pass (Fuel Price / Tank Size tucked into a collapsed
+// "Advanced options" section, shown with thousand separators).
 //
 // apiFetch now fires twice per successful flow (a GET for fuel prices
 // on mount, then the POST estimate on submit) — tests that don't care
@@ -278,7 +280,7 @@ describe("TripPlannerPage — editable fuel price & tank cost (CAR-41)", () => {
     renderPage();
 
     await waitFor(() =>
-      expect(screen.getByLabelText(/Fuel Price/)).toHaveValue(91000),
+      expect(screen.getByLabelText(/Fuel Price/)).toHaveValue("91,000"),
     );
   });
 
@@ -301,7 +303,7 @@ describe("TripPlannerPage — editable fuel price & tank cost (CAR-41)", () => {
     });
 
     renderPage();
-    await waitFor(() => expect(screen.getByLabelText(/Fuel Price/)).toHaveValue(91000));
+    await waitFor(() => expect(screen.getByLabelText(/Fuel Price/)).toHaveValue("91,000"));
 
     const fuelPriceInput = screen.getByLabelText(/Fuel Price/);
     await user.clear(fuelPriceInput);
@@ -680,7 +682,7 @@ describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue(52));
+    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue("52"));
   });
 
   // Regression for the reported "430L / $420.10" figure: whatever shape the
@@ -688,9 +690,9 @@ describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
   // numeric can serialize either way), the field and the cost must use the
   // value exactly, never 10x it.
   it.each([
-    [43, 43, "$43.48 (3,870,000 LBP)"],
-    ["43.0", 43, "$43.48 (3,870,000 LBP)"],
-    [43.5, 43.5, "$43.99 (3,915,000 LBP)"],
+    [43, "43", "$43.48 (3,870,000 LBP)"],
+    ["43.0", "43", "$43.48 (3,870,000 LBP)"],
+    [43.5, "43.5", "$43.99 (3,915,000 LBP)"],
   ])(
     "reads a stored tank capacity of %j as exactly %j litres (no 10x)",
     async (stored, expectedField, expectedCost) => {
@@ -718,13 +720,13 @@ describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
     mockApiFetch({ estimate: ESTIMATE_90K });
 
     renderPage();
-    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue(40));
+    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue("40"));
     await planTrip(user);
     // 40L * 90000 = 3,600,000 LBP.
     expect(await screen.findByText("$40.45 (3,600,000 LBP)")).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Car"), "car-2");
-    expect(screen.getByLabelText(/Tank Size/)).toHaveValue(55);
+    expect(screen.getByLabelText(/Tank Size/)).toHaveValue("55");
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     // 55L * 90000 = 4,950,000 LBP.
@@ -739,7 +741,7 @@ describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
 
     renderPage();
     const tankInput = await screen.findByLabelText(/Tank Size/);
-    expect(tankInput).toHaveValue(null);
+    expect(tankInput).toHaveValue("");
     await planTrip(user);
 
     expect(await screen.findByText("Tank size not set")).toBeInTheDocument();
@@ -777,11 +779,11 @@ describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
     mockApiFetch({ estimate: ESTIMATE_90K });
 
     renderPage();
-    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue(40));
+    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue("40"));
 
     await user.selectOptions(screen.getByLabelText("Car"), "car-2");
 
-    expect(screen.getByLabelText(/Tank Size/)).toHaveValue(null);
+    expect(screen.getByLabelText(/Tank Size/)).toHaveValue("");
   });
 });
 
@@ -801,20 +803,20 @@ describe("TripPlannerPage — tank size reset and range check (CAR-49)", () => {
     mockApiFetch({ estimate: ESTIMATE_90K });
 
     renderPage();
-    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue(40));
+    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue("40"));
 
     // Type extra digits onto car A's value, then bounce around the cars.
     await user.type(screen.getByLabelText(/Tank Size/), "3");
-    expect(screen.getByLabelText(/Tank Size/)).toHaveValue(403);
+    expect(screen.getByLabelText(/Tank Size/)).toHaveValue("403");
 
     const carSelect = screen.getByLabelText("Car");
     for (const [carId, expected] of [
-      ["car-b", null],
-      ["car-a", 40],
-      ["car-c", 55],
-      ["car-b", null],
-      ["car-c", 55],
-      ["car-a", 40],
+      ["car-b", ""],
+      ["car-a", "40"],
+      ["car-c", "55"],
+      ["car-b", ""],
+      ["car-c", "55"],
+      ["car-a", "40"],
     ]) {
       await user.selectOptions(carSelect, carId);
       expect(screen.getByLabelText(/Tank Size/)).toHaveValue(expected);
@@ -849,7 +851,7 @@ describe("TripPlannerPage — tank size reset and range check (CAR-49)", () => {
     mockApiFetch({ estimate: ESTIMATE_90K });
 
     renderPage();
-    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue(430));
+    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue("430"));
     await planTrip(user);
 
     expect(await screen.findByText("Tank size out of range")).toBeInTheDocument();
@@ -870,5 +872,166 @@ describe("TripPlannerPage — tank size reset and range check (CAR-49)", () => {
 
     expect(await screen.findByText(expectedCost)).toBeInTheDocument();
     expect(screen.queryByText(/out of range/)).not.toBeInTheDocument();
+  });
+});
+
+describe("TripPlannerPage — Advanced options & thousand separators (polish)", () => {
+  const FUEL_PRICES = {
+    prices: { "95_octane": { lbp_per_liter: 140500, usd_per_liter: 1.58 } },
+    lbp_per_usd: 89000,
+  };
+
+  async function openAdvanced(user) {
+    await user.click(screen.getByText("Advanced options"));
+  }
+
+  it("keeps Fuel Price and Tank Size collapsed by default, with the toggle visible", async () => {
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline", fuel_tank_capacity_liters: 64 }]);
+    mockApiFetch({ fuelPrices: FUEL_PRICES });
+
+    renderPage();
+    await screen.findByLabelText("Destination *");
+
+    expect(screen.getByText("Advanced options")).toBeVisible();
+    expect(screen.getByLabelText(/Fuel Price/)).not.toBeVisible();
+    expect(screen.getByLabelText(/Tank Size/)).not.toBeVisible();
+  });
+
+  it("reveals both fields when the toggle is clicked, and hides them again on a second click", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    mockApiFetch({ fuelPrices: FUEL_PRICES });
+
+    renderPage();
+    await screen.findByLabelText("Destination *");
+    await openAdvanced(user);
+
+    expect(screen.getByLabelText(/Fuel Price/)).toBeVisible();
+    expect(screen.getByLabelText(/Tank Size/)).toBeVisible();
+
+    await openAdvanced(user);
+    expect(screen.getByLabelText(/Fuel Price/)).not.toBeVisible();
+  });
+
+  it("still uses the auto-filled price and tank size while the section stays closed (default flow)", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline", fuel_tank_capacity_liters: 64 }]);
+    mockApiFetch({
+      fuelPrices: FUEL_PRICES,
+      estimate: { ...ESTIMATE_90K, fuel_price_used_lbp: 140500 },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText(/Fuel Price/)).toHaveValue("140,500"));
+    // Pick car -> destination -> Plan Trip, never opening the section.
+    await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/trip-planner/estimate",
+        expect.objectContaining({
+          body: expect.objectContaining({ fuel_price_per_liter_lbp: 140500 }),
+        }),
+      ),
+    );
+    // 64 L x 140,500 = 8,992,000 LBP.
+    expect(await screen.findByText("$101.03 (8,992,000 LBP)")).toBeInTheDocument();
+  });
+
+  it("shows the prefilled fuel price and tank size with thousand separators", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline", fuel_tank_capacity_liters: 1200 }]);
+    mockApiFetch({ fuelPrices: FUEL_PRICES });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText(/Fuel Price/)).toHaveValue("140,500"));
+    await openAdvanced(user);
+
+    expect(screen.getByLabelText(/Fuel Price/)).toHaveValue("140,500");
+    expect(screen.getByLabelText(/Tank Size/)).toHaveValue("1,200");
+  });
+
+  it("formats a typed fuel price live and submits the plain number (no commas)", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    mockApiFetch({ fuelPrices: FUEL_PRICES, estimate: ESTIMATE_90K });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText(/Fuel Price/)).toHaveValue("140,500"));
+    await openAdvanced(user);
+
+    const priceInput = screen.getByLabelText(/Fuel Price/);
+    await user.clear(priceInput);
+    await user.type(priceInput, "1234567");
+    expect(priceInput).toHaveValue("1,234,567");
+
+    await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/trip-planner/estimate",
+        expect.objectContaining({
+          body: expect.objectContaining({ fuel_price_per_liter_lbp: 1234567 }),
+        }),
+      ),
+    );
+  });
+
+  it("formats a typed tank size and calculates from the plain number (decimals kept)", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_tank_capacity_liters: null }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+    await screen.findByLabelText("Destination *");
+    await openAdvanced(user);
+    const tankInput = screen.getByLabelText(/Tank Size/);
+    await user.type(tankInput, "43.5");
+    expect(tankInput).toHaveValue("43.5");
+
+    await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    // 43.5 L x 90,000 = 3,915,000 LBP.
+    expect(await screen.findByText("$43.99 (3,915,000 LBP)")).toBeInTheDocument();
+  });
+
+  it("ignores letters typed into the number fields", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_tank_capacity_liters: null }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+    await screen.findByLabelText("Destination *");
+    await openAdvanced(user);
+    const tankInput = screen.getByLabelText(/Tank Size/);
+    await user.type(tankInput, "4a5e");
+
+    expect(tankInput).toHaveValue("45");
+  });
+
+  it("opens the section by itself when the tank size is invalid, so the error is visible", async () => {
+    mockCarsLookup([{ id: "car-1", fuel_tank_capacity_liters: 430 }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+
+    const error = await screen.findByText("Tank capacity must be between 5 and 200 liters.");
+    expect(error).toBeVisible();
+    expect(screen.getByLabelText(/Tank Size/)).toBeVisible();
+  });
+
+  it("points to Advanced options when the car has no tank size", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_tank_capacity_liters: null }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+    await user.type(await screen.findByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    expect(await screen.findByText(/Enter a tank size under Advanced options/)).toBeInTheDocument();
   });
 });

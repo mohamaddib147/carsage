@@ -27,6 +27,13 @@
 // key) so stale digits can never be carried over, and values outside
 // 5-200 L are flagged and never used for a figure (lib/tankCapacity.js).
 //
+// Polish: the Fuel Price and Tank Size override fields live in a collapsed
+// "Advanced options" section (closed by default, so the everyday flow is
+// pick car -> destination -> Plan Trip). Their state and behavior are
+// unchanged; the section opens itself if the tank size is invalid so the
+// error is never hidden. Both show thousand separators
+// (components/FormattedNumberInput.jsx) while state holds the raw number.
+//
 // CAR-48: a decorative, non-interactive static map banner
 // (components/RouteMapImage.jsx) tops the results card when a browser
 // Maps key is configured; it hides itself on any failure.
@@ -53,6 +60,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import FormattedNumberInput from "../components/FormattedNumberInput.jsx";
 import InfoTip from "../components/InfoTip.jsx";
 import PageShell from "../components/PageShell.jsx";
 import PlaceAutocompleteInput from "../components/PlaceAutocompleteInput.jsx";
@@ -117,6 +125,7 @@ function TripPlannerPage() {
   const [fuelPrices, setFuelPrices] = useState(null);
   const [fuelPriceInput, setFuelPriceInput] = useState("");
   const [tankSizeInput, setTankSizeInput] = useState("");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const fuelPriceEditedRef = useRef(false);
 
   const selectedCar = cars.find((car) => car.id === selectedCarId) ?? null;
@@ -169,6 +178,11 @@ function TripPlannerPage() {
       cancelled = true;
     };
   }, []);
+
+  // An invalid tank size must never be hidden inside the closed section.
+  useEffect(() => {
+    if (getTankCapacityError(tankSizeInput)) setAdvancedOpen(true);
+  }, [tankSizeInput]);
 
   /** CAR-49: switching cars fully replaces the Tank Size text with the new
    * car's capacity (or empties it) in the same update — never appends to
@@ -334,48 +348,53 @@ function TripPlannerPage() {
             )}
           </div>
 
-          <div className="form-grid">
-            <div className="form-field">
-              <label htmlFor="fuelPricePerLiter">
-                Fuel Price (LBP/L) <span className="form-field__hint">Editable</span>
-              </label>
-              <input
-                id="fuelPricePerLiter"
-                type="number"
-                min="1"
-                step="1"
-                placeholder="Current default used if blank"
-                value={fuelPriceInput}
-                onChange={(event) => {
-                  fuelPriceEditedRef.current = true;
-                  setFuelPriceInput(event.target.value);
-                }}
-              />
-            </div>
+          <details
+            className="advanced-options"
+            open={advancedOpen}
+            onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+          >
+            <summary className="advanced-options__toggle">
+              Advanced options
+              <span className="form-field__hint">Fuel price &amp; tank size</span>
+            </summary>
 
-            <div className="form-field">
-              <label htmlFor="tankSize">
-                Tank Size (L) <span className="form-field__hint">Editable</span>
-              </label>
-              <input
-                key={selectedCarId}
-                id="tankSize"
-                type="number"
-                min="5"
-                max="200"
-                step="any"
-                placeholder="Not set for this car"
-                value={tankSizeInput}
-                aria-invalid={tankSizeError ? "true" : undefined}
-                onChange={(event) => setTankSizeInput(event.target.value)}
-              />
-              {tankSizeError && (
-                <p role="alert" className="auth-form__error">
-                  {tankSizeError}
-                </p>
-              )}
+            <div className="form-grid advanced-options__fields">
+              <div className="form-field">
+                <label htmlFor="fuelPricePerLiter">
+                  Fuel Price (LBP/L) <span className="form-field__hint">Editable</span>
+                </label>
+                <FormattedNumberInput
+                  id="fuelPricePerLiter"
+                  placeholder="Current default used if blank"
+                  value={fuelPriceInput}
+                  onChange={(raw) => {
+                    fuelPriceEditedRef.current = true;
+                    setFuelPriceInput(raw);
+                  }}
+                />
+              </div>
+
+              <div className="form-field">
+                <label htmlFor="tankSize">
+                  Tank Size (L) <span className="form-field__hint">Editable</span>
+                </label>
+                <FormattedNumberInput
+                  key={selectedCarId}
+                  id="tankSize"
+                  allowDecimal
+                  placeholder="Not set for this car"
+                  value={tankSizeInput}
+                  aria-invalid={tankSizeError ? "true" : undefined}
+                  onChange={setTankSizeInput}
+                />
+                {tankSizeError && (
+                  <p role="alert" className="auth-form__error">
+                    {tankSizeError}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
+          </details>
 
           {submitError && (
             <p role="alert" className="auth-form__error">
@@ -491,7 +510,7 @@ function TripPlannerPage() {
                 <>
                   <dd>Tank size not set</dd>
                   <p className="trip-result__caption">
-                    Enter a tank size above, or add it on{" "}
+                    Enter a tank size under Advanced options, or add it on{" "}
                     <Link to={`/cars/${selectedCarId}`}>this car&apos;s profile</Link>.
                   </p>
                 </>

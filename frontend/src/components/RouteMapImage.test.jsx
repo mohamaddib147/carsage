@@ -27,7 +27,7 @@ describe("buildStaticMapUrl", () => {
 
     expect(url.origin + url.pathname).toBe("https://maps.googleapis.com/maps/api/staticmap");
     expect(url.searchParams.get("key")).toBe("k1");
-    expect(url.searchParams.get("size")).toBe("640x160");
+    expect(url.searchParams.get("size")).toBe("640x300");
     const markers = url.searchParams.getAll("markers");
     expect(markers).toHaveLength(2);
     expect(markers[0]).toContain("Beirut, Lebanon");

@@ -18,6 +18,12 @@ import { useState } from "react";
 import { getPlacesApiKey } from "../lib/placesAutocomplete.js";
 
 const STATIC_MAP_URL = "https://maps.googleapis.com/maps/api/staticmap";
+// The frame requested from Google. Static Maps picks the largest whole zoom
+// level that fits the whole route, so a very wide banner (the old 640x160)
+// wasted a lot of sea/land on a north-south route; ~2:1 lets it zoom in
+// tighter. The CSS box uses this same ratio (index.css .route-map) so the
+// image is shown whole, never cropped.
+const MAP_SIZE = "640x300";
 // Static Maps rejects URLs over 16,384 characters; stay safely under it.
 const MAX_URL_LENGTH = 16000;
 
@@ -37,7 +43,7 @@ export function buildStaticMapUrl(origin, destination, apiKey, polyline) {
   const to = destination.trim();
   const build = (withRoute) =>
     [
-      "size=640x160",
+      `size=${MAP_SIZE}`,
       "scale=2",
       "maptype=roadmap",
       ...(from
