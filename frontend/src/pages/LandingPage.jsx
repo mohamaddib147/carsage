@@ -12,7 +12,7 @@
 
 import { Link } from "react-router-dom";
 import Logo from "../components/Logo.jsx";
-import { useAuth } from "../auth/AuthContext.jsx";
+import { useAuthStatus } from "../auth/AuthContext.jsx";
 
 const FEATURES = [
   {
@@ -68,14 +68,19 @@ const PILLARS = [
 /**
  * Landing screen: hero, feature highlights, a reassurance strip, a
  * closing call-to-action, and a footer. The primary CTA adapts to
- * whether a visitor is already signed in.
+ * whether a visitor is signed in, using the same useAuthStatus() check as
+ * the header: "Get Started Free" -> Sign Up when signed out, "Go to
+ * Dashboard" -> Dashboard when signed in, and no CTA while the session is
+ * still loading (so a signed-in visitor never sees a sign-up button flash).
  * @returns {JSX.Element}
  */
 function LandingPage() {
-  const { user } = useAuth();
-  const primaryCta = user
-    ? { to: "/dashboard", label: "Go to Dashboard" }
-    : { to: "/signup", label: "Get Started" };
+  const { status } = useAuthStatus();
+  const primaryCta = {
+    signedIn: { to: "/dashboard", label: "Go to Dashboard" },
+    signedOut: { to: "/signup", label: "Get Started Free" },
+    loading: null,
+  }[status];
 
   return (
     <div className="landing-page">
@@ -98,9 +103,11 @@ function LandingPage() {
           car ownership so you can drive with peace of mind.
         </p>
         <div className="landing-hero__cta-row">
-          <Link className="btn-primary" to={primaryCta.to}>
-            {primaryCta.label} <span aria-hidden="true">→</span>
-          </Link>
+          {primaryCta && (
+            <Link className="btn-primary" to={primaryCta.to}>
+              {primaryCta.label} <span aria-hidden="true">→</span>
+            </Link>
+          )}
           <a className="btn-secondary" href="#features">
             See how it works <span aria-hidden="true">↓</span>
           </a>
@@ -163,9 +170,11 @@ function LandingPage() {
           Join drivers who plan trips and manage car issues with total ease
           — completely free.
         </p>
-        <Link className="btn-accent" to={primaryCta.to}>
-          {primaryCta.label}
-        </Link>
+        {primaryCta && (
+          <Link className="btn-accent" to={primaryCta.to}>
+            {primaryCta.label}
+          </Link>
+        )}
       </section>
 
       <footer className="landing-footer">
