@@ -6,9 +6,10 @@
 // Drivetrain, and Transmission where they're still empty — the user can
 // always override any autofilled value, and a lookup that fails or finds
 // no match never blocks manual entry. Fuel Tank Capacity (L, CAR-44) is
-// filled the same way; since no free spec API provides it, the backend
-// falls back to an AI estimate, which is flagged under the field so the
-// user knows to check it (the note disappears as soon as they edit it).
+// filled the same way. No free spec API provides it, so the backend looks
+// it up on auto-data.net, and only if that finds nothing falls back to an
+// AI estimate. Either way a note under the field says where the value
+// came from and to check it (it disappears as soon as the user edits it).
 // Layout matches docs/stitch_carsage_landing_page/carsage_add_your_car
 // for the in-scope parts (scan card row, section divider, 2-column field
 // grid); its "Designate as Primary Vehicle" telemetry checkbox and
@@ -36,6 +37,15 @@ const FUEL_TYPE_OPTIONS = [
   "Electric",
   "Other",
 ];
+
+// Note shown under an autofilled Fuel Tank Capacity, by where it came
+// from. (A value from API Ninjas needs no note.)
+const TANK_SOURCE_NOTES = {
+  auto_data:
+    "Looked up on auto-data.net for this model — it can vary by trim and market, so check it against your car.",
+  ai_estimate:
+    "Estimated by AI for this model — please check it against your car.",
+};
 
 const EMPTY_FORM = {
   make: "",
@@ -103,10 +113,10 @@ function CarOnboardingPage() {
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [specNotice, setSpecNotice] = useState("");
-  // True while the Fuel Tank Capacity value in the field is an untouched AI
-  // estimate from the autofill (not something the user typed or a real
-  // data-source value).
-  const [tankEstimated, setTankEstimated] = useState(false);
+  // Where the untouched autofilled Fuel Tank Capacity in the field came
+  // from ("auto_data" | "ai_estimate"), or null if it was typed by the user,
+  // came from a fully trusted source, or is empty. Drives the note below.
+  const [tankSource, setTankSource] = useState(null);
   const specLookupRanFor = useRef("");
   // Mirrors `form` so the async autofill callback can see whether the tank
   // field is still empty without a stale closure.
@@ -148,14 +158,14 @@ function CarOnboardingPage() {
           `/cars/spec-suggestions?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&year=${yearNumber}`,
         );
 
-        // Only mark the tank value as an estimate if the autofill is what
-        // actually fills the (still-empty) field.
+        // Only label the tank value if the autofill is what actually fills
+        // the (still-empty) field.
         if (
           !formRef.current.fuelTankCapacity &&
           suggestions.fuel_tank_capacity_liters != null &&
-          suggestions.fuel_tank_capacity_estimated
+          TANK_SOURCE_NOTES[suggestions.fuel_tank_capacity_source]
         ) {
-          setTankEstimated(true);
+          setTankSource(suggestions.fuel_tank_capacity_source);
         }
 
         setForm((previous) => ({
@@ -423,15 +433,12 @@ function CarOnboardingPage() {
               placeholder="e.g. 50 — auto-filled if available"
               value={form.fuelTankCapacity}
               onChange={(event) => {
-                setTankEstimated(false);
+                setTankSource(null);
                 handleChange("fuelTankCapacity")(event);
               }}
             />
-            {tankEstimated && form.fuelTankCapacity && (
-              <p className="form-field__note">
-                Estimated by AI for this model — please check it against your
-                car.
-              </p>
+            {tankSource && form.fuelTankCapacity && (
+              <p className="form-field__note">{TANK_SOURCE_NOTES[tankSource]}</p>
             )}
             {fieldErrors.fuelTankCapacity && (
               <p role="alert" className="auth-form__error">

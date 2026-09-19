@@ -23,9 +23,11 @@ from app.services.vehicle_lookup import (
 
 @pytest.fixture(autouse=True)
 def _no_real_llm_calls():
-    """get_spec_suggestions now asks the LLM for a tank estimate when no
-    data source has one; tests must never call the real provider."""
-    with patch("app.services.vehicle_lookup.estimate_tank_capacity", return_value=None):
+    """get_spec_suggestions falls back to the auto-data.net lookup and then
+    the LLM for a tank capacity; tests must never hit either for real."""
+    with patch(
+        "app.services.vehicle_lookup.lookup_tank_capacity", return_value=None
+    ), patch("app.services.vehicle_lookup.estimate_tank_capacity", return_value=None):
         yield
 
 
@@ -293,7 +295,7 @@ def test_get_spec_suggestions_merges_all_lookups_and_falls_back_to_fueleconomy_g
         "drivetrain": "fwd",
         "transmission": "a",
         "fuel_tank_capacity_liters": None,
-        "fuel_tank_capacity_estimated": False,
+        "fuel_tank_capacity_source": None,
     }
 
 
@@ -323,41 +325,52 @@ def _ninjas(tank):
     }
 
 
-def test_get_spec_suggestions_estimates_the_tank_when_no_source_has_one():
-    # CAR-44/49: no free spec API has tank capacity, so it is asked of the
-    # LLM and flagged as an estimate.
+def _suggestions(*, ninjas_tank=None, lookup_tank=None, estimate=None):
+    """Runs get_spec_suggestions with each tank source stubbed; returns
+    (result, lookup mock, estimate mock)."""
     with patch("app.services.vehicle_lookup.lookup_nhtsa", return_value={}), patch(
-        "app.services.vehicle_lookup.lookup_api_ninjas", return_value=_ninjas(None)
+        "app.services.vehicle_lookup.lookup_api_ninjas", return_value=_ninjas(ninjas_tank)
     ), patch("app.services.vehicle_lookup.lookup_fuel_economy", return_value=None), patch(
-        "app.services.vehicle_lookup.estimate_tank_capacity", return_value=64.3
+        "app.services.vehicle_lookup.lookup_tank_capacity", return_value=lookup_tank
+    ) as mock_lookup, patch(
+        "app.services.vehicle_lookup.estimate_tank_capacity", return_value=estimate
     ) as mock_estimate:
         result = get_spec_suggestions("Toyota", "Camry", 2016)
-
-    mock_estimate.assert_called_once_with("Toyota", "Camry", 2016)
-    assert result["fuel_tank_capacity_liters"] == 64.3
-    assert result["fuel_tank_capacity_estimated"] is True
+    return result, mock_lookup, mock_estimate
 
 
-def test_get_spec_suggestions_prefers_a_real_tank_value_and_skips_the_llm():
-    with patch("app.services.vehicle_lookup.lookup_nhtsa", return_value={}), patch(
-        "app.services.vehicle_lookup.lookup_api_ninjas", return_value=_ninjas(50.0)
-    ), patch("app.services.vehicle_lookup.lookup_fuel_economy", return_value=None), patch(
-        "app.services.vehicle_lookup.estimate_tank_capacity"
-    ) as mock_estimate:
-        result = get_spec_suggestions("Honda", "Civic", 2020)
+def test_get_spec_suggestions_uses_the_real_spec_sheet_lookup_first():
+    result, mock_lookup, mock_estimate = _suggestions(lookup_tank=64.0, estimate=99.0)
 
+    mock_lookup.assert_called_once_with("Toyota", "Camry", 2016)
+    mock_estimate.assert_not_called()  # a real value means no AI guess
+    assert result["fuel_tank_capacity_liters"] == 64.0
+    assert result["fuel_tank_capacity_source"] == "auto_data"
+
+
+def test_get_spec_suggestions_prefers_a_value_from_api_ninjas_over_everything():
+    result, mock_lookup, mock_estimate = _suggestions(
+        ninjas_tank=50.0, lookup_tank=64.0, estimate=99.0
+    )
+
+    # The spec-sheet lookup runs in parallel (speculatively), so it may have
+    # been called; what matters is that its value is ignored.
     mock_estimate.assert_not_called()
     assert result["fuel_tank_capacity_liters"] == 50.0
-    assert result["fuel_tank_capacity_estimated"] is False
+    assert result["fuel_tank_capacity_source"] == "api_ninjas"
 
 
-def test_get_spec_suggestions_leaves_the_tank_empty_when_the_estimate_fails():
-    with patch("app.services.vehicle_lookup.lookup_nhtsa", return_value={}), patch(
-        "app.services.vehicle_lookup.lookup_api_ninjas", return_value=_ninjas(None)
-    ), patch("app.services.vehicle_lookup.lookup_fuel_economy", return_value=None), patch(
-        "app.services.vehicle_lookup.estimate_tank_capacity", return_value=None
-    ):
-        result = get_spec_suggestions("Asdf", "Qwerty", 2016)
+def test_get_spec_suggestions_falls_back_to_an_ai_estimate_only_when_the_lookup_finds_nothing():
+    result, mock_lookup, mock_estimate = _suggestions(lookup_tank=None, estimate=62.1)
+
+    mock_lookup.assert_called_once()
+    mock_estimate.assert_called_once_with("Toyota", "Camry", 2016)
+    assert result["fuel_tank_capacity_liters"] == 62.1
+    assert result["fuel_tank_capacity_source"] == "ai_estimate"
+
+
+def test_get_spec_suggestions_leaves_the_tank_empty_when_nothing_finds_one():
+    result, _, _ = _suggestions()
 
     assert result["fuel_tank_capacity_liters"] is None
-    assert result["fuel_tank_capacity_estimated"] is False
+    assert result["fuel_tank_capacity_source"] is None

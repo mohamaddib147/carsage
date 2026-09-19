@@ -7,10 +7,13 @@
 # that isn't in either database (e.g. not sold in the US) never blocks
 # onboarding.
 
+from concurrent.futures import ThreadPoolExecutor
+
 import httpx
 
 from app.config import API_NINJAS_KEY
 from app.services.llm_client import estimate_tank_capacity
+from app.services.tank_capacity_lookup import lookup_tank_capacity
 
 NHTSA_BASE_URL = "https://vpic.nhtsa.dot.gov/api/vehicles"
 API_NINJAS_URL = "https://api.api-ninjas.com/v1/cars"
@@ -270,27 +273,47 @@ def get_spec_suggestions(make: str, model: str, year: int) -> dict:
     ever configured) and falls back to fueleconomy.gov, since API
     Ninjas' free tier doesn't include it.
 
-    Fuel tank capacity: no free spec API provides it, so when API Ninjas
-    has none it is estimated by the LLM (llm_client.estimate_tank_capacity,
-    kept only inside 5-200 L) and flagged `fuel_tank_capacity_estimated`
-    so the UI can tell the user it's a guess to verify.
+    Fuel tank capacity, best source first, with the winner reported in
+    `fuel_tank_capacity_source` so the UI can label it: API Ninjas if it
+    ever has one, else the real spec sheet on auto-data.net
+    (tank_capacity_lookup), else — only when neither has it — an AI
+    estimate (llm_client.estimate_tank_capacity, kept inside 5-200 L) that
+    the UI flags as a guess to verify.
     """
-    nhtsa = lookup_nhtsa(make, model, year)
-    ninjas = lookup_api_ninjas(make, model, year)
-    fuel_efficiency = ninjas["fuel_efficiency"]
-    if fuel_efficiency is None:
-        fuel_efficiency = lookup_fuel_economy(make, model, year)
+    def ninjas_then_fuel_economy():
+        # fueleconomy.gov is only needed if API Ninjas has no efficiency,
+        # so this pair stays sequential within its own worker.
+        ninjas_result = lookup_api_ninjas(make, model, year)
+        efficiency = ninjas_result["fuel_efficiency"]
+        if efficiency is None:
+            efficiency = lookup_fuel_economy(make, model, year)
+        return ninjas_result, efficiency
+
+    # The lookups are independent network calls, so run them side by side:
+    # total time is the slowest one rather than the sum. The auto-data.net
+    # tank lookup runs speculatively (its result is ignored if API Ninjas
+    # turns out to have a tank value).
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        nhtsa_future = pool.submit(lookup_nhtsa, make, model, year)
+        specs_future = pool.submit(ninjas_then_fuel_economy)
+        tank_future = pool.submit(lookup_tank_capacity, make, model, year)
+        nhtsa = nhtsa_future.result()
+        ninjas, fuel_efficiency = specs_future.result()
+        looked_up_tank = tank_future.result()
 
     tank_capacity = ninjas.get("fuel_tank_capacity_liters")
-    tank_estimated = False
+    tank_source = "api_ninjas" if tank_capacity is not None else None
+    if tank_capacity is None:
+        tank_capacity = looked_up_tank
+        tank_source = "auto_data" if tank_capacity is not None else None
     if tank_capacity is None:
         tank_capacity = estimate_tank_capacity(make, model, year)
-        tank_estimated = tank_capacity is not None
+        tank_source = "ai_estimate" if tank_capacity is not None else None
 
     return {
         **nhtsa,
         **ninjas,
         "fuel_efficiency": fuel_efficiency,
         "fuel_tank_capacity_liters": tank_capacity,
-        "fuel_tank_capacity_estimated": tank_estimated,
+        "fuel_tank_capacity_source": tank_source,
     }

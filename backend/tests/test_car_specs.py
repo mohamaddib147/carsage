@@ -38,7 +38,7 @@ def test_returns_suggestions_for_a_valid_request():
         "transmission": "a",
         # Not in the lookup result -> defaults to null in the response.
         "fuel_tank_capacity_liters": None,
-        "fuel_tank_capacity_estimated": False,
+        "fuel_tank_capacity_source": None,
     }
     mock_lookup.assert_called_once_with("Honda", "Civic", 2020)
 
@@ -89,7 +89,7 @@ def test_passes_a_tank_capacity_through_when_the_lookup_has_one():
     assert response.json()["fuel_tank_capacity_liters"] == 50.0
 
 
-def test_flags_an_ai_estimated_tank_capacity():
+def test_reports_where_the_tank_capacity_came_from():
     with patch("app.routers.car_specs.get_spec_suggestions") as mock_lookup:
         mock_lookup.return_value = {
             "vehicle_confirmed": True,
@@ -99,7 +99,7 @@ def test_flags_an_ai_estimated_tank_capacity():
             "drivetrain": "fwd",
             "transmission": "a",
             "fuel_tank_capacity_liters": 64.3,
-            "fuel_tank_capacity_estimated": True,
+            "fuel_tank_capacity_source": "ai_estimate",
         }
 
         response = client.get(
@@ -109,4 +109,4 @@ def test_flags_an_ai_estimated_tank_capacity():
 
     body = response.json()
     assert body["fuel_tank_capacity_liters"] == 64.3
-    assert body["fuel_tank_capacity_estimated"] is True
+    assert body["fuel_tank_capacity_source"] == "ai_estimate"
