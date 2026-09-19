@@ -15,6 +15,12 @@ NHTSA_BASE_URL = "https://vpic.nhtsa.dot.gov/api/vehicles"
 API_NINJAS_URL = "https://api.api-ninjas.com/v1/cars"
 FUEL_ECONOMY_BASE_URL = "https://www.fueleconomy.gov/ws/rest/vehicle"
 
+# CAR-49: realistic fuel tank range in liters. Must match the frontend
+# (lib/tankCapacity.js) and the cars.fuel_tank_capacity_liters CHECK
+# constraint, so a stray or mis-scaled value can never be stored or used.
+MIN_TANK_LITERS = 5
+MAX_TANK_LITERS = 200
+
 # 1 mile = 1.60934 km, 1 US gallon = 3.78541 L, so mpg -> km/L is this factor.
 MPG_TO_KM_PER_LITER = 1.60934 / 3.78541
 
@@ -75,16 +81,17 @@ def _extract_tank_capacity(car: dict) -> float | None:
     or None if there isn't one (CAR-44). API Ninjas' documented response
     fields don't guarantee a tank capacity, so rather than hardcode a
     field name that may never exist, this accepts any key containing
-    "tank" whose value is a positive number (not the premium-tier
-    placeholder string, and not a bool). Assumes liters — the only unit
-    `cars.fuel_tank_capacity_liters` stores.
+    "tank" whose value is a number within the realistic 5-200 L range (not
+    the premium-tier placeholder string, not a bool, and nothing outside
+    the range — an implausible value is dropped rather than autofilled).
+    Assumes liters — the only unit `cars.fuel_tank_capacity_liters` stores.
     """
     for key, value in car.items():
         if "tank" not in key.lower():
             continue
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             continue
-        if value > 0:
+        if MIN_TANK_LITERS <= value <= MAX_TANK_LITERS:
             return float(value)
     return None
 

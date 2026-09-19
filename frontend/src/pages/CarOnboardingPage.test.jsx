@@ -345,17 +345,20 @@ describe("CarOnboardingPage — fuel tank capacity (CAR-44)", () => {
     );
   });
 
-  it("rejects a non-positive tank capacity without saving (invalid input)", async () => {
-    const user = userEvent.setup();
-    renderPage();
-    await fillRequiredFields(user);
-    await user.type(screen.getByLabelText("Fuel Tank Capacity (L)"), "0");
-    await user.click(screen.getByRole("button", { name: "Add Car" }));
+  it.each([["0"], ["-5"], ["430"], ["4"]])(
+    "rejects a tank capacity of %s (outside 5-200 L) without saving (invalid input)",
+    async (typed) => {
+      const user = userEvent.setup();
+      renderPage();
+      await fillRequiredFields(user);
+      await user.type(screen.getByLabelText("Fuel Tank Capacity (L)"), typed);
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
 
-    expect(
-      await screen.findByText("Tank capacity must be a positive number."),
-    ).toBeInTheDocument();
-    expect(supabase.from).not.toHaveBeenCalled();
-  });
+      expect(
+        await screen.findByText("Tank capacity must be between 5 and 200 liters."),
+      ).toBeInTheDocument();
+      expect(supabase.from).not.toHaveBeenCalled();
+    },
+  );
 });
 

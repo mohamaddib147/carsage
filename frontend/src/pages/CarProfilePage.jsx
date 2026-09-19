@@ -13,6 +13,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
+import { getTankCapacityError } from "../lib/tankCapacity.js";
 
 const FUEL_TYPE_OPTIONS = [
   "Gasoline",
@@ -112,10 +113,8 @@ function validate(form) {
   }
 
   if (form.fuel_tank_capacity_liters.trim()) {
-    const capacity = Number(form.fuel_tank_capacity_liters);
-    if (!Number.isFinite(capacity) || capacity <= 0) {
-      errors.fuel_tank_capacity_liters = "Tank capacity must be a positive number.";
-    }
+    const capacityError = getTankCapacityError(form.fuel_tank_capacity_liters);
+    if (capacityError) errors.fuel_tank_capacity_liters = capacityError;
   }
 
   return errors;

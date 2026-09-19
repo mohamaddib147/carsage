@@ -22,7 +22,10 @@
 // switched — the old hardcoded 20L default is gone. If the car has no tank
 // size yet the field starts empty and the Full Tank Cost stat says so
 // (with a link to the car's profile) instead of showing a made-up number;
-// a size the user types in themselves still works.
+// a size the user types in themselves still works. The field is reset
+// explicitly (in the same update as the car switch, and remounted via its
+// key) so stale digits can never be carried over, and values outside
+// 5-200 L are flagged and never used for a figure (lib/tankCapacity.js).
 //
 // CAR-48: a decorative, non-interactive static map banner
 // (components/RouteMapImage.jsx) tops the results card when a browser
@@ -57,6 +60,7 @@ import RouteMapImage from "../components/RouteMapImage.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { apiFetch } from "../lib/apiClient.js";
+import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { getTrafficLevel } from "../lib/trafficLevel.js";
 
 // Fallback if GET /trip-planner/fuel-prices hasn't loaded yet — matches
@@ -72,6 +76,17 @@ function priceBucketForFuelType(fuelType) {
   if (normalized === "diesel") return "diesel";
   if (normalized === "electric") return null;
   return "95_octane";
+}
+
+/**
+ * The Tank Size field's text for a car: its stored capacity, or "" if it
+ * has none — never a default.
+ * @param {{ fuel_tank_capacity_liters?: number | string | null } | null | undefined} car
+ * @returns {string}
+ */
+function tankInputFor(car) {
+  const capacity = Number(car?.fuel_tank_capacity_liters);
+  return capacity > 0 ? String(capacity) : "";
 }
 
 /**
@@ -123,6 +138,7 @@ function TripPlannerPage() {
       const loadedCars = data ?? [];
       setCars(loadedCars);
       setSelectedCarId(loadedCars[0]?.id ?? "");
+      setTankSizeInput(tankInputFor(loadedCars[0]));
       setLoadingCar(false);
     }
 
@@ -154,15 +170,14 @@ function TripPlannerPage() {
     };
   }, []);
 
-  // CAR-49: the tank size follows the selected car — refilled with that
-  // car's real capacity (or emptied if it has none) on load and on every
-  // car switch. Still editable afterwards, per trip.
-  useEffect(() => {
-    const capacity = selectedCar?.fuel_tank_capacity_liters;
-    setTankSizeInput(capacity > 0 ? String(capacity) : "");
-    // Not keyed on selectedCar itself, so an unrelated re-render can't
-    // clobber a manual edit — only a car switch or the cars list loading.
-  }, [selectedCarId, cars]);
+  /** CAR-49: switching cars fully replaces the Tank Size text with the new
+   * car's capacity (or empties it) in the same update — never appends to
+   * or keeps anything typed for the previous car.
+   * @param {string} carId */
+  function handleCarChange(carId) {
+    setSelectedCarId(carId);
+    setTankSizeInput(tankInputFor(cars.find((car) => car.id === carId)));
+  }
 
   // Prefills the fuel price for the selected car's fuel grade, but never
   // overwrites a value the user already typed themselves.
@@ -235,9 +250,13 @@ function TripPlannerPage() {
   }
 
   const tankSizeLiters = Number(tankSizeInput);
+  // CAR-49: blank = not set; anything outside 5-200 L is flagged, and no
+  // Full Tank Cost is calculated from it.
+  const tankSizeError = getTankCapacityError(tankSizeInput);
+  const tankSizeUsable = tankSizeInput.trim() !== "" && !tankSizeError;
   const lbpPerUsd = fuelPrices?.lbp_per_usd ?? FALLBACK_LBP_PER_USD;
   const tankCostLbp =
-    result && Number.isFinite(tankSizeLiters) && tankSizeLiters > 0
+    result && tankSizeUsable
       ? Math.round(tankSizeLiters * result.fuel_price_used_lbp)
       : null;
   const tankCostUsd = tankCostLbp != null ? tankCostLbp / lbpPerUsd : null;
@@ -263,7 +282,7 @@ function TripPlannerPage() {
               <select
                 id="carId"
                 value={selectedCarId}
-                onChange={(event) => setSelectedCarId(event.target.value)}
+                onChange={(event) => handleCarChange(event.target.value)}
               >
                 {cars.map((carOption) => (
                   <option key={carOption.id} value={carOption.id}>
@@ -339,14 +358,22 @@ function TripPlannerPage() {
                 Tank Size (L) <span className="form-field__hint">Editable</span>
               </label>
               <input
+                key={selectedCarId}
                 id="tankSize"
                 type="number"
-                min="1"
-                step="1"
+                min="5"
+                max="200"
+                step="any"
                 placeholder="Not set for this car"
                 value={tankSizeInput}
+                aria-invalid={tankSizeError ? "true" : undefined}
                 onChange={(event) => setTankSizeInput(event.target.value)}
               />
+              {tankSizeError && (
+                <p role="alert" className="auth-form__error">
+                  {tankSizeError}
+                </p>
+              )}
             </div>
           </div>
 
@@ -451,6 +478,13 @@ function TripPlannerPage() {
                   <p className="trip-result__caption">
                     {tankSizeLiters}L at{" "}
                     {result.fuel_price_used_lbp.toLocaleString()} LBP/L
+                  </p>
+                </>
+              ) : tankSizeError ? (
+                <>
+                  <dd>Tank size out of range</dd>
+                  <p className="trip-result__caption">
+                    Enter a tank size between 5 and 200 L to see this figure.
                   </p>
                 </>
               ) : (

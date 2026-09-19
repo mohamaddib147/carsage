@@ -59,6 +59,10 @@ Create `.env` files (never commit them — see `.gitignore`) based on `frontend/
 
 **Backend**: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_MAPS_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `API_NINJAS_KEY`, `YOUTUBE_API_KEY`, `ALLOWED_ORIGINS`
 
+## Deployment Notes
+
+- **Fuel price scraper (CAR-50) must be re-verified after the backend is deployed.** Its source, L'Orient Today (`today.lorientlejour.com`), sits behind Cloudflare, which returns 403 to `httpx` even with a browser User-Agent — so `backend/app/services/fuel_prices.py` fetches with `urllib` instead (which Cloudflare currently lets through). A hosting provider's IP range can be blocked or challenged differently than local dev, so once deployed, call `GET /trip-planner/fuel-prices` against a stale/empty cache and confirm the `fuel_prices.source_label` in the database is a `today.lorientlejour.com/article/...` URL. If it is blocked, the app degrades gracefully to the last cached price rather than failing — but that price will go stale.
+
 ## Design Reference (in `docs/stitch_carsage_landing_page/`)
 
 This folder contains the actual Stitch-generated wireframes for every screen — the real visual source of truth, more detailed than the summary in `docs/CarSage_Wireframes.pdf`. Each subfolder has a `screen.png` (visual reference) and `code.html` (structure/layout reference) for one screen:

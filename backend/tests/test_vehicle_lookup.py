@@ -162,6 +162,20 @@ def test_lookup_api_ninjas_ignores_a_premium_placeholder_or_nonpositive_tank_val
         assert result["fuel_tank_capacity_liters"] is None, bad_value
 
 
+def test_lookup_api_ninjas_drops_a_tank_value_outside_the_5_to_200_litre_range(
+    monkeypatch,
+):
+    # CAR-49: a mis-scaled value (e.g. 430, or 3 from a unit mix-up) must
+    # never be autofilled; the boundaries themselves are accepted.
+    monkeypatch.setattr("app.services.vehicle_lookup.API_NINJAS_KEY", "test-key")
+
+    for value, expected in ((430, None), (4.9, None), (200.5, None), (5, 5.0), (200, 200.0)):
+        response = _mock_response([{"cylinders": 4, "fuel_tank_capacity": value}])
+        with patch("app.services.vehicle_lookup.httpx.get", return_value=response):
+            result = lookup_api_ninjas("Honda", "Civic", 2020)
+        assert result["fuel_tank_capacity_liters"] == expected, value
+
+
 def test_lookup_fuel_economy_walks_the_menu_and_converts_to_km_per_liter():
     models_response = _mock_response(
         {"menuItem": [{"text": "C230", "value": "C230"}, {"text": "C280", "value": "C280"}]}

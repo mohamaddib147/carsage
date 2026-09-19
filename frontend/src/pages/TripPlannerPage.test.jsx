@@ -784,3 +784,91 @@ describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
     expect(screen.getByLabelText(/Tank Size/)).toHaveValue(null);
   });
 });
+
+describe("TripPlannerPage — tank size reset and range check (CAR-49)", () => {
+  async function planTrip(user) {
+    await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+  }
+
+  it("leaves no stale digits when switching cars repeatedly", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([
+      { id: "car-a", make: "Toyota", model: "Corolla", year: 2020, fuel_tank_capacity_liters: 40 },
+      { id: "car-b", make: "Fiat", model: "500", year: 2015, fuel_tank_capacity_liters: null },
+      { id: "car-c", make: "Nissan", model: "Patrol", year: 2018, fuel_tank_capacity_liters: 55 },
+    ]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue(40));
+
+    // Type extra digits onto car A's value, then bounce around the cars.
+    await user.type(screen.getByLabelText(/Tank Size/), "3");
+    expect(screen.getByLabelText(/Tank Size/)).toHaveValue(403);
+
+    const carSelect = screen.getByLabelText("Car");
+    for (const [carId, expected] of [
+      ["car-b", null],
+      ["car-a", 40],
+      ["car-c", 55],
+      ["car-b", null],
+      ["car-c", 55],
+      ["car-a", 40],
+    ]) {
+      await user.selectOptions(carSelect, carId);
+      expect(screen.getByLabelText(/Tank Size/)).toHaveValue(expected);
+    }
+  });
+
+  it("flags an out-of-range size (430) and never uses it for a figure", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_tank_capacity_liters: null }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+    await user.type(await screen.findByLabelText(/Tank Size/), "430");
+
+    expect(
+      screen.getByText("Tank capacity must be between 5 and 200 liters."),
+    ).toBeInTheDocument();
+
+    await planTrip(user);
+
+    expect(await screen.findByText("Tank size out of range")).toBeInTheDocument();
+    // 430 L x 90,000 LBP/L must never be shown or used.
+    expect(screen.queryByText(/38,700,000/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/430L at/)).not.toBeInTheDocument();
+    // The trip itself still plans and shows the rest of the results.
+    expect(screen.getByText(/Fuel Cost/)).toBeInTheDocument();
+  });
+
+  it("flags a stored capacity that is out of range instead of using it", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_tank_capacity_liters: 430 }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue(430));
+    await planTrip(user);
+
+    expect(await screen.findByText("Tank size out of range")).toBeInTheDocument();
+    expect(screen.queryByText(/38,700,000/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["5", "$5.06 (450,000 LBP)"],
+    ["200", "$202.25 (18,000,000 LBP)"],
+  ])("accepts the boundary size %s L", async (typed, expectedCost) => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_tank_capacity_liters: null }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+    await user.type(await screen.findByLabelText(/Tank Size/), typed);
+    await planTrip(user);
+
+    expect(await screen.findByText(expectedCost)).toBeInTheDocument();
+    expect(screen.queryByText(/out of range/)).not.toBeInTheDocument();
+  });
+});

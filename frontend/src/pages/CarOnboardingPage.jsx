@@ -20,6 +20,7 @@ import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
 import { supabase } from "../lib/supabaseClient.js";
+import { getTankCapacityError } from "../lib/tankCapacity.js";
 
 // How long to wait after the user stops typing Make/Model/Year before
 // firing the autofill lookup, so it doesn't fire on every keystroke.
@@ -78,10 +79,8 @@ function validate(form) {
   }
 
   if (form.fuelTankCapacity.trim()) {
-    const capacity = Number(form.fuelTankCapacity);
-    if (!Number.isFinite(capacity) || capacity <= 0) {
-      errors.fuelTankCapacity = "Tank capacity must be a positive number.";
-    }
+    const capacityError = getTankCapacityError(form.fuelTankCapacity);
+    if (capacityError) errors.fuelTankCapacity = capacityError;
   }
 
   return errors;

@@ -293,21 +293,43 @@ describe("CarProfilePage — fuel tank capacity (CAR-44)", () => {
     );
   });
 
-  it("rejects a zero/negative tank capacity without saving (invalid input)", async () => {
+  it.each([["-5"], ["0"], ["430"], ["4"]])(
+    "rejects a tank capacity of %s (outside 5-200 L) without saving (invalid input)",
+    async (typed) => {
+      const user = userEvent.setup();
+      const { update } = mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+
+      renderAt("/cars/mine");
+      await user.click(await screen.findByRole("button", { name: "Edit" }));
+      const input = screen.getByLabelText("Fuel Tank Capacity (L)");
+      await user.clear(input);
+      await user.type(input, typed);
+      await user.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(
+        await screen.findByText("Tank capacity must be between 5 and 200 liters."),
+      ).toBeInTheDocument();
+      expect(update).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts the boundary values 5 and 200", async () => {
     const user = userEvent.setup();
-    const { update } = mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+    const { update } = mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      updateResult: { data: { ...SAMPLE_CAR, fuel_tank_capacity_liters: 200 }, error: null },
+    });
 
     renderAt("/cars/mine");
     await user.click(await screen.findByRole("button", { name: "Edit" }));
     const input = screen.getByLabelText("Fuel Tank Capacity (L)");
     await user.clear(input);
-    await user.type(input, "-5");
+    await user.type(input, "200");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(
-      await screen.findByText("Tank capacity must be a positive number."),
-    ).toBeInTheDocument();
-    expect(update).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ fuel_tank_capacity_liters: 200 }),
+    );
   });
 });
 
