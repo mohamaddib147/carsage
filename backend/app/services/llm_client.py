@@ -85,17 +85,19 @@ class LLMError(Exception):
 
 class _GeminiUnavailable(Exception):
     """
-    Internal signal that Gemini couldn't serve this request right now —
-    used only to trigger the Groq fallback, never escapes this module.
+    Internal signal that Gemini couldn't serve this request — used only to
+    trigger the Groq fallback, never escapes this module.
 
-    Covers 429 (rate limit, per CAR-19's AC) and also 5xx / a transport
-    failure: live testing against the real Gemini API turned up frequent
-    "503 currently experiencing high demand" responses on the free tier,
-    which is functionally the same "try the other provider" situation as
-    a rate limit, so it's treated the same way. A non-429/5xx failure
-    (e.g. 400/401 — a request or config problem) is NOT covered here and
-    surfaces directly, since Groq would likely fail the same way and the
-    real cause is more useful to see than a masked retry.
+    Covers every way Gemini can fail to give a usable answer: 429 (rate
+    limit, per CAR-19's AC), 5xx (live testing showed frequent "503
+    currently experiencing high demand" on the free tier), a transport
+    failure, ANY other HTTP error, and a 200 whose body has no usable
+    answer (content blocked, no candidates, not JSON). CAR-22 widened this
+    from "429/5xx only": a retired model (404), a disabled or invalid key
+    (400/401/403) are Gemini-side problems that Groq — a separate provider
+    — is not affected by, so the user should still get an answer. The real
+    cause is logged (never shown to the user) so a broken config is still
+    noticed.
     """
 
 
@@ -152,9 +154,9 @@ def _parse_response(text: str) -> dict:
 def _call_gemini(
     prompt: str, system_prompt: str = SYSTEM_PROMPT, timeout: float = 20.0
 ) -> str:
-    """Calls Gemini; raises _GeminiUnavailable on 429/5xx/a transport
-    failure (triggers the Groq fallback), httpx.HTTPError on any other
-    failure (e.g. a 400/401 request or config problem)."""
+    """Calls Gemini; raises _GeminiUnavailable on any failure to get a
+    usable answer (HTTP error, transport failure, malformed body) — this
+    triggers the Groq fallback."""
     try:
         response = httpx.post(
             GEMINI_URL,
@@ -168,11 +170,17 @@ def _call_gemini(
     except httpx.HTTPError as error:
         raise _GeminiUnavailable() from error
 
-    if response.status_code == 429 or response.status_code >= 500:
+    if response.status_code >= 400:
+        logger.warning(
+            "Gemini returned HTTP %s; falling back to Groq", response.status_code
+        )
         raise _GeminiUnavailable()
-    response.raise_for_status()
-    data = response.json()
-    return data["candidates"][0]["content"]["parts"][0]["text"]
+
+    try:
+        return response.json()["candidates"][0]["content"]["parts"][0]["text"]
+    except (ValueError, KeyError, IndexError, TypeError) as error:
+        logger.warning("Gemini returned an unusable response; falling back to Groq")
+        raise _GeminiUnavailable() from error
 
 
 def _call_groq(
@@ -217,7 +225,8 @@ def _complete(
             raise LLMError(failure_message) from error
         try:
             return _call_groq(prompt, system_prompt, timeout), "groq"
-        except httpx.HTTPError as groq_error:
+        except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as groq_error:
+            # Includes a 200 with a malformed body (empty choices, not JSON).
             raise LLMError(failure_message) from groq_error
     except httpx.HTTPError as error:
         raise LLMError(failure_message) from error
