@@ -1,10 +1,11 @@
 // Top navigation bar shown on every screen: the CarSage brand mark on
 // the left (click to go to the Landing page), links to every screen
-// centered, and auth actions (Sign Up/Log In, or Log Out once signed
-// in) on the right.
+// centered, and one auth control on the right — "Sign Up / Log In" when
+// signed out, "Log Out" when signed in, never both (and neither while the
+// session is still being restored, so nothing flashes the wrong state).
 
 import { NavLink, useNavigate } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext.jsx";
+import { useAuthStatus } from "../auth/AuthContext.jsx";
 import Logo from "./Logo.jsx";
 
 const CENTER_LINKS = [
@@ -17,11 +18,11 @@ const CENTER_LINKS = [
 
 /**
  * Renders the top-level navigation bar: brand (left), screen links
- * (center), and auth actions (right).
+ * (center), and the auth control (right).
  * @returns {JSX.Element}
  */
 function SiteNav() {
-  const { user, signOut } = useAuth();
+  const { status, signOut } = useAuthStatus();
   const navigate = useNavigate();
 
   async function handleLogOut() {
@@ -44,16 +45,18 @@ function SiteNav() {
       </ul>
 
       <div className="site-nav__actions">
-        <NavLink to="/login" className="site-nav__auth-link">
-          Sign Up / Log In
-        </NavLink>
-        {user && (
+        {status === "signedOut" && (
+          <NavLink to="/login" className="site-nav__auth-link">
+            Sign Up / Log In
+          </NavLink>
+        )}
+        {status === "signedIn" && (
           <button
             type="button"
             className="site-nav__logout"
             onClick={handleLogOut}
           >
-            Log Out ({user.email})
+            Log Out
           </button>
         )}
       </div>

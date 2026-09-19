@@ -68,8 +68,10 @@ describe("App routing — public screens", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders nav links for all 7 screens", () => {
+  it("renders nav links for all 7 screens", async () => {
     renderAtPath("/");
+    // Wait for the session to resolve so the auth control has rendered.
+    await screen.findByRole("link", { name: "Sign Up / Log In" });
     const nav = screen.getByRole("navigation");
     expect(nav.querySelectorAll("a")).toHaveLength(7);
   });
