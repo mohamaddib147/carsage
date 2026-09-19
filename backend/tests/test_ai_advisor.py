@@ -245,6 +245,67 @@ class TestPostClassify:
         assert response.status_code == 422
 
 
+class TestAuthorizationScoping:
+    """CAR-22: the backend uses the service-role key (which bypasses RLS),
+    so ownership is enforced by explicit filters. These pin that every
+    lookup is scoped to the CALLER's user id — a different caller's id must
+    produce different filters, never a lookup by id alone."""
+
+    def setup_method(self):
+        app.dependency_overrides[get_current_user_id] = lambda: "user-B"
+
+    def teardown_method(self):
+        app.dependency_overrides.pop(get_current_user_id, None)
+
+    def test_the_car_lookup_is_filtered_by_the_callers_user_id(self):
+        mock_supabase, _, _ = _build_mock_supabase(None)  # not found for this caller
+        with patch("app.routers.ai_advisor.supabase", mock_supabase):
+            response = client.post(
+                "/ai-advisor/classify",
+                json={"car_id": "car-owned-by-A", "description": "squeaky brakes"},
+            )
+
+        assert response.status_code == 404
+        cars = mock_supabase.table("cars")
+        first_eq = cars.select.return_value.eq
+        first_eq.assert_called_once_with("id", "car-owned-by-A")
+        first_eq.return_value.eq.assert_called_once_with("user_id", "user-B")
+
+    def test_the_conversation_lookup_is_filtered_by_the_callers_user_id(self):
+        mock_supabase, captured, _ = _build_mock_supabase(
+            {"make": "Toyota", "model": "Camry", "year": 2016}, conversation_lookup_data=None
+        )
+        with patch("app.routers.ai_advisor.supabase", mock_supabase):
+            response = client.post(
+                "/ai-advisor/classify",
+                json={
+                    "car_id": "car-B",
+                    "description": "squeaky brakes",
+                    "conversation_id": "conversation-owned-by-A",
+                },
+            )
+
+        assert response.status_code == 404
+        conversations = mock_supabase.table("advisor_conversations")
+        first_eq = conversations.select.return_value.eq
+        first_eq.assert_called_once_with("id", "conversation-owned-by-A")
+        first_eq.return_value.eq.assert_called_once_with("user_id", "user-B")
+        # Nothing was written into someone else's conversation.
+        assert captured == []
+        conversations.insert.assert_not_called()
+
+    def test_a_new_conversation_is_created_for_the_caller_not_anyone_else(self):
+        mock_supabase, _, _ = _build_mock_supabase({"make": "Toyota", "model": "Camry", "year": 2016})
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.classify_issue",
+            return_value={"recommendation": "mechanic", "guidance": "See a mechanic."},
+        ):
+            client.post("/ai-advisor/classify", json={"car_id": "car-B", "description": "squeaky brakes"})
+
+        inserted = mock_supabase.table("advisor_conversations").insert.call_args.args[0]
+        assert inserted == {"user_id": "user-B", "car_id": "car-B"}
+
+
 class TestDescriptionValidation:
     """CAR-22: invalid input is rejected up front with a clear message —
     blank / symbol-only text, and text over the length cap — before any
