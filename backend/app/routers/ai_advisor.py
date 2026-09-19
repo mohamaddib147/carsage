@@ -26,6 +26,8 @@
 # done by the frontend directly against Supabase (RLS-protected, like
 # the Dashboard's car list), so there's no GET endpoint here.
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -34,6 +36,8 @@ from app.services.llm_client import LLMError, classify_issue
 from app.services.nhtsa_safety import check_safety_data
 from app.services.youtube_client import search_diy_video
 from app.supabase_client import supabase
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ai-advisor", tags=["ai-advisor"])
 
@@ -203,13 +207,21 @@ def post_classify_issue(
         .execute()
     )
 
+    # The video is a nice-to-have on top of an answer that is already saved:
+    # nothing about looking it up or saving it may break the response.
     video = None
     if result["recommendation"] == "diy":
-        video = search_diy_video(car_data, description)
+        try:
+            video = search_diy_video(car_data, description)
+        except Exception:  # noqa: BLE001 - see comment above
+            logger.exception("YouTube video lookup failed unexpectedly")
         if video:
-            supabase.table("advisor_messages").update(video).eq(
-                "id", ai_message.data[0]["id"]
-            ).execute()
+            try:
+                supabase.table("advisor_messages").update(video).eq(
+                    "id", ai_message.data[0]["id"]
+                ).execute()
+            except Exception:  # noqa: BLE001 - still show the video we found
+                logger.exception("Could not save the video onto the AI message")
 
     return {
         "conversation_id": conversation_id,

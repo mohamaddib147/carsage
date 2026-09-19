@@ -7,6 +7,7 @@
 from unittest.mock import MagicMock, patch
 
 import httpx
+import pytest
 
 from app.services.youtube_client import _build_query, search_diy_video
 
@@ -107,3 +108,37 @@ def test_search_diy_video_returns_none_on_a_network_failure(monkeypatch):
         result = search_diy_video({"make": "Honda"}, "Squeaking brakes")
 
     assert result is None
+
+
+# --- CAR-22: malformed responses must mean "no video", never a crash --------
+
+
+def _fake_response(json_value=None, json_error=False):
+    response = MagicMock()
+    response.raise_for_status.return_value = None
+    if json_error:
+        response.json.side_effect = ValueError("not json")
+    else:
+        response.json.return_value = json_value
+    return response
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        _fake_response(json_error=True),  # 200 with an HTML/non-JSON body
+        _fake_response([]),  # a list instead of an object
+        _fake_response(None),
+        _fake_response({"items": None}),
+        _fake_response({"items": ["oops"]}),  # item is not an object
+        _fake_response({"items": [{"id": "abc", "snippet": {"title": "t"}}]}),  # id is a string
+        _fake_response({"items": [{"id": {"videoId": "x"}}]}),  # snippet missing
+        _fake_response({"items": [{"id": {}, "snippet": {"title": "t"}}]}),  # no videoId
+        _fake_response({"items": [{"id": {"videoId": "x"}, "snippet": {"title": ""}}]}),  # empty title
+    ],
+)
+def test_search_diy_video_returns_none_for_a_malformed_response(monkeypatch, response):
+    monkeypatch.setattr("app.services.youtube_client.YOUTUBE_API_KEY", "test-key")
+
+    with patch("app.services.youtube_client.httpx.get", return_value=response):
+        assert search_diy_video({"make": "Toyota"}, "dead battery") is None

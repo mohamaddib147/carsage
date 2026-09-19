@@ -65,15 +65,17 @@ def search_diy_video(car_context: dict, description: str) -> dict | None:
         )
         response.raise_for_status()
         data = response.json()
-    except httpx.HTTPError:
+    except (httpx.HTTPError, ValueError):
+        # ValueError: a 200 whose body isn't JSON (e.g. an HTML error page).
         return None
 
-    items = data.get("items") or []
-    if not items:
+    try:
+        top_result = data["items"][0]
+        video_id = top_result["id"]["videoId"]
+        title = top_result["snippet"]["title"]
+    except (KeyError, IndexError, TypeError):
+        # No results, or a response shape we don't recognize.
         return None
-
-    video_id = items[0].get("id", {}).get("videoId")
-    title = items[0].get("snippet", {}).get("title")
     if not video_id or not title:
         return None
 

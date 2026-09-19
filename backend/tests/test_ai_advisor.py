@@ -414,6 +414,59 @@ class TestYouTubeVideoWiring:
         assert updates == []
 
 
+class TestYouTubeFailureNeverBreaksTheAnswer:
+    """CAR-22: a DIY answer is already saved before the video step, so no
+    failure while finding or saving a video may turn it into an error."""
+
+    def setup_method(self):
+        app.dependency_overrides[get_current_user_id] = lambda: "user-123"
+
+    def teardown_method(self):
+        app.dependency_overrides.pop(get_current_user_id, None)
+
+    def _post_diy(self, mock_supabase, **patches):
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.classify_issue",
+            return_value={"recommendation": "diy", "guidance": "Top up the washer fluid."},
+        ), patch("app.routers.ai_advisor.search_diy_video", **patches):
+            return client.post(
+                "/ai-advisor/classify",
+                json={"car_id": "car-1", "description": "Washer fluid light is on"},
+            )
+
+    def test_an_unexpected_error_in_the_video_lookup_still_returns_the_answer(self):
+        mock_supabase, _, updates = _build_mock_supabase({"make": "Honda"})
+
+        response = self._post_diy(mock_supabase, side_effect=RuntimeError("boom"))
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["recommendation"] == "diy"
+        assert body["guidance"] == "Top up the washer fluid."
+        assert body["video_title"] is None and body["video_url"] is None
+        assert updates == []
+
+    def test_failing_to_save_the_video_still_returns_the_answer_and_the_video(self):
+        mock_supabase, _, _ = _build_mock_supabase({"make": "Honda"})
+        video = {"video_title": "Top Up Washer Fluid", "video_url": "https://www.youtube.com/watch?v=abc"}
+        # Make only the message UPDATE (saving the video) blow up.
+        original_table = mock_supabase.table.side_effect
+
+        def table(name):
+            t = original_table(name)
+            if name == "advisor_messages":
+                t.update.side_effect = RuntimeError("db hiccup")
+            return t
+
+        mock_supabase.table.side_effect = table
+
+        response = self._post_diy(mock_supabase, return_value=video)
+
+        assert response.status_code == 200
+        assert response.json()["guidance"] == "Top up the washer fluid."
+        assert response.json()["video_url"] == video["video_url"]
+
+
 class TestNHTSASafetyWiring:
     """CAR-36: a matching recall/complaint pattern skips the LLM and
     forces 'mechanic' with an NHTSA-grounded explanation, a vehicle
