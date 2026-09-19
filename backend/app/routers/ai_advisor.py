@@ -16,7 +16,10 @@
 # also looks up a matching YouTube tutorial (CAR-40) and saves it onto
 # the AI's message row — a 'mechanic' recommendation (including one
 # forced by an NHTSA match) never triggers this lookup, conserving quota
-# per that task's AC. Requires auth so car_id/conversation_id can be
+# per that task's AC. The description is validated before anything else
+# (CAR-22): it must contain real words (not blank or only symbols) and stay
+# under MAX_DESCRIPTION_CHARS, so junk or huge input never reaches NHTSA, the
+# LLM or the database. Requires auth so car_id/conversation_id can be
 # checked against the caller's own rows — the backend's service-role
 # client bypasses RLS, so this is checked explicitly here, same as the
 # Trip Planner estimate endpoint. Reading past conversation history is
@@ -33,6 +36,12 @@ from app.services.youtube_client import search_diy_video
 from app.supabase_client import supabase
 
 router = APIRouter(prefix="/ai-advisor", tags=["ai-advisor"])
+
+# CAR-22: a car-issue description is a sentence or two. The cap keeps huge
+# input out of the LLM prompt, NHTSA matching and the database; the letter
+# minimum rejects blank / symbol-only input (unicode-aware, so Arabic works).
+MAX_DESCRIPTION_CHARS = 1000
+MIN_DESCRIPTION_LETTERS = 3
 
 
 class ClassifyIssueRequest(BaseModel):
@@ -101,6 +110,21 @@ def post_classify_issue(
     fails, the user's message is still on record but gets no AI reply
     row, same as a real chat where a send succeeded but the reply didn't.
     """
+    description = payload.description.strip()
+    if sum(char.isalpha() for char in description) < MIN_DESCRIPTION_LETTERS:
+        raise HTTPException(
+            status_code=422,
+            detail="Please describe the problem in a few words.",
+        )
+    if len(description) > MAX_DESCRIPTION_CHARS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Please keep your description under {MAX_DESCRIPTION_CHARS} "
+                "characters."
+            ),
+        )
+
     car_result = (
         supabase.table("cars")
         .select("make, model, year")
@@ -121,7 +145,7 @@ def post_classify_issue(
         {
             "conversation_id": conversation_id,
             "sender": "user",
-            "message_text": payload.description,
+            "message_text": description,
         }
     ).execute()
 
@@ -129,7 +153,7 @@ def post_classify_issue(
         car_data.get("make", ""),
         car_data.get("model", ""),
         car_data.get("year"),
-        payload.description,
+        description,
     )
 
     if safety["status"] == "recall_match":
@@ -155,7 +179,7 @@ def post_classify_issue(
         }
     else:
         try:
-            result = classify_issue(payload.description, car_data)
+            result = classify_issue(description, car_data)
         except LLMError as error:
             raise HTTPException(status_code=503, detail=str(error)) from error
 
@@ -181,7 +205,7 @@ def post_classify_issue(
 
     video = None
     if result["recommendation"] == "diy":
-        video = search_diy_video(car_data, payload.description)
+        video = search_diy_video(car_data, description)
         if video:
             supabase.table("advisor_messages").update(video).eq(
                 "id", ai_message.data[0]["id"]

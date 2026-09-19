@@ -368,6 +368,8 @@ function AIAdvisorPage() {
         <input
           type="text"
           placeholder="Describe your car issue..."
+          // Same cap as the backend (MAX_DESCRIPTION_CHARS in ai_advisor.py).
+          maxLength={1000}
           value={description}
           onChange={(event) => setDescription(event.target.value)}
           disabled={submitting}

@@ -245,6 +245,80 @@ class TestPostClassify:
         assert response.status_code == 422
 
 
+class TestDescriptionValidation:
+    """CAR-22: invalid input is rejected up front with a clear message —
+    blank / symbol-only text, and text over the length cap — before any
+    database, NHTSA or LLM work happens. Gibberish made of letters can't be
+    told apart from real text by rules, so it still goes to the LLM (which
+    is prompted to ask for detail / prefer a mechanic)."""
+
+    def setup_method(self):
+        app.dependency_overrides[get_current_user_id] = lambda: "user-123"
+
+    def teardown_method(self):
+        app.dependency_overrides.pop(get_current_user_id, None)
+
+    def _post(self, description):
+        mock_supabase, captured, _ = _build_mock_supabase({"make": "Toyota", "model": "Camry", "year": 2016})
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.classify_issue"
+        ) as mock_classify, patch("app.routers.ai_advisor.search_diy_video", return_value=None):
+            mock_classify.return_value = {"recommendation": "mechanic", "guidance": "See a mechanic."}
+            response = client.post(
+                "/ai-advisor/classify", json={"car_id": "car-1", "description": description}
+            )
+        return response, mock_supabase, captured, mock_classify
+
+    @pytest.mark.parametrize("description", ["   ", "\n\t  ", "!!!??? ###", "12345 67890", "🚗🚗🚗", "a b"])
+    def test_rejects_blank_or_symbol_only_text_with_a_clear_message(self, description):
+        response, mock_supabase, captured, mock_classify = self._post(description)
+
+        assert response.status_code == 422
+        assert response.json() == {"detail": "Please describe the problem in a few words."}
+        # Nothing was touched: no DB access, no saved message, no LLM call.
+        mock_supabase.table.assert_not_called()
+        assert captured == []
+        mock_classify.assert_not_called()
+
+    def test_rejects_text_over_the_length_cap_without_touching_anything(self):
+        response, mock_supabase, captured, mock_classify = self._post("engine noise " * 200)
+
+        assert response.status_code == 422
+        assert response.json() == {"detail": "Please keep your description under 1000 characters."}
+        mock_supabase.table.assert_not_called()
+        assert captured == []
+        mock_classify.assert_not_called()
+
+    def test_accepts_text_exactly_at_the_length_cap(self):
+        text = ("brake noise " * 100)[:1000]
+        assert len(text) == 1000
+
+        response, _, captured, mock_classify = self._post(text)
+
+        assert response.status_code == 200
+        mock_classify.assert_called_once()
+        assert captured[0]["message_text"] == text
+
+    def test_saves_and_forwards_the_trimmed_description(self):
+        response, _, captured, mock_classify = self._post("   squeaking brakes   ")
+
+        assert response.status_code == 200
+        assert captured[0]["message_text"] == "squeaking brakes"
+        assert mock_classify.call_args.args[0] == "squeaking brakes"
+
+    def test_accepts_non_english_text(self):
+        response, _, _, mock_classify = self._post("صوت غريب من الفرامل")
+
+        assert response.status_code == 200
+        mock_classify.assert_called_once()
+
+    def test_gibberish_made_of_letters_still_goes_to_the_llm(self):
+        response, _, _, mock_classify = self._post("asdkjh qwpoei zxcmnb lkjhgf")
+
+        assert response.status_code == 200
+        mock_classify.assert_called_once()
+
+
 class TestYouTubeVideoWiring:
     """CAR-40: a matching video is saved onto the AI message row and
     returned, a diy recommendation with no match returns no video

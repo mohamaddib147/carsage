@@ -193,6 +193,41 @@ describe("AIAdvisorPage — chatting", () => {
 
     expect(await screen.findByRole("button", { name: "Send" })).toBeDisabled();
   });
+
+  it("disables Send for whitespace-only input", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    renderPage();
+
+    await user.type(await screen.findByPlaceholderText("Describe your car issue..."), "     ");
+
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("caps the description at 1000 characters, matching the backend", async () => {
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText("Describe your car issue...");
+
+    expect(input).toHaveAttribute("maxlength", "1000");
+  });
+
+  it("shows the server's clear message when the description is rejected (symbols only)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockRejectedValue(new Error("Please describe the problem in a few words."));
+
+    renderPage();
+    await user.type(await screen.findByPlaceholderText("Describe your car issue..."), "!!!???");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Please describe the problem in a few words.",
+    );
+    expect(screen.queryByText("See a Mechanic")).not.toBeInTheDocument();
+  });
 });
 
 describe("AIAdvisorPage — car selector", () => {
