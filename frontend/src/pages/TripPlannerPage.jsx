@@ -17,6 +17,10 @@
 // the selected car's fuel grade. A "Full Tank Cost" stat is also shown,
 // using an editable tank size (default 20L, a common average).
 //
+// CAR-46: a traffic-light badge (Light/Moderate/Heavy) next to the
+// duration, derived from baseline vs traffic-adjusted duration via
+// lib/trafficLevel.js — no extra API call.
+//
 // CAR-45: an info icon next to the (light-traffic / rated-efficiency) fuel
 // cost explains that it assumes ideal conditions — copy only, no change
 // to the calculation.
@@ -35,6 +39,7 @@ import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { apiFetch } from "../lib/apiClient.js";
+import { getTrafficLevel } from "../lib/trafficLevel.js";
 
 // Fallback if GET /trip-planner/fuel-prices hasn't loaded yet — matches
 // the backend's own documented fixed rate (see fuel_prices.LBP_PER_USD).
@@ -199,6 +204,9 @@ function TripPlannerPage() {
       ? Math.round(tankSizeLiters * result.fuel_price_used_lbp)
       : null;
   const tankCostUsd = tankCostLbp != null ? tankCostLbp / lbpPerUsd : null;
+  const trafficLevel = result
+    ? getTrafficLevel(result.duration_min, result.duration_in_traffic_min)
+    : null;
   const hasTrafficComparison =
     result?.estimated_cost_current_traffic_lbp != null &&
     result?.estimated_cost_current_traffic_usd != null;
@@ -370,6 +378,14 @@ function TripPlannerPage() {
               </span>
               <dt>Duration</dt>
               <dd>{result.duration_in_traffic_min} min</dd>
+              {trafficLevel && (
+                <span
+                  className={`traffic-badge traffic-badge--${trafficLevel.level}`}
+                >
+                  <span className="traffic-badge__dot" aria-hidden="true" />
+                  {trafficLevel.label}
+                </span>
+              )}
               <p className="trip-result__caption">Traffic-adjusted estimate</p>
             </div>
             <div className="trip-result__field">

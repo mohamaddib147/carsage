@@ -1450,3 +1450,37 @@ select:focus {
   text-transform: none;
   box-shadow: 0 4px 12px rgba(43, 43, 43, 0.2);
 }
+
+
+/* Traffic level badge (CAR-46) */
+
+.traffic-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 2px calc(var(--spacing-unit) * 1.25);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-text);
+  background-color: var(--color-surface);
+}
+
+.traffic-badge__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.traffic-badge--light .traffic-badge__dot {
+  background-color: #2e9e5b;
+}
+
+.traffic-badge--moderate .traffic-badge__dot {
+  background-color: #e0a800;
+}
+
+.traffic-badge--heavy .traffic-badge__dot {
+  background-color: var(--color-danger);
+}

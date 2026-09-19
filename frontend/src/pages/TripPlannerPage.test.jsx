@@ -450,3 +450,36 @@ describe("TripPlannerPage — ideal-conditions info tooltip (CAR-45)", () => {
   });
 });
 
+describe("TripPlannerPage — traffic level indicator (CAR-46)", () => {
+  it.each([
+    [60, 62, "Light Traffic"],
+    [60, 72, "Moderate Traffic"],
+    [60, 90, "Heavy Traffic"],
+  ])(
+    "shows the right label for %i min baseline vs %i min in traffic",
+    async (baseline, inTraffic, expectedLabel) => {
+      const user = userEvent.setup();
+      mockCarsLookup([{ id: "car-1" }]);
+      mockApiFetch({
+        estimate: {
+          distance_km: 10,
+          duration_min: baseline,
+          duration_in_traffic_min: inTraffic,
+          fuel_price_used_lbp: 90000,
+          estimated_cost_lbp: 50000,
+          estimated_cost_usd: 0.56,
+        },
+      });
+
+      renderPage();
+      await user.type(await screen.findByLabelText("Destination *"), "Byblos, Lebanon");
+      await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+      const badge = await screen.findByText(expectedLabel);
+      expect(badge).toHaveClass(
+        `traffic-badge--${expectedLabel.split(" ")[0].toLowerCase()}`,
+      );
+    },
+  );
+});
+
