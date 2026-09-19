@@ -84,6 +84,7 @@ def test_lookup_api_ninjas_converts_mpg_to_km_per_liter(monkeypatch):
         "cylinders": 4,
         "drivetrain": "fwd",
         "transmission": "a",
+        "fuel_tank_capacity_liters": None,
     }
 
 
@@ -97,6 +98,7 @@ def test_lookup_api_ninjas_returns_all_none_without_a_configured_key(monkeypatch
         "cylinders": None,
         "drivetrain": None,
         "transmission": None,
+        "fuel_tank_capacity_liters": None,
     }
 
 
@@ -112,6 +114,7 @@ def test_lookup_api_ninjas_returns_all_none_when_there_is_no_match(monkeypatch):
         "cylinders": None,
         "drivetrain": None,
         "transmission": None,
+        "fuel_tank_capacity_liters": None,
     }
 
 
@@ -129,7 +132,34 @@ def test_lookup_api_ninjas_never_raises_on_a_network_failure(monkeypatch):
         "cylinders": None,
         "drivetrain": None,
         "transmission": None,
+        "fuel_tank_capacity_liters": None,
     }
+
+
+def test_lookup_api_ninjas_picks_up_a_tank_capacity_when_the_response_has_one(monkeypatch):
+    # CAR-44: API Ninjas doesn't document a tank field, so any key with
+    # "tank" and a positive number is accepted.
+    monkeypatch.setattr("app.services.vehicle_lookup.API_NINJAS_KEY", "test-key")
+    response = _mock_response(
+        [{"cylinders": 4, "drive": "fwd", "transmission": "a", "fuel_tank_capacity": 50}]
+    )
+
+    with patch("app.services.vehicle_lookup.httpx.get", return_value=response):
+        result = lookup_api_ninjas("Honda", "Civic", 2020)
+
+    assert result["fuel_tank_capacity_liters"] == 50.0
+
+
+def test_lookup_api_ninjas_ignores_a_premium_placeholder_or_nonpositive_tank_value(
+    monkeypatch,
+):
+    monkeypatch.setattr("app.services.vehicle_lookup.API_NINJAS_KEY", "test-key")
+
+    for bad_value in ("this field is for premium subscribers only", 0, -5, True, None):
+        response = _mock_response([{"cylinders": 4, "fuel_tank_capacity": bad_value}])
+        with patch("app.services.vehicle_lookup.httpx.get", return_value=response):
+            result = lookup_api_ninjas("Honda", "Civic", 2020)
+        assert result["fuel_tank_capacity_liters"] is None, bad_value
 
 
 def test_lookup_fuel_economy_walks_the_menu_and_converts_to_km_per_liter():

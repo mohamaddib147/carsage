@@ -30,6 +30,7 @@ const FIELD_LABELS = {
   fuel_type: "Fuel Type",
   fuel_efficiency: "Fuel Efficiency (km/L)",
   cylinders: "Cylinders",
+  fuel_tank_capacity_liters: "Fuel Tank Capacity (L)",
   drivetrain: "Drivetrain",
   transmission: "Transmission",
   license_plate: "License Plate",
@@ -47,6 +48,7 @@ const FIELD_ICONS = {
   fuel_type: "⛽",
   fuel_efficiency: "📊",
   cylinders: "🛠️",
+  fuel_tank_capacity_liters: "🛢️",
   drivetrain: "⚙️",
   transmission: "🔁",
   license_plate: "🪪",
@@ -63,6 +65,10 @@ function toFormValues(car) {
     fuel_type: car.fuel_type ?? "",
     fuel_efficiency: car.fuel_efficiency == null ? "" : String(car.fuel_efficiency),
     cylinders: car.cylinders == null ? "" : String(car.cylinders),
+    fuel_tank_capacity_liters:
+      car.fuel_tank_capacity_liters == null
+        ? ""
+        : String(car.fuel_tank_capacity_liters),
     drivetrain: car.drivetrain ?? "",
     transmission: car.transmission ?? "",
     license_plate: car.license_plate ?? "",
@@ -102,6 +108,13 @@ function validate(form) {
     const cylindersNumber = Number(form.cylinders);
     if (!Number.isInteger(cylindersNumber) || cylindersNumber <= 0) {
       errors.cylinders = "Cylinders must be a positive whole number.";
+    }
+  }
+
+  if (form.fuel_tank_capacity_liters.trim()) {
+    const capacity = Number(form.fuel_tank_capacity_liters);
+    if (!Number.isFinite(capacity) || capacity <= 0) {
+      errors.fuel_tank_capacity_liters = "Tank capacity must be a positive number.";
     }
   }
 
@@ -233,6 +246,9 @@ function CarProfilePage() {
             ? Number(form.fuel_efficiency)
             : null,
           cylinders: form.cylinders.trim() ? Number(form.cylinders) : null,
+          fuel_tank_capacity_liters: form.fuel_tank_capacity_liters.trim()
+            ? Number(form.fuel_tank_capacity_liters)
+            : null,
           drivetrain: form.drivetrain.trim() || null,
           transmission: form.transmission.trim() || null,
           license_plate: form.license_plate.trim() || null,
@@ -353,6 +369,23 @@ function CarProfilePage() {
               />
               {fieldErrors.cylinders && (
                 <p role="alert" className="auth-form__error">{fieldErrors.cylinders}</p>
+              )}
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="fuel_tank_capacity_liters">Fuel Tank Capacity (L)</label>
+              <input
+                id="fuel_tank_capacity_liters"
+                type="number"
+                min="1"
+                step="0.1"
+                value={form.fuel_tank_capacity_liters}
+                onChange={handleChange("fuel_tank_capacity_liters")}
+              />
+              {fieldErrors.fuel_tank_capacity_liters && (
+                <p role="alert" className="auth-form__error">
+                  {fieldErrors.fuel_tank_capacity_liters}
+                </p>
               )}
             </div>
 

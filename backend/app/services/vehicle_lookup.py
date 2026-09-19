@@ -69,14 +69,36 @@ def lookup_nhtsa(make: str, model: str, year: int) -> dict:
     return {"vehicle_confirmed": True, "engine_type": engine_type}
 
 
+def _extract_tank_capacity(car: dict) -> float | None:
+    """
+    Returns a fuel tank capacity in liters from an API Ninjas car record,
+    or None if there isn't one (CAR-44). API Ninjas' documented response
+    fields don't guarantee a tank capacity, so rather than hardcode a
+    field name that may never exist, this accepts any key containing
+    "tank" whose value is a positive number (not the premium-tier
+    placeholder string, and not a bool). Assumes liters — the only unit
+    `cars.fuel_tank_capacity_liters` stores.
+    """
+    for key, value in car.items():
+        if "tank" not in key.lower():
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        if value > 0:
+            return float(value)
+    return None
+
+
 def lookup_api_ninjas(make: str, model: str, year: int) -> dict:
     """
     Looks up detailed specs (fuel economy, cylinders, drivetrain,
-    transmission) from API Ninjas' Cars API.
+    transmission, and — only if the response happens to include one —
+    fuel tank capacity) from API Ninjas' Cars API.
 
     Returns:
         {"fuel_efficiency": float | None, "cylinders": int | None,
-         "drivetrain": str | None, "transmission": str | None}. All None
+         "drivetrain": str | None, "transmission": str | None,
+         "fuel_tank_capacity_liters": float | None}. All None
         (never raises) if API_NINJAS_KEY isn't configured, the API call
         fails, or there's no match for this make/model/year.
         fuel_efficiency is converted from the API's combined MPG figure
@@ -92,6 +114,7 @@ def lookup_api_ninjas(make: str, model: str, year: int) -> dict:
         "cylinders": None,
         "drivetrain": None,
         "transmission": None,
+        "fuel_tank_capacity_liters": None,
     }
     if not API_NINJAS_KEY:
         return empty
@@ -124,6 +147,7 @@ def lookup_api_ninjas(make: str, model: str, year: int) -> dict:
         "cylinders": car.get("cylinders"),
         "drivetrain": car.get("drive"),
         "transmission": car.get("transmission"),
+        "fuel_tank_capacity_liters": _extract_tank_capacity(car),
     }
 
 

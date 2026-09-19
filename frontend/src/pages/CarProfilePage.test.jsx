@@ -26,6 +26,7 @@ const SAMPLE_CAR = {
   cylinders: 4,
   drivetrain: "fwd",
   transmission: "a",
+  fuel_tank_capacity_liters: 55,
   license_plate: "ABC-123",
   vin: "1HGCM82633A004352",
 };
@@ -101,19 +102,26 @@ describe("CarProfilePage — viewing", () => {
     expect(screen.getByText("4")).toBeInTheDocument();
     expect(screen.getByText("fwd")).toBeInTheDocument();
     expect(screen.getByText("a")).toBeInTheDocument();
+    expect(screen.getByText("55")).toBeInTheDocument();
     expect(screen.getByText("ABC-123")).toBeInTheDocument();
     expect(screen.getByText("1HGCM82633A004352")).toBeInTheDocument();
   });
 
   it("shows a placeholder dash for spec-autofill fields that were never set (edge case)", async () => {
-    const { cylinders, drivetrain, transmission, ...carWithoutAutofill } = SAMPLE_CAR;
+    const {
+      cylinders,
+      drivetrain,
+      transmission,
+      fuel_tank_capacity_liters,
+      ...carWithoutAutofill
+    } = SAMPLE_CAR;
     mockCarsTable({ selectResult: { data: carWithoutAutofill, error: null } });
 
     renderAt("/cars/mine");
 
     expect(await screen.findByText("Toyota")).toBeInTheDocument();
     const dashes = screen.getAllByText("—");
-    expect(dashes.length).toBeGreaterThanOrEqual(3);
+    expect(dashes.length).toBeGreaterThanOrEqual(4);
   });
 
   it("displays a car looked up by id at /cars/:carId (normal case)", async () => {
@@ -239,6 +247,67 @@ describe("CarProfilePage — editing", () => {
 
     expect(screen.getByText("Corolla")).toBeInTheDocument();
     expect(screen.queryByText("Discarded")).not.toBeInTheDocument();
+  });
+});
+
+describe("CarProfilePage — fuel tank capacity (CAR-44)", () => {
+  it("saves an edited tank capacity as a number scoped to the car's id", async () => {
+    const user = userEvent.setup();
+    const { update } = mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      updateResult: {
+        data: { ...SAMPLE_CAR, fuel_tank_capacity_liters: 60 },
+        error: null,
+      },
+    });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+
+    const input = screen.getByLabelText("Fuel Tank Capacity (L)");
+    expect(input).toHaveValue(55);
+    await user.clear(input);
+    await user.type(input, "60");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ fuel_tank_capacity_liters: 60 }),
+    );
+    await waitFor(() => expect(screen.getByText("60")).toBeInTheDocument());
+  });
+
+  it("allows clearing the tank capacity back to empty (saved as null)", async () => {
+    const user = userEvent.setup();
+    const { update } = mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      updateResult: { data: { ...SAMPLE_CAR, fuel_tank_capacity_liters: null }, error: null },
+    });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.clear(screen.getByLabelText("Fuel Tank Capacity (L)"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ fuel_tank_capacity_liters: null }),
+    );
+  });
+
+  it("rejects a zero/negative tank capacity without saving (invalid input)", async () => {
+    const user = userEvent.setup();
+    const { update } = mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    const input = screen.getByLabelText("Fuel Tank Capacity (L)");
+    await user.clear(input);
+    await user.type(input, "-5");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(
+      await screen.findByText("Tank capacity must be a positive number."),
+    ).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
   });
 });
 

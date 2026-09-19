@@ -5,7 +5,9 @@
 // FastAPI backend and fills in Engine Type, Fuel Efficiency, Cylinders,
 // Drivetrain, and Transmission where they're still empty — the user can
 // always override any autofilled value, and a lookup that fails or finds
-// no match never blocks manual entry.
+// no match never blocks manual entry. Fuel Tank Capacity (L, CAR-44) is
+// filled the same way when API Ninjas happens to return one (its docs
+// don't guarantee it), and is otherwise a plain manual field.
 // Layout matches docs/stitch_carsage_landing_page/carsage_add_your_car
 // for the in-scope parts (scan card row, section divider, 2-column field
 // grid); its "Designate as Primary Vehicle" telemetry checkbox and
@@ -45,6 +47,7 @@ const EMPTY_FORM = {
   cylinders: "",
   drivetrain: "",
   transmission: "",
+  fuelTankCapacity: "",
 };
 
 /**
@@ -71,6 +74,13 @@ function validate(form) {
       yearNumber > CURRENT_YEAR + 1
     ) {
       errors.year = `Enter a valid year between 1900 and ${CURRENT_YEAR + 1}.`;
+    }
+  }
+
+  if (form.fuelTankCapacity.trim()) {
+    const capacity = Number(form.fuelTankCapacity);
+    if (!Number.isFinite(capacity) || capacity <= 0) {
+      errors.fuelTankCapacity = "Tank capacity must be a positive number.";
     }
   }
 
@@ -143,6 +153,11 @@ function CarOnboardingPage() {
             (suggestions.cylinders != null ? String(suggestions.cylinders) : ""),
           drivetrain: previous.drivetrain || suggestions.drivetrain || "",
           transmission: previous.transmission || suggestions.transmission || "",
+          fuelTankCapacity:
+            previous.fuelTankCapacity ||
+            (suggestions.fuel_tank_capacity_liters != null
+              ? String(suggestions.fuel_tank_capacity_liters)
+              : ""),
         }));
 
         if (
@@ -150,7 +165,8 @@ function CarOnboardingPage() {
           suggestions.fuel_efficiency != null ||
           suggestions.cylinders != null ||
           suggestions.drivetrain ||
-          suggestions.transmission
+          suggestions.transmission ||
+          suggestions.fuel_tank_capacity_liters != null
         ) {
           setSpecNotice("Some specs were auto-filled below — feel free to edit them.");
         }
@@ -193,6 +209,9 @@ function CarOnboardingPage() {
           cylinders: form.cylinders.trim() ? Number(form.cylinders) : null,
           drivetrain: form.drivetrain.trim() || null,
           transmission: form.transmission.trim() || null,
+          fuel_tank_capacity_liters: form.fuelTankCapacity.trim()
+            ? Number(form.fuelTankCapacity)
+            : null,
         })
         .select()
         .single();
@@ -372,6 +391,25 @@ function CarOnboardingPage() {
               value={form.drivetrain}
               onChange={handleChange("drivetrain")}
             />
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="fuelTankCapacity">Fuel Tank Capacity (L)</label>
+            <input
+              id="fuelTankCapacity"
+              name="fuelTankCapacity"
+              type="number"
+              min="1"
+              step="0.1"
+              placeholder="e.g. 50 — auto-filled if available"
+              value={form.fuelTankCapacity}
+              onChange={handleChange("fuelTankCapacity")}
+            />
+            {fieldErrors.fuelTankCapacity && (
+              <p role="alert" className="auth-form__error">
+                {fieldErrors.fuelTankCapacity}
+              </p>
+            )}
           </div>
 
           <div className="form-field">

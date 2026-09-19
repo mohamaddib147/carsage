@@ -20,6 +20,7 @@ class SpecSuggestionsResponse(BaseModel):
     cylinders: int | None
     drivetrain: str | None
     transmission: str | None
+    fuel_tank_capacity_liters: float | None = None
 
 
 @router.get("/spec-suggestions", response_model=SpecSuggestionsResponse)

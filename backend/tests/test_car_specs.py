@@ -36,6 +36,8 @@ def test_returns_suggestions_for_a_valid_request():
         "cylinders": 4,
         "drivetrain": "fwd",
         "transmission": "a",
+        # Not in the lookup result -> defaults to null in the response.
+        "fuel_tank_capacity_liters": None,
     }
     mock_lookup.assert_called_once_with("Honda", "Civic", 2020)
 
@@ -64,3 +66,23 @@ def test_returns_200_with_all_null_fields_when_nothing_is_found():
 
     assert response.status_code == 200
     assert response.json()["vehicle_confirmed"] is False
+
+
+def test_passes_a_tank_capacity_through_when_the_lookup_has_one():
+    with patch("app.routers.car_specs.get_spec_suggestions") as mock_lookup:
+        mock_lookup.return_value = {
+            "vehicle_confirmed": True,
+            "engine_type": None,
+            "fuel_efficiency": None,
+            "cylinders": 4,
+            "drivetrain": "fwd",
+            "transmission": "a",
+            "fuel_tank_capacity_liters": 50.0,
+        }
+
+        response = client.get(
+            "/cars/spec-suggestions",
+            params={"make": "Honda", "model": "Civic", "year": 2020},
+        )
+
+    assert response.json()["fuel_tank_capacity_liters"] == 50.0

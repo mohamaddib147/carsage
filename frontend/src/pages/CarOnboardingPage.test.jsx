@@ -283,3 +283,79 @@ describe("CarOnboardingPage", () => {
     10000,
   );
 });
+
+describe("CarOnboardingPage — fuel tank capacity (CAR-44)", () => {
+  it(
+    "auto-fills the tank capacity when the lookup provides one, and saves it",
+    async () => {
+      const user = userEvent.setup();
+      apiFetch.mockResolvedValue({ fuel_tank_capacity_liters: 50 });
+      const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+      const select = vi.fn(() => ({ single }));
+      const insert = vi.fn(() => ({ select }));
+      supabase.from.mockReturnValue({ insert });
+
+      renderPage();
+      await fillRequiredFields(user);
+
+      await waitFor(
+        () => expect(screen.getByLabelText("Fuel Tank Capacity (L)")).toHaveValue(50),
+        { timeout: 3000 },
+      );
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+      expect(insert).toHaveBeenCalledWith(
+        expect.objectContaining({ fuel_tank_capacity_liters: 50 }),
+      );
+    },
+    10000,
+  );
+
+  it("accepts a manually entered tank capacity when the lookup has none", async () => {
+    const user = userEvent.setup();
+    apiFetch.mockResolvedValue({ fuel_tank_capacity_liters: null });
+    const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+    const select = vi.fn(() => ({ single }));
+    const insert = vi.fn(() => ({ select }));
+    supabase.from.mockReturnValue({ insert });
+
+    renderPage();
+    await fillRequiredFields(user);
+    await user.type(screen.getByLabelText("Fuel Tank Capacity (L)"), "45.5");
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ fuel_tank_capacity_liters: 45.5 }),
+    );
+  });
+
+  it("saves null (and never blocks) when tank capacity is left blank", async () => {
+    const user = userEvent.setup();
+    const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+    const select = vi.fn(() => ({ single }));
+    const insert = vi.fn(() => ({ select }));
+    supabase.from.mockReturnValue({ insert });
+
+    renderPage();
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ fuel_tank_capacity_liters: null }),
+    );
+  });
+
+  it("rejects a non-positive tank capacity without saving (invalid input)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await fillRequiredFields(user);
+    await user.type(screen.getByLabelText("Fuel Tank Capacity (L)"), "0");
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+    expect(
+      await screen.findByText("Tank capacity must be a positive number."),
+    ).toBeInTheDocument();
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+});
+
