@@ -10,7 +10,8 @@
 // Copy elsewhere is rewritten to only claim what CarSage actually does
 // (no invented pricing/trial/diagnostics claims).
 
-import { Link } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
 import Logo from "../components/Logo.jsx";
 import { useAuthStatus } from "../auth/AuthContext.jsx";
 
@@ -41,6 +42,24 @@ const FEATURES = [
       "Describe a car issue in plain language and get clear guidance on whether it's safe to fix yourself or time to see a mechanic.",
     previewLabel: "“Squeaking brake when cold”",
     previewMeta: "Advice: safe for DIY inspection",
+  },
+];
+
+const STEPS = [
+  {
+    title: "Add your car",
+    description:
+      "Enter its make, model, year and fuel type — CarSage fills in specs like fuel efficiency and tank size where it can.",
+  },
+  {
+    title: "Plan a trip",
+    description:
+      "Type a destination and get the estimated fuel cost, distance and traffic-adjusted travel time.",
+  },
+  {
+    title: "Ask the advisor",
+    description:
+      "Describe a car issue in plain language and get a DIY-or-mechanic recommendation with short guidance steps.",
   },
 ];
 
@@ -76,6 +95,17 @@ const PILLARS = [
  */
 function LandingPage() {
   const { status } = useAuthStatus();
+  const { hash } = useLocation();
+
+  // The header's "Features" / "How it works" links (and the hero button)
+  // navigate to a #hash; scroll the matching section into view, including
+  // when arriving from another screen. Optional-called because jsdom (tests)
+  // has no scrollIntoView.
+  useEffect(() => {
+    if (!hash) return;
+    document.getElementById(hash.slice(1))?.scrollIntoView?.({ behavior: "smooth" });
+  }, [hash]);
+
   const primaryCta = {
     signedIn: { to: "/dashboard", label: "Go to Dashboard" },
     signedOut: { to: "/signup", label: "Get Started Free" },
@@ -108,9 +138,9 @@ function LandingPage() {
               {primaryCta.label} <span aria-hidden="true">→</span>
             </Link>
           )}
-          <a className="btn-secondary" href="#features">
+          <Link className="btn-secondary" to={{ hash: "#how-it-works" }}>
             See how it works <span aria-hidden="true">↓</span>
-          </a>
+          </Link>
         </div>
         <div className="landing-trust-row">
           <span>✓ Completely free</span>
@@ -145,6 +175,24 @@ function LandingPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="landing-steps" id="how-it-works">
+        <div className="landing-section-header">
+          <p className="landing-section-header__eyebrow">Three simple steps</p>
+          <h2>How it works</h2>
+        </div>
+        <ol className="landing-steps__list">
+          {STEPS.map((step, index) => (
+            <li key={step.title} className="landing-step">
+              <span className="landing-step__number" aria-hidden="true">
+                {index + 1}
+              </span>
+              <h3>{step.title}</h3>
+              <p>{step.description}</p>
+            </li>
+          ))}
+        </ol>
       </section>
 
       <section className="landing-pillars">

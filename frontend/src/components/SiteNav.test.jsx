@@ -1,9 +1,11 @@
-// Tests for the header's auth control: a logged-out session shows ONLY
-// "Sign Up / Log In", a logged-in session shows ONLY "Log Out" (no email in
-// it), neither shows while the session is still loading, the header flips
-// when the session changes (log in / log out), and Log Out really signs
-// out. The Supabase client is mocked so getSession() and the auth-state
-// listener are driven by the tests — no real network calls.
+// Tests for the header's centered links (marketing anchors when signed out,
+// the full app menu when signed in, none while loading) and its auth
+// control: a logged-out session shows ONLY "Sign Up / Log In", a logged-in
+// session shows ONLY "Log Out" (no email in it), neither shows while the
+// session is still loading, the header flips when the session changes (log
+// in / log out), and Log Out really signs out. The Supabase client is
+// mocked so getSession() and the auth-state listener are driven by the
+// tests — no real network calls.
 
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -122,5 +124,59 @@ describe("SiteNav auth control", () => {
     expect(await screen.findByText("Login screen")).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "Sign Up / Log In" })).toBeInTheDocument();
     expect(logOut()).not.toBeInTheDocument();
+  });
+});
+
+describe("SiteNav center links", () => {
+  const APP_LINKS = ["Dashboard", "Car Onboarding", "Car Profile", "Trip Planner", "AI Advisor"];
+
+  it("logged out: shows only 'Features' and 'How it works' anchors, no app routes", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderNav();
+    await screen.findByRole("link", { name: "Sign Up / Log In" });
+
+    expect(screen.getByRole("link", { name: "Features" })).toHaveAttribute("href", "/#features");
+    expect(screen.getByRole("link", { name: "How it works" })).toHaveAttribute(
+      "href",
+      "/#how-it-works",
+    );
+    for (const label of APP_LINKS) {
+      expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
+    }
+  });
+
+  it("logged in: shows the full app menu and no marketing anchors", async () => {
+    supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: LOGGED_IN_USER } },
+    });
+    renderNav();
+    await screen.findByRole("button", { name: "Log Out" });
+
+    for (const label of APP_LINKS) {
+      expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole("link", { name: "Features" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "How it works" })).not.toBeInTheDocument();
+  });
+
+  it("shows no center links while the session is loading (no wrong-state flash)", () => {
+    supabase.auth.getSession.mockReturnValue(new Promise(() => {}));
+    renderNav();
+
+    expect(screen.queryByRole("link", { name: "Features" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
+  });
+
+  it("swaps the menu when the session changes", async () => {
+    supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: LOGGED_IN_USER } },
+    });
+    renderNav();
+    expect(await screen.findByRole("link", { name: "Dashboard" })).toBeInTheDocument();
+
+    act(() => emitAuthChange(null));
+
+    expect(await screen.findByRole("link", { name: "Features" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
   });
 });

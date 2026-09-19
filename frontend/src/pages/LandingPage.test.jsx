@@ -4,7 +4,7 @@
 // are absent while the session is still loading. The Supabase client is
 // mocked so no real network calls happen.
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import LandingPage from "./LandingPage.jsx";
@@ -24,9 +24,9 @@ vi.mock("../lib/supabaseClient.js", () => ({
   },
 }));
 
-function renderPage() {
+function renderPage(path = "/") {
   render(
-    <MemoryRouter initialEntries={["/"]}>
+    <MemoryRouter initialEntries={[path]}>
       <AuthProvider>
         <LandingPage />
       </AuthProvider>
@@ -92,5 +92,61 @@ describe("LandingPage", () => {
 
     expect(screen.queryByRole("link", { name: /Get Started/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Go to Dashboard/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("LandingPage sections and anchors", () => {
+  beforeEach(() => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+  });
+
+  it("has a Features section and a How it works section (the nav's anchor targets)", async () => {
+    renderPage();
+    await screen.findByText("Everything about your car, in one place");
+
+    expect(document.getElementById("features")).not.toBeNull();
+    const howItWorks = document.getElementById("how-it-works");
+    expect(howItWorks).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "How it works" })).toBeInTheDocument();
+    expect(howItWorks.querySelectorAll("li")).toHaveLength(3);
+    for (const title of ["Add your car", "Plan a trip", "Ask the advisor"]) {
+      expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+    }
+  });
+
+  it.each([
+    ["#features", "features"],
+    ["#how-it-works", "how-it-works"],
+  ])("scrolls to the %s section when opened with that hash", async (hash, id) => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      renderPage(`/${hash}`);
+
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+      expect(scrollIntoView.mock.contexts[0]).toBe(document.getElementById(id));
+    } finally {
+      delete Element.prototype.scrollIntoView;
+    }
+  });
+
+  it("does not scroll or crash when there is no hash, or the hash matches nothing", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      renderPage("/#no-such-section");
+      await screen.findByText("Everything about your car, in one place");
+
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      delete Element.prototype.scrollIntoView;
+    }
+  });
+
+  it("points the hero 'See how it works' button at the How it works section", async () => {
+    renderPage();
+
+    const button = await screen.findByRole("link", { name: /See how it works/ });
+    expect(button).toHaveAttribute("href", "/#how-it-works");
   });
 });

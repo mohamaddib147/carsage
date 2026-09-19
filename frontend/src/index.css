@@ -1582,3 +1582,45 @@ select:focus {
 .advanced-options__fields {
   margin-top: calc(var(--spacing-unit) * 2);
 }
+
+/* Landing "How it works" (anchor target for the header's marketing nav) */
+.landing-steps__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: calc(var(--spacing-unit) * 3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landing-step {
+  padding: calc(var(--spacing-unit) * 3);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+}
+
+.landing-step__number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: calc(var(--spacing-unit) * 1.5);
+  border-radius: 999px;
+  background-color: var(--color-primary);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+
+.landing-step h3 {
+  margin: 0 0 calc(var(--spacing-unit) * 1);
+}
+
+.landing-step p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}

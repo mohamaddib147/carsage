@@ -1,10 +1,13 @@
 // Top navigation bar shown on every screen: the CarSage brand mark on
-// the left (click to go to the Landing page), links to every screen
-// centered, and one auth control on the right — "Sign Up / Log In" when
+// the left (click to go to the Landing page), the centered links, and one
+// auth control on the right. The centered links depend on who is looking:
+// signed-out visitors get a simple marketing nav (Features / How it works,
+// anchors on the Landing page — no internal app routes), signed-in users
+// get the full app menu. The auth control — "Sign Up / Log In" when
 // signed out, "Log Out" when signed in, never both (and neither while the
 // session is still being restored, so nothing flashes the wrong state).
 
-import { NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuthStatus } from "../auth/AuthContext.jsx";
 import Logo from "./Logo.jsx";
 
@@ -16,9 +19,16 @@ const CENTER_LINKS = [
   { to: "/advisor", label: "AI Advisor" },
 ];
 
+// Signed-out nav: anchors on the Landing page (its sections carry these ids).
+const MARKETING_LINKS = [
+  { hash: "#features", label: "Features" },
+  { hash: "#how-it-works", label: "How it works" },
+];
+
 /**
- * Renders the top-level navigation bar: brand (left), screen links
- * (center), and the auth control (right).
+ * Renders the top-level navigation bar: brand (left), the centered links
+ * (marketing anchors when signed out, app screens when signed in, none
+ * while the session loads), and the auth control (right).
  * @returns {JSX.Element}
  */
 function SiteNav() {
@@ -37,11 +47,20 @@ function SiteNav() {
       </NavLink>
 
       <ul className="site-nav__links">
-        {CENTER_LINKS.map((link) => (
-          <li key={link.to}>
-            <NavLink to={link.to}>{link.label}</NavLink>
-          </li>
-        ))}
+        {status === "signedIn" &&
+          CENTER_LINKS.map((link) => (
+            <li key={link.to}>
+              <NavLink to={link.to}>{link.label}</NavLink>
+            </li>
+          ))}
+        {status === "signedOut" &&
+          MARKETING_LINKS.map((link) => (
+            <li key={link.hash}>
+              {/* Works from any screen: goes to the Landing page and the
+                  page scrolls to the section (see LandingPage). */}
+              <Link to={{ pathname: "/", hash: link.hash }}>{link.label}</Link>
+            </li>
+          ))}
       </ul>
 
       <div className="site-nav__actions">
