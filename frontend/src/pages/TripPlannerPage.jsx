@@ -15,7 +15,14 @@
 // backend's fuel_price_per_liter_lbp override already existed — this
 // just exposes it), pre-filled from GET /trip-planner/fuel-prices for
 // the selected car's fuel grade. A "Full Tank Cost" stat is also shown,
-// using an editable tank size (default 20L, a common average).
+// using an editable tank size.
+//
+// CAR-49: that tank size is now the selected car's own
+// fuel_tank_capacity_liters (CAR-44), refilled whenever the car is
+// switched — the old hardcoded 20L default is gone. If the car has no tank
+// size yet the field starts empty and the Full Tank Cost stat says so
+// (with a link to the car's profile) instead of showing a made-up number;
+// a size the user types in themselves still works.
 //
 // CAR-48: a decorative, non-interactive static map banner
 // (components/RouteMapImage.jsx) tops the results card when a browser
@@ -94,7 +101,7 @@ function TripPlannerPage() {
 
   const [fuelPrices, setFuelPrices] = useState(null);
   const [fuelPriceInput, setFuelPriceInput] = useState("");
-  const [tankSizeInput, setTankSizeInput] = useState("20");
+  const [tankSizeInput, setTankSizeInput] = useState("");
   const fuelPriceEditedRef = useRef(false);
 
   const selectedCar = cars.find((car) => car.id === selectedCarId) ?? null;
@@ -108,7 +115,7 @@ function TripPlannerPage() {
       setLoadingCar(true);
       const { data } = await supabase
         .from("cars")
-        .select("id, make, model, year, fuel_type")
+        .select("id, make, model, year, fuel_type, fuel_tank_capacity_liters")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
 
@@ -146,6 +153,16 @@ function TripPlannerPage() {
       cancelled = true;
     };
   }, []);
+
+  // CAR-49: the tank size follows the selected car — refilled with that
+  // car's real capacity (or emptied if it has none) on load and on every
+  // car switch. Still editable afterwards, per trip.
+  useEffect(() => {
+    const capacity = selectedCar?.fuel_tank_capacity_liters;
+    setTankSizeInput(capacity > 0 ? String(capacity) : "");
+    // Not keyed on selectedCar itself, so an unrelated re-render can't
+    // clobber a manual edit — only a car switch or the cars list loading.
+  }, [selectedCarId, cars]);
 
   // Prefills the fuel price for the selected car's fuel grade, but never
   // overwrites a value the user already typed themselves.
@@ -326,6 +343,7 @@ function TripPlannerPage() {
                 type="number"
                 min="1"
                 step="1"
+                placeholder="Not set for this car"
                 value={tankSizeInput}
                 onChange={(event) => setTankSizeInput(event.target.value)}
               />
@@ -420,21 +438,31 @@ function TripPlannerPage() {
               <dt>Distance</dt>
               <dd>{result.distance_km} km</dd>
             </div>
-            {tankCostLbp != null && (
-              <div className="trip-result__field">
-                <span className="trip-result__icon" aria-hidden="true">
-                  🛢️
-                </span>
-                <dt>Full Tank Cost</dt>
-                <dd>
-                  ${tankCostUsd.toFixed(2)} ({tankCostLbp.toLocaleString()} LBP)
-                </dd>
-                <p className="trip-result__caption">
-                  {tankSizeLiters}L at {result.fuel_price_used_lbp.toLocaleString()}{" "}
-                  LBP/L
-                </p>
-              </div>
-            )}
+            <div className="trip-result__field">
+              <span className="trip-result__icon" aria-hidden="true">
+                🛢️
+              </span>
+              <dt>Full Tank Cost</dt>
+              {tankCostLbp != null ? (
+                <>
+                  <dd>
+                    ${tankCostUsd.toFixed(2)} ({tankCostLbp.toLocaleString()} LBP)
+                  </dd>
+                  <p className="trip-result__caption">
+                    {tankSizeLiters}L at{" "}
+                    {result.fuel_price_used_lbp.toLocaleString()} LBP/L
+                  </p>
+                </>
+              ) : (
+                <>
+                  <dd>Tank size not set</dd>
+                  <p className="trip-result__caption">
+                    Enter a tank size above, or add it on{" "}
+                    <Link to={`/cars/${selectedCarId}`}>this car&apos;s profile</Link>.
+                  </p>
+                </>
+              )}
+            </div>
           </dl>
           {hasTrafficComparison && (
             <p className="trip-result__explainer">

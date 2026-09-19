@@ -7,7 +7,10 @@
 // sent as an override; the Full Tank Cost stat), and CAR-42 (light vs
 // current-traffic fuel cost estimates + the explainer text — shown only
 // when the response includes the new fields, so older-shaped responses
-// degrade to the original single "Fuel Cost" stat).
+// degrade to the original single "Fuel Cost" stat), and CAR-49 (the Tank
+// Size field/Full Tank Cost use the selected car's own
+// fuel_tank_capacity_liters — no hardcoded default; switching cars
+// changes it; a car with no tank size gets a clear "not set" message).
 //
 // apiFetch now fires twice per successful flow (a GET for fuel prices
 // on mount, then the POST estimate on submit) — tests that don't care
@@ -68,6 +71,15 @@ function mockApiFetch({ fuelPrices, estimate, error } = {}) {
     return Promise.reject(new Error(`mockApiFetch: unexpected path "${path}"`));
   });
 }
+
+const ESTIMATE_90K = {
+  distance_km: 10,
+  duration_min: 10,
+  duration_in_traffic_min: 10,
+  fuel_price_used_lbp: 90000,
+  estimated_cost_lbp: 50000,
+  estimated_cost_usd: 0.56,
+};
 
 function renderPage() {
   render(
@@ -307,19 +319,10 @@ describe("TripPlannerPage — editable fuel price & tank cost (CAR-41)", () => {
     );
   });
 
-  it("shows the full tank cost using the default 20L tank size (normal case)", async () => {
+  it("shows the full tank cost using the car's own tank size (normal case)", async () => {
     const user = userEvent.setup();
-    mockCarsLookup([{ id: "car-1" }]);
-    mockApiFetch({
-      estimate: {
-        distance_km: 10,
-        duration_min: 10,
-        duration_in_traffic_min: 10,
-        fuel_price_used_lbp: 90000,
-        estimated_cost_lbp: 50000,
-        estimated_cost_usd: 0.56,
-      },
-    });
+    mockCarsLookup([{ id: "car-1", fuel_tank_capacity_liters: 45 }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
 
     renderPage();
     await user.type(
@@ -328,8 +331,8 @@ describe("TripPlannerPage — editable fuel price & tank cost (CAR-41)", () => {
     );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
-    // 20L * 90000 LBP/L = 1,800,000 LBP.
-    expect(await screen.findByText("$20.22 (1,800,000 LBP)")).toBeInTheDocument();
+    // 45L * 90000 LBP/L = 4,050,000 LBP.
+    expect(await screen.findByText("$45.51 (4,050,000 LBP)")).toBeInTheDocument();
   });
 
   it("recalculates the full tank cost when the tank size is edited", async () => {
@@ -662,5 +665,96 @@ describe("TripPlannerPage — static route map (CAR-48)", () => {
 
     expect(screen.queryByTestId("route-map")).not.toBeInTheDocument();
     expect(screen.getByText(/Fuel Cost/)).toBeInTheDocument();
+  });
+});
+
+describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
+  async function planTrip(user) {
+    await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+  }
+
+  it("prefills the Tank Size field with the selected car's capacity", async () => {
+    mockCarsLookup([{ id: "car-1", fuel_tank_capacity_liters: 52 }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue(52));
+  });
+
+  it("changes the tank size and full tank cost when switching between cars with different capacities", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([
+      { id: "car-1", make: "Toyota", model: "Corolla", year: 2020, fuel_tank_capacity_liters: 40 },
+      { id: "car-2", make: "Nissan", model: "Patrol", year: 2018, fuel_tank_capacity_liters: 55 },
+    ]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue(40));
+    await planTrip(user);
+    // 40L * 90000 = 3,600,000 LBP.
+    expect(await screen.findByText("$40.45 (3,600,000 LBP)")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Car"), "car-2");
+    expect(screen.getByLabelText(/Tank Size/)).toHaveValue(55);
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    // 55L * 90000 = 4,950,000 LBP.
+    expect(await screen.findByText("$55.62 (4,950,000 LBP)")).toBeInTheDocument();
+    expect(screen.queryByText("$40.45 (3,600,000 LBP)")).not.toBeInTheDocument();
+  });
+
+  it("shows a clear message, not a fake default, when the car has no tank size (null case)", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_tank_capacity_liters: null }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+    const tankInput = await screen.findByLabelText(/Tank Size/);
+    expect(tankInput).toHaveValue(null);
+    await planTrip(user);
+
+    expect(await screen.findByText("Tank size not set")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /this car's profile/ })).toHaveAttribute(
+      "href",
+      "/cars/car-1",
+    );
+    // Nothing tank-cost-shaped (and in particular no 20L figure) is shown.
+    expect(screen.queryByText(/1,800,000 LBP/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/20L at/)).not.toBeInTheDocument();
+    // The rest of the results are unaffected.
+    expect(screen.getByText(/Fuel Cost/)).toBeInTheDocument();
+  });
+
+  it("still calculates the full tank cost from a size the user types when the car has none", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_tank_capacity_liters: null }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+    await user.type(await screen.findByLabelText(/Tank Size/), "30");
+    await planTrip(user);
+
+    // 30L * 90000 = 2,700,000 LBP.
+    expect(await screen.findByText("$30.34 (2,700,000 LBP)")).toBeInTheDocument();
+    expect(screen.queryByText("Tank size not set")).not.toBeInTheDocument();
+  });
+
+  it("drops a previous car's typed tank size when switching to a car with none", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([
+      { id: "car-1", make: "Toyota", model: "Corolla", year: 2020, fuel_tank_capacity_liters: 40 },
+      { id: "car-2", make: "Fiat", model: "500", year: 2015, fuel_tank_capacity_liters: null },
+    ]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue(40));
+
+    await user.selectOptions(screen.getByLabelText("Car"), "car-2");
+
+    expect(screen.getByLabelText(/Tank Size/)).toHaveValue(null);
   });
 });
