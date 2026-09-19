@@ -16,7 +16,7 @@
 // response shape it doesn't recognize); tests that DO care about the
 // prefill/override behavior mock each path distinctly via mockApiFetch.
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -564,5 +564,80 @@ describe("TripPlannerPage — address autocomplete (CAR-47)", () => {
         }),
       ),
     );
+  });
+});
+
+describe("TripPlannerPage — static route map (CAR-48)", () => {
+  const ESTIMATE = {
+    distance_km: 10,
+    duration_min: 10,
+    duration_in_traffic_min: 10,
+    fuel_price_used_lbp: 90000,
+    estimated_cost_lbp: 50000,
+    estimated_cost_usd: 0.56,
+  };
+
+  async function planTrip(user) {
+    mockCarsLookup([{ id: "car-1" }]);
+    mockApiFetch({ estimate: ESTIMATE });
+    renderPage();
+    await user.type(await screen.findByLabelText(/Starting Location/), "Beirut, Lebanon");
+    await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+    await screen.findByText(/Fuel Cost/);
+  }
+
+  beforeEach(() => {
+    // Autocomplete also uses fetch; return no suggestions so it stays quiet.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows a map of the submitted route above the results when a key is configured", async () => {
+    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "test-key");
+    const user = userEvent.setup();
+
+    await planTrip(user);
+
+    const map = await screen.findByTestId("route-map");
+    const src = new URL(map.querySelector("img").getAttribute("src"));
+    expect(src.searchParams.getAll("markers").join(" ")).toContain("Beirut, Lebanon");
+    expect(src.searchParams.getAll("markers").join(" ")).toContain("Byblos, Lebanon");
+  });
+
+  it("keeps the map on the submitted route while the fields are edited afterwards", async () => {
+    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "test-key");
+    const user = userEvent.setup();
+    await planTrip(user);
+
+    await user.type(screen.getByLabelText("Destination *"), " Castle");
+
+    const src = screen.getByTestId("route-map").querySelector("img").getAttribute("src");
+    expect(decodeURIComponent(src)).not.toContain("Castle");
+  });
+
+  it("shows no map without a key, and the results are unaffected", async () => {
+    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "");
+    const user = userEvent.setup();
+
+    await planTrip(user);
+
+    expect(screen.queryByTestId("route-map")).not.toBeInTheDocument();
+    expect(screen.getByText(/Fuel Cost/)).toBeInTheDocument();
+  });
+
+  it("hides the map if the image fails to load but keeps the results", async () => {
+    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "test-key");
+    const user = userEvent.setup();
+    await planTrip(user);
+
+    fireEvent.error((await screen.findByTestId("route-map")).querySelector("img"));
+
+    expect(screen.queryByTestId("route-map")).not.toBeInTheDocument();
+    expect(screen.getByText(/Fuel Cost/)).toBeInTheDocument();
   });
 });

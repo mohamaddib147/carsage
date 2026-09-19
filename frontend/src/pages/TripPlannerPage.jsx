@@ -17,6 +17,10 @@
 // the selected car's fuel grade. A "Full Tank Cost" stat is also shown,
 // using an editable tank size (default 20L, a common average).
 //
+// CAR-48: a decorative, non-interactive static map banner
+// (components/RouteMapImage.jsx) tops the results card when a browser
+// Maps key is configured; it hides itself on any failure.
+//
 // CAR-47: Starting Location and Destination offer Google Places address
 // suggestions (components/PlaceAutocompleteInput.jsx) but remain plain
 // free-text fields — the typed/selected string is what goes to the
@@ -42,6 +46,7 @@ import { Link } from "react-router-dom";
 import InfoTip from "../components/InfoTip.jsx";
 import PageShell from "../components/PageShell.jsx";
 import PlaceAutocompleteInput from "../components/PlaceAutocompleteInput.jsx";
+import RouteMapImage from "../components/RouteMapImage.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { apiFetch } from "../lib/apiClient.js";
@@ -82,6 +87,10 @@ function TripPlannerPage() {
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
+  // The route the current result was actually computed for — captured at
+  // submit time so the decorative map (CAR-48) can't drift from the result
+  // if the user edits the fields afterwards.
+  const [submittedRoute, setSubmittedRoute] = useState(null);
 
   const [fuelPrices, setFuelPrices] = useState(null);
   const [fuelPriceInput, setFuelPriceInput] = useState("");
@@ -179,6 +188,7 @@ function TripPlannerPage() {
         },
       });
       setResult(data);
+      setSubmittedRoute({ origin: origin.trim(), destination: destination.trim() });
     } catch (error) {
       setSubmitError(error.message);
     } finally {
@@ -337,6 +347,12 @@ function TripPlannerPage() {
 
       {result && (
         <div className="trip-result-card">
+          {submittedRoute && (
+            <RouteMapImage
+              origin={submittedRoute.origin}
+              destination={submittedRoute.destination}
+            />
+          )}
           <p className="trip-result-card__route">
             {origin ? `${origin} → ${destination}` : destination}
           </p>
