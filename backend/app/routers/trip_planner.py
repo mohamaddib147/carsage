@@ -5,6 +5,13 @@
 # `trips` and this router's responses) are LBP — the unit fuel_prices.py
 # standardizes on — since liters * LBP/liter = LBP; USD is a display-only
 # conversion, never the stored unit.
+#
+# CAR-42: the estimate response also includes a current-traffic-adjusted
+# cost alongside the original light-traffic figure — see
+# _traffic_adjusted_efficiency for the heuristic. Only the light-traffic
+# figure is persisted to `trips.estimated_cost` (unchanged from before
+# CAR-42); the traffic-adjusted one is response-only since it changes
+# every time someone re-checks the same route.
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -92,6 +99,37 @@ def get_fuel_prices():
     }
 
 
+# Traffic increases real-world fuel consumption beyond what distance
+# alone implies (stop-and-go driving, idling, lower average speeds).
+# There's no precise per-trip model for this without real vehicle
+# telemetry, so this is a deliberately simple, capped heuristic (CAR-42):
+# the current-traffic estimate's effective efficiency is reduced in
+# proportion to how much slower the traffic-adjusted duration is than
+# the no-traffic baseline, reaching this maximum penalty once traffic
+# makes the trip twice as long as it would be with no traffic. 30% is
+# roughly the commonly-cited city-vs-highway fuel economy gap — a
+# reasonable ceiling so one severely congested route doesn't imply an
+# absurd fuel penalty.
+MAX_TRAFFIC_FUEL_PENALTY = 0.30
+
+
+def _traffic_adjusted_efficiency(
+    fuel_efficiency: float, duration_min: int, duration_in_traffic_min: int
+) -> float:
+    """
+    Returns an effective km/L figure reduced for the current traffic
+    conditions, capped at MAX_TRAFFIC_FUEL_PENALTY worse than the car's
+    rated fuel_efficiency. No traffic slowdown (or Maps reporting an
+    unusable duration_min) returns the rated efficiency unchanged.
+    """
+    if duration_min <= 0 or duration_in_traffic_min <= duration_min:
+        return fuel_efficiency
+
+    traffic_ratio = duration_in_traffic_min / duration_min
+    penalty = min(MAX_TRAFFIC_FUEL_PENALTY, (traffic_ratio - 1.0) * MAX_TRAFFIC_FUEL_PENALTY)
+    return fuel_efficiency / (1 + penalty)
+
+
 def _price_bucket_for_car_fuel_type(car_fuel_type: str) -> str | None:
     """
     Maps a car's general fuel_type (from the Car Onboarding dropdown —
@@ -124,8 +162,16 @@ class EstimateTripResponse(BaseModel):
     duration_min: int
     duration_in_traffic_min: int
     fuel_price_used_lbp: float
+    # Light-traffic estimate: distance / the car's rated fuel_efficiency,
+    # unchanged since before CAR-42 — this is what `trips.estimated_cost`
+    # persists, same as always.
     estimated_cost_lbp: float
     estimated_cost_usd: float
+    # CAR-42: the same trip, but with fuel efficiency reduced for current
+    # traffic conditions (see _traffic_adjusted_efficiency) — response-only,
+    # never persisted, since it changes every time someone re-checks.
+    estimated_cost_current_traffic_lbp: float
+    estimated_cost_current_traffic_usd: float
 
 
 @router.post("/estimate", response_model=EstimateTripResponse)
@@ -202,6 +248,14 @@ def post_estimate(
     liters_needed = route["distance_km"] / fuel_efficiency
     estimated_cost_lbp = round(liters_needed * fuel_price, 0)
 
+    effective_efficiency = _traffic_adjusted_efficiency(
+        fuel_efficiency, route["duration_min"], route["duration_in_traffic_min"]
+    )
+    liters_needed_current_traffic = route["distance_km"] / effective_efficiency
+    estimated_cost_current_traffic_lbp = round(
+        liters_needed_current_traffic * fuel_price, 0
+    )
+
     trip_row = {
         "user_id": user_id,
         "car_id": payload.car_id,
@@ -223,4 +277,8 @@ def post_estimate(
         "fuel_price_used_lbp": fuel_price,
         "estimated_cost_lbp": estimated_cost_lbp,
         "estimated_cost_usd": lbp_to_usd(estimated_cost_lbp),
+        "estimated_cost_current_traffic_lbp": estimated_cost_current_traffic_lbp,
+        "estimated_cost_current_traffic_usd": lbp_to_usd(
+            estimated_cost_current_traffic_lbp
+        ),
     }

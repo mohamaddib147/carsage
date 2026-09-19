@@ -2,14 +2,20 @@
 # missing required destination, missing origin, a Google Maps failure),
 # GET /fuel-prices, and POST /estimate — the full route+cost+save flow,
 # including authorization (a car that isn't the caller's own, and a
-# missing/invalid session).
+# missing/invalid session), and CAR-42's traffic-adjusted cost estimate
+# (_traffic_adjusted_efficiency directly, plus its wiring into the
+# estimate response's new estimated_cost_current_traffic_* fields —
+# the original estimated_cost_lbp/usd and trips.estimated_cost stay the
+# light-traffic figure, unchanged from before CAR-42).
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.auth import get_current_user_id
 from app.main import app
+from app.routers.trip_planner import _traffic_adjusted_efficiency
 from app.services.fuel_prices import FuelPriceError
 from app.services.google_maps import GoogleMapsError
 
@@ -77,6 +83,31 @@ def test_returns_a_clear_error_when_the_maps_lookup_fails():
     assert response.json() == {
         "detail": "Could not find a route between that origin and destination."
     }
+
+
+def test_traffic_adjusted_efficiency_is_unchanged_with_no_traffic_slowdown():
+    assert _traffic_adjusted_efficiency(10.0, 60, 60) == 10.0
+
+
+def test_traffic_adjusted_efficiency_scales_linearly_below_the_cap():
+    # 50% slower than the no-traffic baseline -> half of the max 30%
+    # penalty (the cap is reached at a full 2x slowdown) -> 15% worse.
+    result = _traffic_adjusted_efficiency(10.0, 60, 90)
+    assert result == pytest.approx(10.0 / 1.15)
+
+
+def test_traffic_adjusted_efficiency_caps_at_the_maximum_penalty():
+    # A 2x slowdown hits the cap exactly...
+    at_cap = _traffic_adjusted_efficiency(10.0, 60, 120)
+    assert at_cap == pytest.approx(10.0 / 1.30)
+    # ...and anything worse than that is capped at the same penalty, not
+    # scaled further.
+    way_over = _traffic_adjusted_efficiency(10.0, 60, 300)
+    assert way_over == at_cap
+
+
+def test_traffic_adjusted_efficiency_guards_against_a_zero_duration():
+    assert _traffic_adjusted_efficiency(10.0, 0, 0) == 10.0
 
 
 def test_returns_current_fuel_prices_in_lbp_and_usd():
@@ -184,9 +215,40 @@ class TestPostEstimate:
         assert body["estimated_cost_lbp"] == 900000.0
         assert body["estimated_cost_usd"] == round(900000 / 89000, 2)
         assert body["fuel_price_used_lbp"] == 90000.0
+        # duration_in_traffic_min=75 vs duration_min=60 -> 1.25x -> a 7.5%
+        # traffic penalty (half of the cap, since the cap is a 2x slowdown).
+        assert body["estimated_cost_current_traffic_lbp"] == 967500.0
+        assert body["estimated_cost_current_traffic_usd"] == round(967500 / 89000, 2)
         assert captured["row"]["user_id"] == "user-123"
         assert captured["row"]["car_id"] == "car-1"
+        # trips.estimated_cost stays the light-traffic figure, unchanged.
         assert captured["row"]["estimated_cost"] == 900000.0
+
+    def test_estimate_response_uses_the_light_traffic_figure_with_no_traffic_slowdown(
+        self,
+    ):
+        mock_supabase, _ = _mock_supabase_for_estimate(
+            {"fuel_efficiency": 10, "fuel_type": "Gasoline"}
+        )
+        with patch("app.routers.trip_planner.supabase", mock_supabase), patch(
+            "app.routers.trip_planner.get_route_summary"
+        ) as mock_route, patch(
+            "app.routers.trip_planner.get_current_fuel_prices"
+        ) as mock_prices:
+            mock_route.return_value = {
+                "distance_km": 100.0,
+                "duration_min": 60,
+                "duration_in_traffic_min": 60,
+            }
+            mock_prices.return_value = {"95_octane": 90000.0}
+
+            response = client.post(
+                "/trip-planner/estimate",
+                json={"car_id": "car-1", "origin": "Beirut", "destination": "Tripoli"},
+            )
+
+        body = response.json()
+        assert body["estimated_cost_current_traffic_lbp"] == body["estimated_cost_lbp"]
 
     def test_uses_a_user_provided_fuel_price_override_instead_of_the_default(self):
         mock_supabase, captured = _mock_supabase_for_estimate(
