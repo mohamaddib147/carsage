@@ -1,4 +1,5 @@
-// Root component — defines client-side routing for all 7 CarSage screens.
+// Root component — defines client-side routing for all 7 CarSage screens
+// plus the placeholder Terms / Privacy pages linked from the footer.
 
 import { Route, Routes } from "react-router-dom";
 import SiteNav from "./components/SiteNav.jsx";
@@ -10,6 +11,7 @@ import CarOnboardingPage from "./pages/CarOnboardingPage.jsx";
 import CarProfilePage from "./pages/CarProfilePage.jsx";
 import TripPlannerPage from "./pages/TripPlannerPage.jsx";
 import AIAdvisorPage from "./pages/AIAdvisorPage.jsx";
+import { PrivacyPage, TermsPage } from "./pages/LegalPages.jsx";
 import NotFoundPage from "./pages/NotFoundPage.jsx";
 
 /**
@@ -25,6 +27,8 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<AuthPage />} />
           <Route path="/signup" element={<AuthPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route
             path="/dashboard"
             element={

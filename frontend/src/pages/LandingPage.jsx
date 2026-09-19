@@ -231,6 +231,10 @@ function LandingPage() {
           Your everyday car companion — trip planning and AI-powered advice,
           all in one place.
         </p>
+        <div className="landing-footer__links">
+          <Link to="/terms">Terms of Service</Link>
+          <Link to="/privacy">Privacy Policy</Link>
+        </div>
         <p className="landing-footer__copyright">
           © {new Date().getFullYear()} CarSage. Built for a calmer commute.
         </p>

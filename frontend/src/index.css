@@ -1624,3 +1624,21 @@ select:focus {
   font-size: 0.9375rem;
   line-height: 1.5;
 }
+
+.landing-footer__links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 3);
+  font-size: 0.8125rem;
+}
+
+.landing-footer__links a {
+  color: var(--color-text-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.landing-footer__links a:hover {
+  color: var(--color-primary);
+}
