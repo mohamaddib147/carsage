@@ -683,6 +683,32 @@ describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
     await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue(52));
   });
 
+  // Regression for the reported "430L / $420.10" figure: whatever shape the
+  // numeric column arrives in (a number, or a string such as "43.0" — Postgres
+  // numeric can serialize either way), the field and the cost must use the
+  // value exactly, never 10x it.
+  it.each([
+    [43, 43, "$43.48 (3,870,000 LBP)"],
+    ["43.0", 43, "$43.48 (3,870,000 LBP)"],
+    [43.5, 43.5, "$43.99 (3,915,000 LBP)"],
+  ])(
+    "reads a stored tank capacity of %j as exactly %j litres (no 10x)",
+    async (stored, expectedField, expectedCost) => {
+      const user = userEvent.setup();
+      mockCarsLookup([{ id: "car-1", fuel_tank_capacity_liters: stored }]);
+      mockApiFetch({ estimate: ESTIMATE_90K });
+
+      renderPage();
+      await waitFor(() =>
+        expect(screen.getByLabelText(/Tank Size/)).toHaveValue(expectedField),
+      );
+      await planTrip(user);
+
+      expect(await screen.findByText(expectedCost)).toBeInTheDocument();
+      expect(screen.queryByText(/430L/)).not.toBeInTheDocument();
+    },
+  );
+
   it("changes the tank size and full tank cost when switching between cars with different capacities", async () => {
     const user = userEvent.setup();
     mockCarsLookup([
