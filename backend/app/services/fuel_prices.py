@@ -1,41 +1,77 @@
-# Scrapes Lebanon's official weekly fuel prices from the Directorate
-# General of Oil (dgo.gov.lb, affiliated with the Ministry of Energy and
-# Water) and caches them in the fuel_prices table, so Trip Planner never
-# scrapes on every request. This is the only place that knows about that
-# site's HTML structure or the LBP-per-20-liters pricing convention.
+# Scrapes Lebanon's current fuel prices from L'Orient Today and caches
+# them in the fuel_prices table, so Trip Planner never scrapes on every
+# request. This is the only place that knows about that site's structure
+# or the LBP-per-20-liters pricing convention.
 #
-# Scraping approach (documented per CAR-35's requirement, since this WILL
-# break if the site's markup changes):
-#   - GET https://en.dgo.gov.lb/prices. Prices are server-rendered (not
-#     loaded via a later JS/XHR call) inside repeating blocks:
-#       <div class="counter-wrapper"> ... </div>
-#     each holding a price in <span class="counter-up" data-count="N">
-#     (the visible "0" text is a JS count-up animation start value — the
-#     real number is the data-count attribute) and a label in
-#     <div class="counter-title"><h5>...</h5></div>.
-#   - The page lists one block of 4 counters per weekly date heading, in
-#     a fixed order: Octane 95, Octane 98, Gaz, Diesel oil (for motor
-#     vehicles) — newest date first.
-#   - Some recent blocks on the live site render as "0" placeholders
-#     (a site-side issue, not ours), so we walk blocks newest-first and
-#     use the first one where our 3 target fuels are all non-zero.
-#   - Prices are published per 20 liters (Lebanon's standard reporting
-#     unit for fuel), so we divide by 20 to store LBP per liter.
+# CAR-50: this used to scrape en.dgo.gov.lb/prices, which turned out to be
+# serving stale (2024) data. L'Orient Today instead publishes a new dated
+# article each time the Ministry of Energy and Water changes prices (often
+# twice a week), citing the Ministry, in a very consistent text format.
+#
+# Scraping approach (documented because it WILL break if the site changes;
+# every step degrades to "no result" -> the cached price is used):
+#   1. There is no fixed "current prices" URL, so fetch the site's keyword
+#      listing pages (KEYWORD_LISTING_URLS — /keyword/<id>-fuel-prices and
+#      /keyword/<id>-gasoline; the plain /tag/... paths 404). They are
+#      server-rendered, newest article first, and include unrelated news.
+#   2. Collect the article links (/article/<numeric id>/<slug>.html), keep
+#      those whose slug looks fuel-related, and try the newest first
+#      (highest numeric id), up to MAX_ARTICLES_TO_TRY. The site rejects
+#      obvious bot user agents, so a browser-like User-Agent is sent, and
+#      pages are fetched with the standard library (urllib) rather than
+#      httpx: the site is behind Cloudflare, which answers 403 to httpx's
+#      TLS handshake even with an identical browser User-Agent but lets
+#      urllib through. If that ever stops working, the failure is graceful
+#      (last cached price is used) — see _fetch_text.
+#   3. In an article's text, the prices appear as lines such as
+#         "20 liters of 95-octane gasoline: LL 2,810,000, an increase of ..."
+#         "20 liters of 98-octane gasoline: LL 2,828,000, ..."
+#         "20 liters of diesel (for vehicles): LL 2,768,000, ..."
+#      Regexes below pull the LL figure; the first article in which all
+#      three parse (and pass a sanity range) wins, and its URL is stored as
+#      the row's source_label.
+#   4. The site quotes 20-liter canister totals, so divide by 20 to store
+#      LBP per liter.
 #
 # USD figures shown alongside LBP (e.g. on the fuel-prices endpoint) use
 # a fixed LBP_PER_USD rate below rather than a live exchange-rate API —
 # see the comment on that constant.
 
+import http.client
+import re
+import urllib.request
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urljoin
 
-import httpx
 from bs4 import BeautifulSoup
 
 from app.supabase_client import supabase
 
-FUEL_PRICES_URL = "https://en.dgo.gov.lb/prices"
+SITE_URL = "https://today.lorientlejour.com"
+KEYWORD_LISTING_URLS = (
+    f"{SITE_URL}/keyword/23993-fuel-prices",
+    f"{SITE_URL}/keyword/25091-gasoline",
+)
+MAX_ARTICLES_TO_TRY = 8
+REQUEST_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    ),
+    "Accept-Language": "en",
+}
 LITERS_PER_PRICED_UNIT = 20
 CACHE_MAX_AGE = timedelta(days=7)
+
+# Rows scraped from the retired, stale source are never treated as fresh,
+# so the next request re-scrapes even if they are only a few days old.
+RETIRED_SOURCE_MARKER = "dgo.gov.lb"
+
+# Sanity range for a per-liter price in LBP. Real prices are ~1e5 today;
+# this only exists to reject a mis-parsed figure (e.g. a 10x error, or a
+# USD amount picked up by mistake) instead of storing it.
+MIN_PLAUSIBLE_LBP_PER_LITER = 10_000
+MAX_PLAUSIBLE_LBP_PER_LITER = 1_000_000
 
 # Lebanon has no stable official exchange rate; the parallel-market rate
 # is what actually applies to everyday prices like fuel, and it moves
@@ -46,11 +82,29 @@ LBP_PER_USD = 89000
 
 FUEL_TYPES = ("95_octane", "98_octane", "diesel")
 
-_LABEL_TO_FUEL_TYPE = {
-    "Octane 95": "95_octane",
-    "Octane 98": "98_octane",
-    "Diesel oil (for motor vehicles)": "diesel",
+_LL = r"(?:LL|L\.L\.)\s*(\d[\d,\.]*)"
+_PRICE_PATTERNS = {
+    "95_octane": re.compile(
+        r"20\s*liters?\s+of\s+95[-\s]?octane(?:\s+gasoline)?\s*:\s*" + _LL, re.I
+    ),
+    "98_octane": re.compile(
+        r"20\s*liters?\s+of\s+98[-\s]?octane(?:\s+gasoline)?\s*:\s*" + _LL, re.I
+    ),
+    "diesel": re.compile(
+        r"20\s*liters?\s+of\s+diesel(?:\s*\(for vehicles\))?\s*:\s*" + _LL, re.I
+    ),
 }
+_ARTICLE_HREF = re.compile(r"/article/(\d+)/([a-z0-9-]+)\.html", re.I)
+_FUEL_SLUG_WORDS = (
+    "fuel",
+    "gasoline",
+    "gas",
+    "petrol",
+    "diesel",
+    "mazout",
+    "price",
+    "octane",
+)
 
 
 class FuelPriceError(Exception):
@@ -59,62 +113,99 @@ class FuelPriceError(Exception):
     message is safe to show to the end user."""
 
 
-def _parse_prices_from_html(html: str) -> dict[str, float] | None:
-    """Returns {fuel_type: price_per_liter_lbp} from the page's most
-    recent fully-populated weekly block, or None if none is found."""
-    soup = BeautifulSoup(html, "html.parser")
+def _fetch_text(url: str) -> str:
+    """GETs a page and returns its text. Raises OSError / HTTPException on
+    any network or HTTP-status failure (callers treat all of those as "this
+    page isn't available")."""
+    request = urllib.request.Request(url, headers=REQUEST_HEADERS)
+    with urllib.request.urlopen(request, timeout=15.0) as response:
+        return response.read().decode("utf-8", errors="replace")
 
-    entries = []
-    for counter in soup.select(".counter-wrapper"):
-        value_el = counter.select_one(".counter-value .counter-up")
-        label_el = counter.select_one(".counter-title h5")
-        if value_el is None or label_el is None:
+
+_FETCH_ERRORS = (OSError, http.client.HTTPException)
+
+
+def _article_id(url: str) -> int:
+    return int(_ARTICLE_HREF.search(url).group(1))
+
+
+def _find_article_urls(listing_html: str) -> list[str]:
+    """Returns fuel-related article URLs from a keyword listing page,
+    newest (highest article id) first, without duplicates."""
+    soup = BeautifulSoup(listing_html, "html.parser")
+    found: dict[int, str] = {}
+    for link in soup.find_all("a", href=True):
+        match = _ARTICLE_HREF.search(link["href"])
+        if not match:
             continue
+        article_id, slug = int(match.group(1)), match.group(2).lower()
+        if any(word in slug for word in _FUEL_SLUG_WORDS):
+            found.setdefault(article_id, urljoin(SITE_URL, link["href"]))
+    return [found[article_id] for article_id in sorted(found, reverse=True)]
+
+
+def _parse_prices_from_article(html: str) -> dict[str, float] | None:
+    """Returns {fuel_type: price_per_liter_lbp} if the article states all
+    three 20-liter prices and they look plausible, else None."""
+    text = BeautifulSoup(html, "html.parser").get_text(" ")
+    text = re.sub(r"\s+", " ", text.replace("\xa0", " "))
+
+    prices = {}
+    for fuel_type, pattern in _PRICE_PATTERNS.items():
+        match = pattern.search(text)
+        if match is None:
+            return None
         try:
-            value = float(value_el.get("data-count", "0"))
+            total = float(match.group(1).replace(",", "").rstrip("."))
         except ValueError:
-            value = 0.0
-        entries.append((label_el.get_text(strip=True), value))
-
-    # Blocks are 4 entries each (Octane 95, Octane 98, Gaz, Diesel).
-    for block_start in range(0, len(entries) - 3, 4):
-        block = dict(entries[block_start : block_start + 4])
-        priced_per_20l = {
-            fuel_type: block.get(label, 0.0)
-            for label, fuel_type in _LABEL_TO_FUEL_TYPE.items()
-        }
-        if all(priced_per_20l[fuel_type] > 0 for fuel_type in FUEL_TYPES):
-            return {
-                fuel_type: round(price / LITERS_PER_PRICED_UNIT, 2)
-                for fuel_type, price in priced_per_20l.items()
-            }
-
-    return None
+            return None
+        per_liter = round(total / LITERS_PER_PRICED_UNIT, 2)
+        if not MIN_PLAUSIBLE_LBP_PER_LITER <= per_liter <= MAX_PLAUSIBLE_LBP_PER_LITER:
+            return None
+        prices[fuel_type] = per_liter
+    return prices
 
 
-def scrape_fuel_prices() -> dict[str, float]:
+def scrape_fuel_prices() -> tuple[dict[str, float], str]:
     """
-    Fetches and parses the current fuel prices from dgo.gov.lb.
+    Finds L'Orient Today's most recent fuel-price article and parses it.
 
     Returns:
-        {fuel_type: price_per_liter_lbp} for "95_octane", "98_octane", "diesel".
+        ({fuel_type: price_per_liter_lbp} for "95_octane", "98_octane",
+        "diesel", the URL of the article the prices came from).
 
     Raises:
-        FuelPriceError: if the page can't be fetched or no fully-populated
-            price block can be parsed from it.
+        FuelPriceError: if no listing can be fetched, or no recent article
+            yields a full, plausible set of prices.
     """
-    try:
-        response = httpx.get(FUEL_PRICES_URL, timeout=15.0, follow_redirects=True)
-        response.raise_for_status()
-    except httpx.HTTPError as error:
-        raise FuelPriceError("Could not reach the fuel price source.") from error
+    article_urls: list[str] = []
+    listing_fetched = False
+    for listing_url in KEYWORD_LISTING_URLS:
+        try:
+            listing_html = _fetch_text(listing_url)
+        except _FETCH_ERRORS:
+            continue
+        listing_fetched = True
+        for url in _find_article_urls(listing_html):
+            if url not in article_urls:
+                article_urls.append(url)
 
-    prices = _parse_prices_from_html(response.text)
-    if prices is None:
-        raise FuelPriceError(
-            "Could not find a current fuel price on the source page."
-        )
-    return prices
+    if not listing_fetched:
+        raise FuelPriceError("Could not reach the fuel price source.")
+
+    # Newest first across all listings (article ids grow over time).
+    article_urls.sort(key=_article_id, reverse=True)
+
+    for url in article_urls[:MAX_ARTICLES_TO_TRY]:
+        try:
+            article_html = _fetch_text(url)
+        except _FETCH_ERRORS:
+            continue
+        prices = _parse_prices_from_article(article_html)
+        if prices is not None:
+            return prices, url
+
+    raise FuelPriceError("Could not find a current fuel price on the source page.")
 
 
 def _get_cached_prices() -> dict[str, float]:
@@ -124,7 +215,7 @@ def _get_cached_prices() -> dict[str, float]:
     for fuel_type in FUEL_TYPES:
         result = (
             supabase.table("fuel_prices")
-            .select("price_per_liter_lbp, scraped_at")
+            .select("price_per_liter_lbp, scraped_at, source_label")
             .eq("fuel_type", fuel_type)
             .order("scraped_at", desc=True)
             .limit(1)
@@ -138,9 +229,10 @@ def _get_cached_prices() -> dict[str, float]:
 def get_current_fuel_prices() -> dict[str, float]:
     """
     Returns the current price per liter (LBP) for each fuel type, using
-    the cache if it's fresh (scraped within the last 7 days), otherwise
-    scraping and re-caching. Falls back to the last cached price (of any
-    age) if a fresh scrape fails.
+    the cache if it's fresh (scraped within the last 7 days, and not from
+    the retired dgo.gov.lb source), otherwise scraping and re-caching.
+    Falls back to the last cached price (of any age) if a fresh scrape
+    fails.
 
     Returns:
         {fuel_type: price_per_liter_lbp} for "95_octane", "98_octane", "diesel".
@@ -154,13 +246,14 @@ def get_current_fuel_prices() -> dict[str, float]:
 
     is_fresh = len(cached) == len(FUEL_TYPES) and all(
         now - datetime.fromisoformat(row["scraped_at"]) < CACHE_MAX_AGE
+        and RETIRED_SOURCE_MARKER not in (row.get("source_label") or "")
         for row in cached.values()
     )
     if is_fresh:
         return {ft: row["price_per_liter_lbp"] for ft, row in cached.items()}
 
     try:
-        fresh_prices = scrape_fuel_prices()
+        fresh_prices, source_url = scrape_fuel_prices()
     except FuelPriceError:
         if cached:
             return {ft: row["price_per_liter_lbp"] for ft, row in cached.items()}
@@ -171,7 +264,7 @@ def get_current_fuel_prices() -> dict[str, float]:
             {
                 "fuel_type": fuel_type,
                 "price_per_liter_lbp": price,
-                "source_label": FUEL_PRICES_URL,
+                "source_label": source_url,
             }
             for fuel_type, price in fresh_prices.items()
         ]
