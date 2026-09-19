@@ -19,7 +19,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TripPlannerPage from "./TripPlannerPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
@@ -483,3 +483,86 @@ describe("TripPlannerPage — traffic level indicator (CAR-46)", () => {
   );
 });
 
+
+describe("TripPlannerPage — address autocomplete (CAR-47)", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "test-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          suggestions: [
+            { placePrediction: { text: { text: "Tripoli, North Governorate, Lebanon" } } },
+          ],
+        }),
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the full address of a picked suggestion into the existing estimate call", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1" }]);
+    mockApiFetch({
+      estimate: {
+        distance_km: 10,
+        duration_min: 10,
+        duration_in_traffic_min: 10,
+        fuel_price_used_lbp: 90000,
+        estimated_cost_lbp: 50000,
+        estimated_cost_usd: 0.56,
+      },
+    });
+
+    renderPage();
+    await user.type(await screen.findByLabelText("Destination *"), "Trip");
+    await user.click(
+      await screen.findByRole("option", { name: "Tripoli, North Governorate, Lebanon" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/trip-planner/estimate",
+        expect.objectContaining({
+          body: expect.objectContaining({
+            destination: "Tripoli, North Governorate, Lebanon",
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("still submits a hand-typed destination when no suggestion is picked", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1" }]);
+    mockApiFetch({
+      estimate: {
+        distance_km: 10,
+        duration_min: 10,
+        duration_in_traffic_min: 10,
+        fuel_price_used_lbp: 90000,
+        estimated_cost_lbp: 50000,
+        estimated_cost_usd: 0.56,
+      },
+    });
+
+    renderPage();
+    await user.type(await screen.findByLabelText("Destination *"), "My cousin's house");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/trip-planner/estimate",
+        expect.objectContaining({
+          body: expect.objectContaining({ destination: "My cousin's house" }),
+        }),
+      ),
+    );
+  });
+});

@@ -17,6 +17,11 @@
 // the selected car's fuel grade. A "Full Tank Cost" stat is also shown,
 // using an editable tank size (default 20L, a common average).
 //
+// CAR-47: Starting Location and Destination offer Google Places address
+// suggestions (components/PlaceAutocompleteInput.jsx) but remain plain
+// free-text fields — the typed/selected string is what goes to the
+// existing estimate call, unchanged.
+//
 // CAR-46: a traffic-light badge (Light/Moderate/Heavy) next to the
 // duration, derived from baseline vs traffic-adjusted duration via
 // lib/trafficLevel.js — no extra API call.
@@ -36,6 +41,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import InfoTip from "../components/InfoTip.jsx";
 import PageShell from "../components/PageShell.jsx";
+import PlaceAutocompleteInput from "../components/PlaceAutocompleteInput.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { apiFetch } from "../lib/apiClient.js";
@@ -248,12 +254,11 @@ function TripPlannerPage() {
                 className="route-input-row__marker route-input-row__marker--origin"
                 aria-hidden="true"
               />
-              <input
+              <PlaceAutocompleteInput
                 id="origin"
-                type="text"
                 placeholder="e.g. Beirut, Lebanon"
                 value={origin}
-                onChange={(event) => setOrigin(event.target.value)}
+                onChange={setOrigin}
               />
             </div>
           </div>
@@ -265,12 +270,11 @@ function TripPlannerPage() {
                 className="route-input-row__marker route-input-row__marker--destination"
                 aria-hidden="true"
               />
-              <input
+              <PlaceAutocompleteInput
                 id="destination"
-                type="text"
                 placeholder="e.g. Tripoli, Lebanon"
                 value={destination}
-                onChange={(event) => setDestination(event.target.value)}
+                onChange={setDestination}
               />
             </div>
             {destinationError && (
