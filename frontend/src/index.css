@@ -1533,3 +1533,10 @@ select:focus {
   height: 100%;
   object-fit: cover;
 }
+
+/* Note under a form field, e.g. "AI estimate - please verify" (CAR-44) */
+.form-field__note {
+  margin: calc(var(--spacing-unit) * 0.5) 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}

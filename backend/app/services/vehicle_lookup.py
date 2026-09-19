@@ -10,6 +10,7 @@
 import httpx
 
 from app.config import API_NINJAS_KEY
+from app.services.llm_client import estimate_tank_capacity
 
 NHTSA_BASE_URL = "https://vpic.nhtsa.dot.gov/api/vehicles"
 API_NINJAS_URL = "https://api.api-ninjas.com/v1/cars"
@@ -268,6 +269,11 @@ def get_spec_suggestions(make: str, model: str, year: int) -> dict:
     fuel_efficiency prefers API Ninjas' figure (in case a paid key is
     ever configured) and falls back to fueleconomy.gov, since API
     Ninjas' free tier doesn't include it.
+
+    Fuel tank capacity: no free spec API provides it, so when API Ninjas
+    has none it is estimated by the LLM (llm_client.estimate_tank_capacity,
+    kept only inside 5-200 L) and flagged `fuel_tank_capacity_estimated`
+    so the UI can tell the user it's a guess to verify.
     """
     nhtsa = lookup_nhtsa(make, model, year)
     ninjas = lookup_api_ninjas(make, model, year)
@@ -275,4 +281,16 @@ def get_spec_suggestions(make: str, model: str, year: int) -> dict:
     if fuel_efficiency is None:
         fuel_efficiency = lookup_fuel_economy(make, model, year)
 
-    return {**nhtsa, **ninjas, "fuel_efficiency": fuel_efficiency}
+    tank_capacity = ninjas.get("fuel_tank_capacity_liters")
+    tank_estimated = False
+    if tank_capacity is None:
+        tank_capacity = estimate_tank_capacity(make, model, year)
+        tank_estimated = tank_capacity is not None
+
+    return {
+        **nhtsa,
+        **ninjas,
+        "fuel_efficiency": fuel_efficiency,
+        "fuel_tank_capacity_liters": tank_capacity,
+        "fuel_tank_capacity_estimated": tank_estimated,
+    }

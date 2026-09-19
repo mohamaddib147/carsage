@@ -1,6 +1,7 @@
 # GET /cars/spec-suggestions: best-effort autofill for Car Onboarding
-# (CAR-34) — looks up make/model/year against NHTSA vPIC + API Ninjas and
-# returns whatever specs are available. No auth required (it's a public
+# (CAR-34) — looks up make/model/year against NHTSA vPIC + API Ninjas +
+# fueleconomy.gov (and an AI estimate for tank capacity) and returns
+# whatever specs are available. No auth required (it's a public
 # data lookup, not a write), and never errors even if both lookups fail —
 # callers should treat every field as optional and fall back to manual
 # entry.
@@ -21,6 +22,9 @@ class SpecSuggestionsResponse(BaseModel):
     drivetrain: str | None
     transmission: str | None
     fuel_tank_capacity_liters: float | None = None
+    # True when the tank capacity is an AI estimate rather than looked up
+    # from a data source, so the UI can ask the user to verify it.
+    fuel_tank_capacity_estimated: bool = False
 
 
 @router.get("/spec-suggestions", response_model=SpecSuggestionsResponse)

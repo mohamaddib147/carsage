@@ -1,5 +1,6 @@
-# Isolates all AI Advisor LLM calls behind one function (classify_issue),
-# so the rest of the app never talks to a provider directly and the
+# Isolates all LLM calls behind this module (classify_issue for the AI
+# Advisor, estimate_tank_capacity for Car Onboarding's autofill), so the
+# rest of the app never talks to a provider directly and the
 # provider could be swapped without touching the router. Gemini is the
 # primary provider; Groq is an automatic fallback used only when Gemini
 # returns a 429 (rate limit). Both providers are prompted for the exact
@@ -7,6 +8,7 @@
 
 import json
 import logging
+import re
 
 import httpx
 
@@ -45,6 +47,24 @@ SYSTEM_PROMPT = (
     '{"recommendation": "diy" or "mechanic", "guidance": "2-4 short '
     'plain-language sentences"}'
 )
+
+# CAR-44/49 autofill: no free vehicle-spec API exposes fuel tank capacity
+# (API Ninjas, NHTSA and fueleconomy.gov have no such field), so Car
+# Onboarding asks the same LLM for the typical factory figure instead.
+# It's an estimate, always shown to the user as such and always editable.
+TANK_SYSTEM_PROMPT = (
+    "You are an automotive specifications reference. Given a vehicle's year, "
+    "make and model, give the typical factory fuel tank capacity in LITERS "
+    "for its most common trim (US gallons x 3.785 = liters). Only answer if "
+    "it is a real, existing vehicle model and you are reasonably confident "
+    "of the figure; otherwise answer null.\n\nRespond with ONLY a JSON "
+    "object, no other text and no markdown code fences, in exactly this "
+    'shape:\n{"tank_liters": <number or null>}'
+)
+# Realistic tank range in liters — must match the frontend
+# (lib/tankCapacity.js) and the cars.fuel_tank_capacity_liters CHECK.
+MIN_TANK_LITERS = 5
+MAX_TANK_LITERS = 200
 
 # Returned whenever a response was received but couldn't be parsed into a
 # confident answer — biases toward caution rather than guessing DIY.
@@ -129,7 +149,9 @@ def _parse_response(text: str) -> dict:
     return {"recommendation": recommendation, "guidance": guidance.strip()}
 
 
-def _call_gemini(prompt: str) -> str:
+def _call_gemini(
+    prompt: str, system_prompt: str = SYSTEM_PROMPT, timeout: float = 20.0
+) -> str:
     """Calls Gemini; raises _GeminiUnavailable on 429/5xx/a transport
     failure (triggers the Groq fallback), httpx.HTTPError on any other
     failure (e.g. a 400/401 request or config problem)."""
@@ -139,9 +161,9 @@ def _call_gemini(prompt: str) -> str:
             params={"key": GEMINI_API_KEY},
             json={
                 "contents": [{"parts": [{"text": prompt}]}],
-                "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+                "systemInstruction": {"parts": [{"text": system_prompt}]},
             },
-            timeout=20.0,
+            timeout=timeout,
         )
     except httpx.HTTPError as error:
         raise _GeminiUnavailable() from error
@@ -153,7 +175,9 @@ def _call_gemini(prompt: str) -> str:
     return data["candidates"][0]["content"]["parts"][0]["text"]
 
 
-def _call_groq(prompt: str) -> str:
+def _call_groq(
+    prompt: str, system_prompt: str = SYSTEM_PROMPT, timeout: float = 20.0
+) -> str:
     """Calls Groq (OpenAI-compatible chat completions); raises
     httpx.HTTPError on any failure."""
     response = httpx.post(
@@ -162,15 +186,41 @@ def _call_groq(prompt: str) -> str:
         json={
             "model": GROQ_MODEL,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
             ],
         },
-        timeout=20.0,
+        timeout=timeout,
     )
     response.raise_for_status()
     data = response.json()
     return data["choices"][0]["message"]["content"]
+
+
+def _complete(
+    prompt: str, system_prompt: str, timeout: float = 20.0, failure_message: str = ""
+) -> tuple[str, str]:
+    """
+    Gets a text completion from Gemini, falling back to Groq when Gemini is
+    unavailable (429 / 5xx / transport failure).
+
+    Returns:
+        (raw reply text, name of the provider that served it).
+
+    Raises:
+        LLMError: if no provider could produce a response at all.
+    """
+    try:
+        return _call_gemini(prompt, system_prompt, timeout), "gemini"
+    except _GeminiUnavailable as error:
+        if not GROQ_API_KEY:
+            raise LLMError(failure_message) from error
+        try:
+            return _call_groq(prompt, system_prompt, timeout), "groq"
+        except httpx.HTTPError as groq_error:
+            raise LLMError(failure_message) from groq_error
+    except httpx.HTTPError as error:
+        raise LLMError(failure_message) from error
 
 
 def classify_issue(description: str, car_context: dict) -> dict:
@@ -196,25 +246,59 @@ def classify_issue(description: str, car_context: dict) -> dict:
     """
     prompt = _build_prompt(description, car_context)
 
-    provider = "gemini"
-    try:
-        raw_text = _call_gemini(prompt)
-    except _GeminiUnavailable as error:
-        if not GROQ_API_KEY:
-            raise LLMError(
-                "Could not get advice right now. Please try again shortly."
-            ) from error
-        provider = "groq"
-        try:
-            raw_text = _call_groq(prompt)
-        except httpx.HTTPError as groq_error:
-            raise LLMError(
-                "Could not get advice right now. Please try again."
-            ) from groq_error
-    except httpx.HTTPError as error:
-        raise LLMError("Could not get advice right now. Please try again.") from error
+    raw_text, provider = _complete(
+        prompt,
+        SYSTEM_PROMPT,
+        failure_message="Could not get advice right now. Please try again.",
+    )
 
     # Logged for debugging/demo purposes only — never exposed to the client.
     logger.info("AI Advisor classification served by %s", provider)
 
     return _parse_response(raw_text)
+
+
+def _parse_tank_response(text: str) -> float | None:
+    """Parses a reply of the form {"tank_liters": number | null} into a
+    liters figure, or None if it is missing, malformed, null, a bool, or
+    outside the realistic 5-200 L range (an implausible value is dropped,
+    never passed on)."""
+    match = re.search(r"\{.*\}", text or "", re.S)
+    if not match:
+        return None
+    try:
+        value = json.loads(match.group(0)).get("tank_liters")
+    except (json.JSONDecodeError, AttributeError):
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if not MIN_TANK_LITERS <= value <= MAX_TANK_LITERS:
+        return None
+    return round(float(value), 1)
+
+
+def estimate_tank_capacity(make: str, model: str, year: int) -> float | None:
+    """
+    Asks the LLM for a vehicle's typical fuel tank capacity in liters, for
+    Car Onboarding's autofill (no free spec API provides it).
+
+    Args:
+        make: Vehicle make, e.g. "Toyota".
+        model: Vehicle model, e.g. "Camry".
+        year: Model year.
+
+    Returns:
+        Liters (5-200), or None if the model isn't confident / doesn't
+        recognise the vehicle / the reply is unusable. Never raises — this
+        is a best-effort convenience that must not block onboarding.
+    """
+    prompt = f"Vehicle: {year} {make} {model}"
+    try:
+        raw_text, provider = _complete(
+            prompt, TANK_SYSTEM_PROMPT, timeout=10.0, failure_message="unavailable"
+        )
+    except (LLMError, KeyError, IndexError, TypeError, ValueError):
+        return None
+
+    logger.info("Tank capacity estimate served by %s", provider)
+    return _parse_tank_response(raw_text)

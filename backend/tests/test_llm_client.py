@@ -159,3 +159,87 @@ def test_parse_response_defaults_to_mechanic_on_empty_guidance():
 
 def test_parse_response_defaults_to_mechanic_on_empty_text():
     assert _parse_response("") == DEFAULT_RESULT
+
+
+# --- CAR-44/49: estimate_tank_capacity (Car Onboarding autofill) ----------
+
+
+def _gemini_reply(text):
+    response = MagicMock()
+    response.status_code = 200
+    response.raise_for_status.return_value = None
+    response.json.return_value = {"candidates": [{"content": {"parts": [{"text": text}]}}]}
+    return response
+
+
+@pytest.mark.parametrize(
+    "reply, expected",
+    [
+        ('{"tank_liters": 64.3}', 64.3),
+        ('{"tank_liters": 50}', 50.0),
+        ('```json\n{"tank_liters": 46.64}\n```', 46.6),
+        ('Sure! {"tank_liters": 43}', 43.0),
+        ('{"tank_liters": null}', None),
+        ('{"tank_liters": 430}', None),
+        ('{"tank_liters": 3}', None),
+        ('{"tank_liters": "sixty"}', None),
+        ('{"tank_liters": true}', None),
+        ("I do not know", None),
+        ("", None),
+    ],
+)
+def test_estimate_tank_capacity_parses_and_range_checks_the_reply(reply, expected):
+    from app.services.llm_client import estimate_tank_capacity
+
+    with patch("app.services.llm_client.httpx.post", return_value=_gemini_reply(reply)):
+        assert estimate_tank_capacity("Toyota", "Camry", 2016) == expected
+
+
+def test_estimate_tank_capacity_asks_about_the_right_vehicle():
+    from app.services.llm_client import estimate_tank_capacity
+
+    with patch(
+        "app.services.llm_client.httpx.post", return_value=_gemini_reply('{"tank_liters": 64}')
+    ) as mock_post:
+        estimate_tank_capacity("Toyota", "Camry", 2016)
+
+    sent = mock_post.call_args.kwargs["json"]
+    assert sent["contents"][0]["parts"][0]["text"] == "Vehicle: 2016 Toyota Camry"
+
+
+def test_estimate_tank_capacity_falls_back_to_groq_when_gemini_is_rate_limited(monkeypatch):
+    from app.services.llm_client import estimate_tank_capacity
+
+    monkeypatch.setattr("app.services.llm_client.GROQ_API_KEY", "test-groq-key")
+    gemini_429 = MagicMock(status_code=429)
+    groq_ok = MagicMock(status_code=200)
+    groq_ok.raise_for_status.return_value = None
+    groq_ok.json.return_value = {"choices": [{"message": {"content": '{"tank_liters": 50}'}}]}
+
+    with patch("app.services.llm_client.httpx.post", side_effect=[gemini_429, groq_ok]):
+        assert estimate_tank_capacity("Toyota", "Corolla", 2015) == 50.0
+
+
+def test_estimate_tank_capacity_returns_none_and_never_raises_when_the_llm_is_down(
+    monkeypatch,
+):
+    from app.services.llm_client import estimate_tank_capacity
+
+    monkeypatch.setattr("app.services.llm_client.GROQ_API_KEY", "")
+    with patch("app.services.llm_client.httpx.post", side_effect=httpx.ConnectError("down")):
+        assert estimate_tank_capacity("Toyota", "Camry", 2016) is None
+
+    # A non-retryable provider failure (e.g. a 401) must not raise either.
+    bad = MagicMock(status_code=401)
+    bad.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "401", request=MagicMock(), response=bad
+    )
+    with patch("app.services.llm_client.httpx.post", return_value=bad):
+        assert estimate_tank_capacity("Toyota", "Camry", 2016) is None
+
+    # A malformed provider reply (no candidates) must not raise either.
+    odd = MagicMock(status_code=200)
+    odd.raise_for_status.return_value = None
+    odd.json.return_value = {}
+    with patch("app.services.llm_client.httpx.post", return_value=odd):
+        assert estimate_tank_capacity("Toyota", "Camry", 2016) is None

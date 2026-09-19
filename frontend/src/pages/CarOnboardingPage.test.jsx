@@ -362,3 +362,99 @@ describe("CarOnboardingPage — fuel tank capacity (CAR-44)", () => {
   );
 });
 
+
+describe("CarOnboardingPage — AI-estimated tank capacity (CAR-44)", () => {
+  const NOTE = /Estimated by AI for this model/;
+
+  it(
+    "fills an estimated tank capacity, flags it as an estimate, and saves it",
+    async () => {
+      const user = userEvent.setup();
+      apiFetch.mockResolvedValue({
+        fuel_tank_capacity_liters: 64.3,
+        fuel_tank_capacity_estimated: true,
+      });
+      const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+      const select = vi.fn(() => ({ single }));
+      const insert = vi.fn(() => ({ select }));
+      supabase.from.mockReturnValue({ insert });
+
+      renderPage();
+      await fillRequiredFields(user);
+
+      await waitFor(
+        () => expect(screen.getByLabelText("Fuel Tank Capacity (L)")).toHaveValue(64.3),
+        { timeout: 3000 },
+      );
+      expect(screen.getByText(NOTE)).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+      expect(insert).toHaveBeenCalledWith(
+        expect.objectContaining({ fuel_tank_capacity_liters: 64.3 }),
+      );
+    },
+    10000,
+  );
+
+  it(
+    "drops the estimate note as soon as the user edits the value",
+    async () => {
+      const user = userEvent.setup();
+      apiFetch.mockResolvedValue({
+        fuel_tank_capacity_liters: 64.3,
+        fuel_tank_capacity_estimated: true,
+      });
+
+      renderPage();
+      await fillRequiredFields(user);
+      await waitFor(() => expect(screen.getByText(NOTE)).toBeInTheDocument(), {
+        timeout: 3000,
+      });
+
+      await user.type(screen.getByLabelText("Fuel Tank Capacity (L)"), "1");
+
+      expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+    },
+    10000,
+  );
+
+  it(
+    "shows no estimate note for a value that came from a real data source",
+    async () => {
+      const user = userEvent.setup();
+      apiFetch.mockResolvedValue({
+        fuel_tank_capacity_liters: 50,
+        fuel_tank_capacity_estimated: false,
+      });
+
+      renderPage();
+      await fillRequiredFields(user);
+      await waitFor(
+        () => expect(screen.getByLabelText("Fuel Tank Capacity (L)")).toHaveValue(50),
+        { timeout: 3000 },
+      );
+
+      expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+    },
+    10000,
+  );
+
+  it(
+    "does not overwrite a tank capacity the user already typed, or flag it",
+    async () => {
+      const user = userEvent.setup();
+      let resolveLookup;
+      apiFetch.mockReturnValue(new Promise((resolve) => (resolveLookup = resolve)));
+
+      renderPage();
+      await fillRequiredFields(user);
+      await user.type(screen.getByLabelText("Fuel Tank Capacity (L)"), "55");
+      await waitFor(() => expect(apiFetch).toHaveBeenCalled(), { timeout: 3000 });
+      resolveLookup({ fuel_tank_capacity_liters: 64.3, fuel_tank_capacity_estimated: true });
+
+      await waitFor(() => expect(screen.getByLabelText("Fuel Tank Capacity (L)")).toHaveValue(55));
+      expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+    },
+    10000,
+  );
+});

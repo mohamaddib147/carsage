@@ -6,8 +6,9 @@
 // Drivetrain, and Transmission where they're still empty — the user can
 // always override any autofilled value, and a lookup that fails or finds
 // no match never blocks manual entry. Fuel Tank Capacity (L, CAR-44) is
-// filled the same way when API Ninjas happens to return one (its docs
-// don't guarantee it), and is otherwise a plain manual field.
+// filled the same way; since no free spec API provides it, the backend
+// falls back to an AI estimate, which is flagged under the field so the
+// user knows to check it (the note disappears as soon as they edit it).
 // Layout matches docs/stitch_carsage_landing_page/carsage_add_your_car
 // for the in-scope parts (scan card row, section divider, 2-column field
 // grid); its "Designate as Primary Vehicle" telemetry checkbox and
@@ -102,7 +103,15 @@ function CarOnboardingPage() {
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [specNotice, setSpecNotice] = useState("");
+  // True while the Fuel Tank Capacity value in the field is an untouched AI
+  // estimate from the autofill (not something the user typed or a real
+  // data-source value).
+  const [tankEstimated, setTankEstimated] = useState(false);
   const specLookupRanFor = useRef("");
+  // Mirrors `form` so the async autofill callback can see whether the tank
+  // field is still empty without a stale closure.
+  const formRef = useRef(form);
+  formRef.current = form;
 
   /** @param {keyof typeof EMPTY_FORM} field */
   function handleChange(field) {
@@ -138,6 +147,16 @@ function CarOnboardingPage() {
         const suggestions = await apiFetch(
           `/cars/spec-suggestions?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&year=${yearNumber}`,
         );
+
+        // Only mark the tank value as an estimate if the autofill is what
+        // actually fills the (still-empty) field.
+        if (
+          !formRef.current.fuelTankCapacity &&
+          suggestions.fuel_tank_capacity_liters != null &&
+          suggestions.fuel_tank_capacity_estimated
+        ) {
+          setTankEstimated(true);
+        }
 
         setForm((previous) => ({
           ...previous,
@@ -398,12 +417,22 @@ function CarOnboardingPage() {
               id="fuelTankCapacity"
               name="fuelTankCapacity"
               type="number"
-              min="1"
+              min="5"
+              max="200"
               step="0.1"
               placeholder="e.g. 50 — auto-filled if available"
               value={form.fuelTankCapacity}
-              onChange={handleChange("fuelTankCapacity")}
+              onChange={(event) => {
+                setTankEstimated(false);
+                handleChange("fuelTankCapacity")(event);
+              }}
             />
+            {tankEstimated && form.fuelTankCapacity && (
+              <p className="form-field__note">
+                Estimated by AI for this model — please check it against your
+                car.
+              </p>
+            )}
             {fieldErrors.fuelTankCapacity && (
               <p role="alert" className="auth-form__error">
                 {fieldErrors.fuelTankCapacity}
