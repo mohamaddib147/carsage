@@ -375,6 +375,25 @@ class TestNHTSASafetyWiring:
         # The LLM is never called — the recall is authoritative on its own.
         mock_classify.assert_not_called()
 
+    def test_a_recall_match_names_the_system_without_claiming_an_exact_match(self):
+        mock_supabase, _, _ = _build_mock_supabase({"make": "Ford", "model": "F-150"})
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.check_safety_data",
+            return_value={
+                "status": "recall_match",
+                "summary": "Brake fluid may leak.",
+                "system": "brakes",
+            },
+        ), patch("app.routers.ai_advisor.classify_issue"):
+            response = client.post(
+                "/ai-advisor/classify",
+                json={"car_id": "car-1", "description": "Brakes squeak a little"},
+            )
+
+        guidance = response.json()["guidance"]
+        assert "same system as this issue (brakes)" in guidance
+        assert "exact issue" not in guidance
+
     def test_a_complaint_pattern_forces_mechanic_and_skips_the_llm(self):
         mock_supabase, _, _ = _build_mock_supabase({"make": "Honda", "model": "Civic"})
         with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(

@@ -136,10 +136,11 @@ def post_classify_issue(
         result = {
             "recommendation": "mechanic",
             "guidance": (
-                "NHTSA has an open recall matching this exact issue on your "
-                f"vehicle: {safety['summary']} Given this official recall, "
-                "please have a professional mechanic inspect this rather "
-                "than attempting a DIY fix."
+                "NHTSA has an open recall on your vehicle involving the "
+                f"same system as this issue ({safety.get('system', 'affected')}): "
+                f"{safety['summary']} Given this official recall, please have "
+                "a professional mechanic inspect this rather than attempting "
+                "a DIY fix."
             ),
         }
     elif safety["status"] == "complaint_pattern":

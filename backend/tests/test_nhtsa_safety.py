@@ -11,6 +11,7 @@
 from unittest.mock import MagicMock, patch
 
 import httpx
+import pytest
 
 from app.services.nhtsa_safety import check_safety_data
 
@@ -189,3 +190,114 @@ def test_treats_a_400_status_with_a_well_formed_empty_body_as_zero_results():
         )
 
     assert result == {"status": "no_match"}
+
+
+# --- CAR-22: matching precision ------------------------------------------
+# The original matcher treated any 4+ letter word shared with a recall's or
+# complaint's free text as a match, so everyday words ("right", "after",
+# "engine") produced false "NHTSA recall / complaint pattern" claims for
+# unrelated problems. These pin down the corrected behavior.
+
+
+def _check(recalls, complaints, description, vpic_confirmed=True):
+    with patch(
+        "app.services.nhtsa_safety.httpx.get",
+        side_effect=[_recalls(recalls), _complaints(complaints)],
+    ), patch(
+        "app.services.nhtsa_safety.lookup_nhtsa",
+        return_value={"vehicle_confirmed": vpic_confirmed, "engine_type": None},
+    ):
+        return check_safety_data("Toyota", "Camry", 2016, description)
+
+
+AIRBAG_RECALL = {
+    "Component": "AIR BAGS:SENSOR:OCCUPANT CLASSIFICATION",
+    "Summary": "Toyota is recalling certain vehicles. The right front seat sensor may fail after impact.",
+}
+NOISY_COMPLAINTS = [
+    {"components": "ENGINE", "summary": "After the right turn the check engine light came on, I think the engine is loose."}
+] * 5
+
+
+def test_an_unrelated_description_is_not_matched_on_everyday_words():
+    # Words like "right", "after", "think", "loose" all appear in the recall
+    # and complaint text below, but the description is about a cup holder —
+    # no vehicle system — so nothing may match.
+    result = _check(
+        [AIRBAG_RECALL], NOISY_COMPLAINTS, "The cup holder is cracked on the right side after I sat on it, I think"
+    )
+
+    assert result == {"status": "no_match"}
+
+
+def test_a_recall_in_a_different_system_does_not_match():
+    result = _check([AIRBAG_RECALL], [], "My wipers leave streaks on the windshield")
+
+    assert result == {"status": "no_match"}
+
+
+def test_a_safety_critical_system_recall_always_surfaces_and_names_the_system():
+    recall = {"Component": "SERVICE BRAKES, HYDRAULIC", "Summary": "Brake fluid may leak from the master cylinder."}
+
+    result = _check([recall], [], "My brakes squeak a little in the morning")
+
+    assert result["status"] == "recall_match"
+    assert result["system"] == "brakes"
+    assert "master cylinder" in result["summary"]
+
+
+def test_a_non_critical_system_recall_needs_a_shared_symptom_to_match():
+    recall = {"Component": "ELECTRICAL SYSTEM:WIRING", "Summary": "A wiring harness may chafe and cause a short circuit."}
+
+    # Dead battery: same system (electrical) but nothing in common with the recall text.
+    assert _check([recall], [], "My battery is dead this morning") == {"status": "no_match"}
+    # Same system AND a shared symptom ("short circuit") -> surfaces.
+    assert _check([recall], [], "There seems to be a short circuit that keeps blowing my fuse")["status"] == "recall_match"
+
+
+def test_complaints_in_another_system_never_count_even_with_matching_words():
+    complaints = [{"components": "ENGINE", "summary": "The brakes squeak and squeal"}] * 5
+
+    assert _check([], complaints, "My brakes squeak") == {"status": "no_match"}
+
+
+def test_a_complaint_pattern_needs_the_symptom_not_just_the_system():
+    # Five brake complaints, but about a soft pedal — not the squeak described.
+    complaints = [{"components": "SERVICE BRAKES", "summary": "Brake pedal feels soft and spongy."}] * 5
+
+    assert _check([], complaints, "My brakes squeak when cold") == {"status": "no_match"}
+
+
+def test_a_complaint_pattern_needs_two_shared_symptoms_when_the_description_has_several():
+    only_one = [{"components": "SERVICE BRAKES", "summary": "Pedal is soft."}] * 4
+    both = [{"components": "SERVICE BRAKES", "summary": "Pedal is soft and sinks to the floor."}] * 4
+    description = "My brake pedal is soft and sinks to the floor"
+
+    assert _check([], only_one, description) == {"status": "no_match"}
+    result = _check([], both, description)
+    assert result["status"] == "complaint_pattern"
+    assert result["count"] == 4
+
+
+def test_a_description_with_no_recognizable_system_never_matches_but_still_reports_not_found():
+    recall = {"Component": "SERVICE BRAKES", "Summary": "Something about noise."}
+
+    assert _check([recall], [], "It makes a weird noise sometimes") == {"status": "no_match"}
+    # With no NHTSA data at all and an unrecognized vehicle, "not found" still wins.
+    assert _check([], [], "It makes a weird noise", vpic_confirmed=False) == {"status": "not_found"}
+
+
+@pytest.mark.parametrize(
+    "description, expected_system",
+    [
+        ("airbag warning light is on", "air bags"),
+        ("power steering suddenly stopped working", "steering"),
+        ("I can smell gasoline near the back", "fuel system"),
+        ("the seatbelt will not retract", "seat belts"),
+        ("my front tire keeps losing air", "tires"),
+    ],
+)
+def test_recognizes_the_safety_critical_systems_from_everyday_wording(description, expected_system):
+    from app.services.nhtsa_safety import _systems_in
+
+    assert expected_system in [entry[0] for entry in _systems_in(description)]
