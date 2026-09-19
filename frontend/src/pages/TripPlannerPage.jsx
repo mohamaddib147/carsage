@@ -188,7 +188,11 @@ function TripPlannerPage() {
         },
       });
       setResult(data);
-      setSubmittedRoute({ origin: origin.trim(), destination: destination.trim() });
+      setSubmittedRoute({
+        origin: origin.trim(),
+        destination: destination.trim(),
+        polyline: data.route_polyline ?? null,
+      });
     } catch (error) {
       setSubmitError(error.message);
     } finally {
@@ -351,6 +355,7 @@ function TripPlannerPage() {
             <RouteMapImage
               origin={submittedRoute.origin}
               destination={submittedRoute.destination}
+              polyline={submittedRoute.polyline}
             />
           )}
           <p className="trip-result-card__route">

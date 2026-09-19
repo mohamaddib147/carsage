@@ -28,6 +28,7 @@ def test_returns_distance_and_durations_for_a_valid_request():
             "distance_km": 12.3,
             "duration_min": 20,
             "duration_in_traffic_min": 25,
+            "route_polyline": "abc123",
         }
 
         response = client.post(
@@ -40,6 +41,7 @@ def test_returns_distance_and_durations_for_a_valid_request():
         "distance_km": 12.3,
         "duration_min": 20,
         "duration_in_traffic_min": 25,
+        "route_polyline": "abc123",
     }
     mock_get_route.assert_called_once_with("Beirut", "Tripoli")
 
@@ -223,6 +225,38 @@ class TestPostEstimate:
         assert captured["row"]["car_id"] == "car-1"
         # trips.estimated_cost stays the light-traffic figure, unchanged.
         assert captured["row"]["estimated_cost"] == 900000.0
+
+    @pytest.mark.parametrize(
+        "route_extra, expected",
+        [({"route_polyline": "_p~iF~ps|U_ulLnnqC"}, "_p~iF~ps|U_ulLnnqC"), ({}, None)],
+    )
+    def test_estimate_returns_the_route_polyline_but_does_not_persist_it(
+        self, route_extra, expected
+    ):
+        mock_supabase, captured = _mock_supabase_for_estimate(
+            {"fuel_efficiency": 10, "fuel_type": "Gasoline"}
+        )
+        with patch("app.routers.trip_planner.supabase", mock_supabase), patch(
+            "app.routers.trip_planner.get_route_summary"
+        ) as mock_route, patch(
+            "app.routers.trip_planner.get_current_fuel_prices"
+        ) as mock_prices:
+            mock_route.return_value = {
+                "distance_km": 100.0,
+                "duration_min": 60,
+                "duration_in_traffic_min": 60,
+                **route_extra,
+            }
+            mock_prices.return_value = {"95_octane": 90000.0}
+
+            response = client.post(
+                "/trip-planner/estimate",
+                json={"car_id": "car-1", "origin": "Beirut", "destination": "Tripoli"},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["route_polyline"] == expected
+        assert "route_polyline" not in captured["row"]
 
     def test_estimate_response_uses_the_light_traffic_figure_with_no_traffic_slowdown(
         self,

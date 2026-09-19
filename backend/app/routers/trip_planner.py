@@ -38,6 +38,9 @@ class DirectionsResponse(BaseModel):
     distance_km: float
     duration_min: int
     duration_in_traffic_min: int
+    # CAR-48: encoded overview polyline of the driving route, for the
+    # decorative static map. None if Google didn't return one.
+    route_polyline: str | None = None
 
 
 @router.post("/directions", response_model=DirectionsResponse)
@@ -172,6 +175,9 @@ class EstimateTripResponse(BaseModel):
     # never persisted, since it changes every time someone re-checks.
     estimated_cost_current_traffic_lbp: float
     estimated_cost_current_traffic_usd: float
+    # CAR-48: encoded overview polyline of the driving route (response-only,
+    # not persisted) so the results map can draw the real route.
+    route_polyline: str | None = None
 
 
 @router.post("/estimate", response_model=EstimateTripResponse)
@@ -281,4 +287,5 @@ def post_estimate(
         "estimated_cost_current_traffic_usd": lbp_to_usd(
             estimated_cost_current_traffic_lbp
         ),
+        "route_polyline": route.get("route_polyline"),
     }

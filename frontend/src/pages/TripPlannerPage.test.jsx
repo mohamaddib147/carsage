@@ -575,11 +575,12 @@ describe("TripPlannerPage — static route map (CAR-48)", () => {
     fuel_price_used_lbp: 90000,
     estimated_cost_lbp: 50000,
     estimated_cost_usd: 0.56,
+    route_polyline: "_p~iF~ps|U_ulLnnqC",
   };
 
-  async function planTrip(user) {
+  async function planTrip(user, estimate = ESTIMATE) {
     mockCarsLookup([{ id: "car-1" }]);
-    mockApiFetch({ estimate: ESTIMATE });
+    mockApiFetch({ estimate });
     renderPage();
     await user.type(await screen.findByLabelText(/Starting Location/), "Beirut, Lebanon");
     await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
@@ -607,6 +608,28 @@ describe("TripPlannerPage — static route map (CAR-48)", () => {
     const src = new URL(map.querySelector("img").getAttribute("src"));
     expect(src.searchParams.getAll("markers").join(" ")).toContain("Beirut, Lebanon");
     expect(src.searchParams.getAll("markers").join(" ")).toContain("Byblos, Lebanon");
+  });
+
+  it("draws the real driving route from the estimate's polyline, not a straight line", async () => {
+    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "test-key");
+    const user = userEvent.setup();
+
+    await planTrip(user);
+
+    const src = new URL((await screen.findByTestId("route-map")).querySelector("img").getAttribute("src"));
+    expect(src.searchParams.get("path")).toBe("color:0x00594Cff|weight:4|enc:_p~iF~ps|U_ulLnnqC");
+    expect(src.searchParams.get("path")).not.toContain("Beirut");
+  });
+
+  it("shows markers only (no line) when the estimate has no polyline", async () => {
+    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "test-key");
+    const user = userEvent.setup();
+
+    await planTrip(user, { ...ESTIMATE, route_polyline: null });
+
+    const src = new URL((await screen.findByTestId("route-map")).querySelector("img").getAttribute("src"));
+    expect(src.searchParams.get("path")).toBeNull();
+    expect(src.searchParams.getAll("markers")).toHaveLength(2);
   });
 
   it("keeps the map on the submitted route while the fields are edited afterwards", async () => {

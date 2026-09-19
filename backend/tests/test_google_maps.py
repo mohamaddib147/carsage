@@ -1,8 +1,9 @@
-# Tests the Google Maps Distance Matrix integration: normal case,
-# invalid/unresolvable addresses, and network failure — the outbound
-# httpx call is mocked so these never hit the real API.
+# Tests the Google Maps Directions integration: normal case (incl. the
+# route polyline used by the CAR-48 map), invalid/unresolvable addresses,
+# and network failure — the outbound httpx call is mocked so these never
+# hit the real API.
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -22,28 +23,28 @@ def _mock_response(json_body, status_code=200):
     return response
 
 
-OK_PAYLOAD = {
-    "status": "OK",
-    "rows": [
-        {
-            "elements": [
-                {
-                    "status": "OK",
-                    "distance": {"text": "12.3 km", "value": 12300},
-                    "duration": {"text": "20 mins", "value": 1200},
-                    "duration_in_traffic": {"text": "25 mins", "value": 1500},
-                }
-            ]
-        }
-    ],
-}
+def _payload(distance_m, duration_s, traffic_s=None, polyline="_p~iF~ps|U_ulLnnqC"):
+    leg = {
+        "distance": {"text": "x", "value": distance_m},
+        "duration": {"text": "x", "value": duration_s},
+    }
+    if traffic_s is not None:
+        leg["duration_in_traffic"] = {"text": "x", "value": traffic_s}
+    route = {"legs": [leg]}
+    if polyline is not None:
+        route["overview_polyline"] = {"points": polyline}
+    return {"status": "OK", "routes": [route]}
 
 
-def test_returns_distance_and_durations_for_a_valid_route(monkeypatch):
+def _stub(monkeypatch, payload):
     monkeypatch.setattr(
         "app.services.google_maps.httpx.get",
-        lambda *args, **kwargs: _mock_response(OK_PAYLOAD),
+        lambda *args, **kwargs: _mock_response(payload),
     )
+
+
+def test_returns_distance_durations_and_polyline_for_a_valid_route(monkeypatch):
+    _stub(monkeypatch, _payload(12300, 1200, 1500))
 
     result = get_route_summary("Beirut", "Tripoli")
 
@@ -51,137 +52,90 @@ def test_returns_distance_and_durations_for_a_valid_route(monkeypatch):
         "distance_km": 12.3,
         "duration_min": 20,
         "duration_in_traffic_min": 25,
+        "route_polyline": "_p~iF~ps|U_ulLnnqC",
     }
+
+
+def test_calls_the_directions_endpoint_with_origin_destination_and_traffic(monkeypatch):
+    captured = {}
+
+    def fake_get(url, **kwargs):
+        captured["url"] = url
+        captured["params"] = kwargs["params"]
+        return _mock_response(_payload(1000, 60, 60))
+
+    monkeypatch.setattr("app.services.google_maps.httpx.get", fake_get)
+
+    get_route_summary("Beirut", "Tripoli")
+
+    assert captured["url"].endswith("/maps/api/directions/json")
+    assert captured["params"]["origin"] == "Beirut"
+    assert captured["params"]["destination"] == "Tripoli"
+    assert captured["params"]["departure_time"] == "now"
 
 
 def test_falls_back_to_baseline_duration_when_traffic_duration_is_absent(monkeypatch):
-    payload = {
-        "status": "OK",
-        "rows": [
-            {
-                "elements": [
-                    {
-                        "status": "OK",
-                        "distance": {"text": "5 km", "value": 5000},
-                        "duration": {"text": "10 mins", "value": 600},
-                    }
-                ]
-            }
-        ],
-    }
-    monkeypatch.setattr(
-        "app.services.google_maps.httpx.get",
-        lambda *args, **kwargs: _mock_response(payload),
-    )
+    _stub(monkeypatch, _payload(5000, 600))
 
     result = get_route_summary("A", "B")
 
     assert result["duration_min"] == result["duration_in_traffic_min"] == 10
 
 
+def test_polyline_is_none_when_google_does_not_return_one(monkeypatch):
+    _stub(monkeypatch, _payload(5000, 600, 600, polyline=None))
+
+    result = get_route_summary("A", "B")
+
+    assert result["route_polyline"] is None
+    assert result["distance_km"] == 5.0
+
+
 def test_raises_clear_error_for_an_unresolvable_address(monkeypatch):
-    payload = {
-        "status": "OK",
-        "rows": [{"elements": [{"status": "NOT_FOUND"}]}],
-    }
-    monkeypatch.setattr(
-        "app.services.google_maps.httpx.get",
-        lambda *args, **kwargs: _mock_response(payload),
-    )
+    _stub(monkeypatch, {"status": "NOT_FOUND"})
 
     with pytest.raises(GoogleMapsError, match="Could not find a route"):
         get_route_summary("Nowhere Land", "Also Nowhere")
 
 
 def test_raises_clear_error_when_there_is_no_drivable_route(monkeypatch):
-    # Distinct from an address that can't be geocoded at all (NOT_FOUND) —
-    # this is two valid, geocodable addresses with no route between them
-    # (e.g. separated by a body of water), which Google reports as
-    # ZERO_RESULTS on the element rather than the address itself.
-    payload = {
-        "status": "OK",
-        "rows": [{"elements": [{"status": "ZERO_RESULTS"}]}],
-    }
-    monkeypatch.setattr(
-        "app.services.google_maps.httpx.get",
-        lambda *args, **kwargs: _mock_response(payload),
-    )
+    # Two valid, geocodable addresses with no route between them (e.g.
+    # separated by a body of water) come back as ZERO_RESULTS.
+    _stub(monkeypatch, {"status": "ZERO_RESULTS", "routes": []})
 
     with pytest.raises(GoogleMapsError, match="Could not find a route"):
         get_route_summary("Beirut, Lebanon", "Nicosia, Cyprus")
 
 
 def test_handles_a_very_short_same_city_trip(monkeypatch):
-    payload = {
-        "status": "OK",
-        "rows": [
-            {
-                "elements": [
-                    {
-                        "status": "OK",
-                        "distance": {"text": "0.8 km", "value": 800},
-                        "duration": {"text": "3 mins", "value": 180},
-                        "duration_in_traffic": {"text": "4 mins", "value": 240},
-                    }
-                ]
-            }
-        ],
-    }
-    monkeypatch.setattr(
-        "app.services.google_maps.httpx.get",
-        lambda *args, **kwargs: _mock_response(payload),
-    )
+    _stub(monkeypatch, _payload(800, 180, 240))
 
-    result = get_route_summary(
-        "Hamra Street, Beirut", "AUB Main Gate, Beirut"
-    )
+    result = get_route_summary("Hamra Street, Beirut", "AUB Main Gate, Beirut")
 
-    assert result == {
-        "distance_km": 0.8,
-        "duration_min": 3,
-        "duration_in_traffic_min": 4,
-    }
+    assert result["distance_km"] == 0.8
+    assert result["duration_min"] == 3
+    assert result["duration_in_traffic_min"] == 4
 
 
 def test_handles_a_very_long_cross_country_trip(monkeypatch):
-    payload = {
-        "status": "OK",
-        "rows": [
-            {
-                "elements": [
-                    {
-                        "status": "OK",
-                        "distance": {"text": "215 km", "value": 215000},
-                        "duration": {"text": "3 hours", "value": 10800},
-                        "duration_in_traffic": {
-                            "text": "3 hours 45 mins",
-                            "value": 13500,
-                        },
-                    }
-                ]
-            }
-        ],
-    }
-    monkeypatch.setattr(
-        "app.services.google_maps.httpx.get",
-        lambda *args, **kwargs: _mock_response(payload),
-    )
+    _stub(monkeypatch, _payload(215000, 10800, 13500))
 
     result = get_route_summary("Naqoura, Lebanon", "Arida, Lebanon")
 
-    assert result == {
-        "distance_km": 215.0,
-        "duration_min": 180,
-        "duration_in_traffic_min": 225,
-    }
+    assert result["distance_km"] == 215.0
+    assert result["duration_min"] == 180
+    assert result["duration_in_traffic_min"] == 225
 
 
 def test_raises_clear_error_when_top_level_status_is_not_ok(monkeypatch):
-    payload = {"status": "REQUEST_DENIED"}
-    monkeypatch.setattr(
-        "app.services.google_maps.httpx.get",
-        lambda *args, **kwargs: _mock_response(payload),
-    )
+    _stub(monkeypatch, {"status": "REQUEST_DENIED"})
+
+    with pytest.raises(GoogleMapsError, match="Could not calculate a route"):
+        get_route_summary("A", "B")
+
+
+def test_raises_clear_error_when_an_ok_response_has_no_routes(monkeypatch):
+    _stub(monkeypatch, {"status": "OK", "routes": []})
 
     with pytest.raises(GoogleMapsError, match="Could not calculate a route"):
         get_route_summary("A", "B")
