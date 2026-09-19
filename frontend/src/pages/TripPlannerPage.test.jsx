@@ -1,8 +1,20 @@
 // Tests for the Trip Planner screen: the empty state (no car yet),
 // required-destination validation, a successful trip (loading state +
 // results card), the clear-error case when the backend rejects the
-// trip, that Starting Location really is optional, and the CAR-37 car
-// selector (hidden with 0-1 cars, shown and switchable with 2+).
+// trip, that Starting Location really is optional, the CAR-37 car
+// selector (hidden with 0-1 cars, shown and switchable with 2+), CAR-41
+// (editable fuel price prefilled from GET /trip-planner/fuel-prices,
+// sent as an override; the Full Tank Cost stat), and CAR-42 (light vs
+// current-traffic fuel cost estimates + the explainer text — shown only
+// when the response includes the new fields, so older-shaped responses
+// degrade to the original single "Fuel Cost" stat).
+//
+// apiFetch now fires twice per successful flow (a GET for fuel prices
+// on mount, then the POST estimate on submit) — tests that don't care
+// about the prefill just let both resolve to the same mocked value,
+// which is harmless (the fuel-prices prefill effect no-ops on a
+// response shape it doesn't recognize); tests that DO care about the
+// prefill/override behavior mock each path distinctly via mockApiFetch.
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -39,6 +51,22 @@ function mockCarsLookup(carsArray) {
   const eq = vi.fn(() => ({ order }));
   const select = vi.fn(() => ({ eq }));
   supabase.from.mockReturnValue({ select });
+}
+
+/** Routes apiFetch by path: GET /trip-planner/fuel-prices resolves to
+ * `fuelPrices`, POST /trip-planner/estimate resolves to `estimate` (or
+ * rejects with `error` if given). Use when a test cares about the two
+ * calls behaving differently, rather than a single blanket mock. */
+function mockApiFetch({ fuelPrices, estimate, error } = {}) {
+  apiFetch.mockImplementation((path) => {
+    if (path === "/trip-planner/fuel-prices") {
+      return Promise.resolve(fuelPrices ?? { prices: {}, lbp_per_usd: 89000 });
+    }
+    if (path === "/trip-planner/estimate") {
+      return error ? Promise.reject(error) : Promise.resolve(estimate);
+    }
+    return Promise.reject(new Error(`mockApiFetch: unexpected path "${path}"`));
+  });
 }
 
 function renderPage() {
@@ -84,7 +112,12 @@ describe("TripPlannerPage — planning a trip", () => {
     expect(
       await screen.findByText("Destination is required."),
     ).toBeInTheDocument();
-    expect(apiFetch).not.toHaveBeenCalled();
+    // apiFetch may still have fired for the on-mount fuel-prices prefill
+    // (CAR-41) — what matters is the estimate itself was never submitted.
+    expect(apiFetch).not.toHaveBeenCalledWith(
+      "/trip-planner/estimate",
+      expect.anything(),
+    );
   });
 
   it("shows a loading state, then the results card, on a successful trip (normal case)", async () => {
@@ -217,5 +250,170 @@ describe("TripPlannerPage — car selector (CAR-37)", () => {
         body: expect.objectContaining({ car_id: "car-2" }),
       }),
     );
+  });
+});
+
+describe("TripPlannerPage — editable fuel price & tank cost (CAR-41)", () => {
+  it("prefills the fuel price from the current default for the car's fuel grade (normal case)", async () => {
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    mockApiFetch({
+      fuelPrices: {
+        prices: { "95_octane": { lbp_per_liter: 91000, usd_per_liter: 1.02 } },
+        lbp_per_usd: 89000,
+      },
+    });
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Fuel Price/)).toHaveValue(91000),
+    );
+  });
+
+  it("sends a manually-edited fuel price as the override instead of the prefilled default", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    mockApiFetch({
+      fuelPrices: {
+        prices: { "95_octane": { lbp_per_liter: 91000, usd_per_liter: 1.02 } },
+        lbp_per_usd: 89000,
+      },
+      estimate: {
+        distance_km: 10,
+        duration_min: 10,
+        duration_in_traffic_min: 10,
+        fuel_price_used_lbp: 100000,
+        estimated_cost_lbp: 50000,
+        estimated_cost_usd: 0.56,
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText(/Fuel Price/)).toHaveValue(91000));
+
+    const fuelPriceInput = screen.getByLabelText(/Fuel Price/);
+    await user.clear(fuelPriceInput);
+    await user.type(fuelPriceInput, "100000");
+    await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/trip-planner/estimate",
+        expect.objectContaining({
+          body: expect.objectContaining({ fuel_price_per_liter_lbp: 100000 }),
+        }),
+      ),
+    );
+  });
+
+  it("shows the full tank cost using the default 20L tank size (normal case)", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1" }]);
+    mockApiFetch({
+      estimate: {
+        distance_km: 10,
+        duration_min: 10,
+        duration_in_traffic_min: 10,
+        fuel_price_used_lbp: 90000,
+        estimated_cost_lbp: 50000,
+        estimated_cost_usd: 0.56,
+      },
+    });
+
+    renderPage();
+    await user.type(
+      await screen.findByLabelText("Destination *"),
+      "Byblos, Lebanon",
+    );
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    // 20L * 90000 LBP/L = 1,800,000 LBP.
+    expect(await screen.findByText("$20.22 (1,800,000 LBP)")).toBeInTheDocument();
+  });
+
+  it("recalculates the full tank cost when the tank size is edited", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1" }]);
+    mockApiFetch({
+      estimate: {
+        distance_km: 10,
+        duration_min: 10,
+        duration_in_traffic_min: 10,
+        fuel_price_used_lbp: 90000,
+        estimated_cost_lbp: 50000,
+        estimated_cost_usd: 0.56,
+      },
+    });
+
+    renderPage();
+    const tankInput = await screen.findByLabelText(/Tank Size/);
+    await user.clear(tankInput);
+    await user.type(tankInput, "40");
+    await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    // 40L * 90000 LBP/L = 3,600,000 LBP.
+    expect(await screen.findByText("$40.45 (3,600,000 LBP)")).toBeInTheDocument();
+  });
+});
+
+describe("TripPlannerPage — light vs current-traffic estimates (CAR-42)", () => {
+  it("shows both estimates with an explanation when the response includes them (normal case)", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1" }]);
+    mockApiFetch({
+      estimate: {
+        distance_km: 100,
+        duration_min: 60,
+        duration_in_traffic_min: 90,
+        fuel_price_used_lbp: 90000,
+        estimated_cost_lbp: 900000,
+        estimated_cost_usd: 10.11,
+        estimated_cost_current_traffic_lbp: 967500,
+        estimated_cost_current_traffic_usd: 10.87,
+      },
+    });
+
+    renderPage();
+    await user.type(
+      await screen.findByLabelText("Destination *"),
+      "Tripoli, Lebanon",
+    );
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    expect(await screen.findByText("Fuel Cost (Light Traffic)")).toBeInTheDocument();
+    expect(screen.getByText("Fuel Cost (Current Traffic)")).toBeInTheDocument();
+    expect(screen.getByText("$10.11 (900,000 LBP)")).toBeInTheDocument();
+    expect(screen.getByText("$10.87 (967,500 LBP)")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Heavy traffic means more stop-and-go driving/),
+    ).toBeInTheDocument();
+  });
+
+  it("falls back to a single plain Fuel Cost stat when the response has no traffic comparison (edge case)", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1" }]);
+    mockApiFetch({
+      estimate: {
+        distance_km: 10,
+        duration_min: 10,
+        duration_in_traffic_min: 12,
+        fuel_price_used_lbp: 90000,
+        estimated_cost_lbp: 50000,
+        estimated_cost_usd: 0.56,
+      },
+    });
+
+    renderPage();
+    await user.type(
+      await screen.findByLabelText("Destination *"),
+      "Byblos, Lebanon",
+    );
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    expect(await screen.findByText("Fuel Cost")).toBeInTheDocument();
+    expect(screen.queryByText(/Light Traffic/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Current Traffic/)).not.toBeInTheDocument();
   });
 });

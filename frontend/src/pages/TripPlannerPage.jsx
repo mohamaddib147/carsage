@@ -1,22 +1,50 @@
 // Trip Planner screen (core feature) — destination in, estimated fuel
-// cost + traffic-adjusted travel time out. No map UI, no route
-// modifiers. Loads all of the logged-in user's cars; if there's more
-// than one, a plain <select> lets the user pick which one to plan the
-// trip with (CAR-37) — with exactly one car it's used automatically, same
-// as before. Layout matches
-// docs/stitch_carsage_landing_page/carsage_trip_planner for the in-scope
-// parts (route parameters card, 3-stat results row); its weather widget
-// and route-recommendation badges are out of scope (no live weather/
-// route data) and are omitted — the car selector here is a plain <select>
-// rather than that reference's chip-style switcher, since CAR-37 only
-// asked for a way to choose the car, not to match that specific control.
+// cost + traffic-adjusted travel time out. No route modifiers. Loads
+// all of the logged-in user's cars; if there's more than one, a plain
+// <select> lets the user pick which one to plan the trip with (CAR-37)
+// — with exactly one car it's used automatically, same as before.
+// Layout matches docs/stitch_carsage_landing_page/carsage_trip_planner
+// for the in-scope parts (route parameters card, 3-stat results row);
+// its weather widget and route-recommendation badges are out of scope
+// (no live weather/route data) and are omitted — the car selector here
+// is a plain <select> rather than that reference's chip-style switcher,
+// since CAR-37 only asked for a way to choose the car, not to match
+// that specific control.
+//
+// CAR-41: the fuel price per liter is now an editable field (the
+// backend's fuel_price_per_liter_lbp override already existed — this
+// just exposes it), pre-filled from GET /trip-planner/fuel-prices for
+// the selected car's fuel grade. A "Full Tank Cost" stat is also shown,
+// using an editable tank size (default 20L, a common average).
+//
+// CAR-42: the results show both a light-traffic estimate (the original
+// estimated_cost_lbp/usd — close to the car's rated fuel efficiency)
+// and a current-traffic estimate (estimated_cost_current_traffic_lbp/usd
+// — adjusted down for congestion server-side), with a caption explaining
+// why they differ. Both new fields are optional on the result object so
+// this degrades gracefully against an older cached response shape.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { apiFetch } from "../lib/apiClient.js";
+
+// Fallback if GET /trip-planner/fuel-prices hasn't loaded yet — matches
+// the backend's own documented fixed rate (see fuel_prices.LBP_PER_USD).
+const FALLBACK_LBP_PER_USD = 89000;
+
+/** Maps a car's general fuel_type onto the price bucket fuel-prices
+ * tracks — mirrors app/routers/trip_planner.py's
+ * _price_bucket_for_car_fuel_type so the prefilled price matches what
+ * the backend would pick by default. */
+function priceBucketForFuelType(fuelType) {
+  const normalized = (fuelType || "").trim().toLowerCase();
+  if (normalized === "diesel") return "diesel";
+  if (normalized === "electric") return null;
+  return "95_octane";
+}
 
 /**
  * Trip Planner screen: enter an (optional) starting location and a
@@ -39,6 +67,13 @@ function TripPlannerPage() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
 
+  const [fuelPrices, setFuelPrices] = useState(null);
+  const [fuelPriceInput, setFuelPriceInput] = useState("");
+  const [tankSizeInput, setTankSizeInput] = useState("20");
+  const fuelPriceEditedRef = useRef(false);
+
+  const selectedCar = cars.find((car) => car.id === selectedCarId) ?? null;
+
   useEffect(() => {
     if (!user) return;
 
@@ -48,7 +83,7 @@ function TripPlannerPage() {
       setLoadingCar(true);
       const { data } = await supabase
         .from("cars")
-        .select("id, make, model, year")
+        .select("id, make, model, year, fuel_type")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
 
@@ -65,6 +100,38 @@ function TripPlannerPage() {
     };
   }, [user]);
 
+  // CAR-41: fetch the current default fuel prices once, to prefill the
+  // editable fuel price field — non-critical, so a failure here just
+  // leaves the field for the user to fill in (or the backend falls back
+  // to its own default if it's left blank).
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFuelPrices() {
+      try {
+        const data = await apiFetch("/trip-planner/fuel-prices");
+        if (!cancelled) setFuelPrices(data);
+      } catch {
+        // Non-critical — see comment above.
+      }
+    }
+
+    loadFuelPrices();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Prefills the fuel price for the selected car's fuel grade, but never
+  // overwrites a value the user already typed themselves.
+  useEffect(() => {
+    if (fuelPriceEditedRef.current || !fuelPrices || !selectedCar) return;
+
+    const bucket = priceBucketForFuelType(selectedCar.fuel_type);
+    const price = bucket ? fuelPrices.prices?.[bucket]?.lbp_per_liter : null;
+    if (price != null) setFuelPriceInput(String(price));
+  }, [fuelPrices, selectedCar]);
+
   /** @param {import('react').FormEvent} event */
   async function handleSubmit(event) {
     event.preventDefault();
@@ -77,6 +144,12 @@ function TripPlannerPage() {
     }
     setDestinationError("");
 
+    const parsedFuelPrice = Number(fuelPriceInput);
+    const fuelPriceOverride =
+      Number.isFinite(parsedFuelPrice) && parsedFuelPrice > 0
+        ? parsedFuelPrice
+        : undefined;
+
     setSubmitting(true);
     try {
       const data = await apiFetch("/trip-planner/estimate", {
@@ -86,6 +159,7 @@ function TripPlannerPage() {
           car_id: selectedCarId,
           destination: destination.trim(),
           origin: origin.trim() || undefined,
+          fuel_price_per_liter_lbp: fuelPriceOverride,
         },
       });
       setResult(data);
@@ -112,6 +186,17 @@ function TripPlannerPage() {
       </PageShell>
     );
   }
+
+  const tankSizeLiters = Number(tankSizeInput);
+  const lbpPerUsd = fuelPrices?.lbp_per_usd ?? FALLBACK_LBP_PER_USD;
+  const tankCostLbp =
+    result && Number.isFinite(tankSizeLiters) && tankSizeLiters > 0
+      ? Math.round(tankSizeLiters * result.fuel_price_used_lbp)
+      : null;
+  const tankCostUsd = tankCostLbp != null ? tankCostLbp / lbpPerUsd : null;
+  const hasTrafficComparison =
+    result?.estimated_cost_current_traffic_lbp != null &&
+    result?.estimated_cost_current_traffic_usd != null;
 
   return (
     <PageShell
@@ -182,6 +267,40 @@ function TripPlannerPage() {
             )}
           </div>
 
+          <div className="form-grid">
+            <div className="form-field">
+              <label htmlFor="fuelPricePerLiter">
+                Fuel Price (LBP/L) <span className="form-field__hint">Editable</span>
+              </label>
+              <input
+                id="fuelPricePerLiter"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="Current default used if blank"
+                value={fuelPriceInput}
+                onChange={(event) => {
+                  fuelPriceEditedRef.current = true;
+                  setFuelPriceInput(event.target.value);
+                }}
+              />
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="tankSize">
+                Tank Size (L) <span className="form-field__hint">Editable</span>
+              </label>
+              <input
+                id="tankSize"
+                type="number"
+                min="1"
+                step="1"
+                value={tankSizeInput}
+                onChange={(event) => setTankSizeInput(event.target.value)}
+              />
+            </div>
+          </div>
+
           {submitError && (
             <p role="alert" className="auth-form__error">
               {submitError}
@@ -209,7 +328,7 @@ function TripPlannerPage() {
               <span className="trip-result__icon" aria-hidden="true">
                 ⛽
               </span>
-              <dt>Fuel Cost</dt>
+              <dt>Fuel Cost{hasTrafficComparison ? " (Light Traffic)" : ""}</dt>
               <dd>
                 ${result.estimated_cost_usd.toFixed(2)} (
                 {result.estimated_cost_lbp.toLocaleString()} LBP)
@@ -218,6 +337,21 @@ function TripPlannerPage() {
                 Based on {result.fuel_price_used_lbp.toLocaleString()} LBP/L
               </p>
             </div>
+            {hasTrafficComparison && (
+              <div className="trip-result__field">
+                <span className="trip-result__icon" aria-hidden="true">
+                  🚦
+                </span>
+                <dt>Fuel Cost (Current Traffic)</dt>
+                <dd>
+                  ${result.estimated_cost_current_traffic_usd.toFixed(2)} (
+                  {result.estimated_cost_current_traffic_lbp.toLocaleString()} LBP)
+                </dd>
+                <p className="trip-result__caption">
+                  Adjusted for current congestion
+                </p>
+              </div>
+            )}
             <div className="trip-result__field">
               <span className="trip-result__icon" aria-hidden="true">
                 ⏱️
@@ -233,7 +367,31 @@ function TripPlannerPage() {
               <dt>Distance</dt>
               <dd>{result.distance_km} km</dd>
             </div>
+            {tankCostLbp != null && (
+              <div className="trip-result__field">
+                <span className="trip-result__icon" aria-hidden="true">
+                  🛢️
+                </span>
+                <dt>Full Tank Cost</dt>
+                <dd>
+                  ${tankCostUsd.toFixed(2)} ({tankCostLbp.toLocaleString()} LBP)
+                </dd>
+                <p className="trip-result__caption">
+                  {tankSizeLiters}L at {result.fuel_price_used_lbp.toLocaleString()}{" "}
+                  LBP/L
+                </p>
+              </div>
+            )}
           </dl>
+          {hasTrafficComparison && (
+            <p className="trip-result__explainer">
+              Light traffic assumes free-flowing driving close to your
+              car&apos;s rated fuel efficiency. Heavy traffic means more
+              stop-and-go driving, idling, and lower average speeds — all of
+              which burn noticeably more fuel per km, so the current-traffic
+              estimate is usually higher.
+            </p>
+          )}
         </div>
       )}
     </PageShell>
