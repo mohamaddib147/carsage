@@ -3,12 +3,22 @@
 # appending to an existing conversation, a conversation that isn't the
 # caller's own, a car that isn't the caller's own, the user's message
 # still being saved when the LLM service fails (surfacing a clear 503),
-# missing/empty description validation, missing authentication, and the
+# missing/empty description validation, missing authentication, the
 # CAR-40 YouTube video wiring (saved + returned on a 'diy' match, absent
-# on no match, and never even looked up for 'mechanic').
+# on no match, and never even looked up for 'mechanic'), and the CAR-36
+# NHTSA safety-data wiring (a recall/complaint match skips the LLM and
+# forces 'mechanic', a vehicle NHTSA doesn't recognize gets a disclaimer
+# appended to the normal LLM guidance, and an unreachable NHTSA API
+# falls back to the normal LLM path unchanged).
+#
+# check_safety_data is auto-mocked to "no_match" for every test in this
+# file except TestNHTSASafetyWiring, so the pre-CAR-36 tests exercise
+# exactly the same path they did before that task — the NHTSA check
+# simply wasn't there yet.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.auth import get_current_user_id
@@ -16,6 +26,14 @@ from app.main import app
 from app.services.llm_client import LLMError
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _default_no_safety_match():
+    with patch(
+        "app.routers.ai_advisor.check_safety_data", return_value={"status": "no_match"}
+    ):
+        yield
 
 
 def _build_mock_supabase(
@@ -320,6 +338,111 @@ class TestYouTubeVideoWiring:
         assert body["video_url"] is None
         mock_search.assert_not_called()
         assert updates == []
+
+
+class TestNHTSASafetyWiring:
+    """CAR-36: a matching recall/complaint pattern skips the LLM and
+    forces 'mechanic' with an NHTSA-grounded explanation, a vehicle
+    NHTSA doesn't recognize gets a disclaimer appended to the normal LLM
+    guidance, and an unreachable NHTSA API falls back to the normal LLM
+    path unchanged."""
+
+    def setup_method(self):
+        app.dependency_overrides[get_current_user_id] = lambda: "user-123"
+
+    def teardown_method(self):
+        app.dependency_overrides.pop(get_current_user_id, None)
+
+    def test_a_recall_match_forces_mechanic_and_skips_the_llm(self):
+        mock_supabase, _, _ = _build_mock_supabase({"make": "Honda", "model": "Civic"})
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.check_safety_data",
+            return_value={
+                "status": "recall_match",
+                "summary": "Steering may fail unexpectedly.",
+            },
+        ), patch("app.routers.ai_advisor.classify_issue") as mock_classify:
+            response = client.post(
+                "/ai-advisor/classify",
+                json={"car_id": "car-1", "description": "Steering locks up"},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["recommendation"] == "mechanic"
+        assert "open recall" in body["guidance"]
+        assert "Steering may fail unexpectedly." in body["guidance"]
+        # The LLM is never called — the recall is authoritative on its own.
+        mock_classify.assert_not_called()
+
+    def test_a_complaint_pattern_forces_mechanic_and_skips_the_llm(self):
+        mock_supabase, _, _ = _build_mock_supabase({"make": "Honda", "model": "Civic"})
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.check_safety_data",
+            return_value={"status": "complaint_pattern", "count": 7, "summary": "..."},
+        ), patch("app.routers.ai_advisor.classify_issue") as mock_classify:
+            response = client.post(
+                "/ai-advisor/classify",
+                json={"car_id": "car-1", "description": "Brakes are grinding"},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["recommendation"] == "mechanic"
+        assert "7 similar owner complaints" in body["guidance"]
+        mock_classify.assert_not_called()
+
+    def test_not_found_still_calls_the_llm_with_a_disclaimer_appended(self):
+        mock_supabase, _, _ = _build_mock_supabase({"make": "Mercedes-Benz", "model": "C230"})
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.check_safety_data",
+            return_value={"status": "not_found"},
+        ), patch("app.routers.ai_advisor.classify_issue") as mock_classify, patch(
+            "app.routers.ai_advisor.search_diy_video", return_value=None
+        ):
+            mock_classify.return_value = {
+                "recommendation": "diy",
+                "guidance": "Top up the washer fluid.",
+            }
+
+            response = client.post(
+                "/ai-advisor/classify",
+                json={"car_id": "car-1", "description": "Washer fluid light is on"},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        # The LLM's own recommendation still stands — only a note is added.
+        assert body["recommendation"] == "diy"
+        assert body["guidance"].startswith("Top up the washer fluid.")
+        assert "NHTSA safety data isn't available" in body["guidance"]
+        mock_classify.assert_called_once()
+
+    def test_an_unavailable_nhtsa_api_falls_back_to_the_llm_unchanged(self):
+        mock_supabase, _, _ = _build_mock_supabase({"make": "Honda", "model": "Civic"})
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.check_safety_data",
+            return_value={"status": "unavailable"},
+        ), patch("app.routers.ai_advisor.classify_issue") as mock_classify:
+            mock_classify.return_value = {
+                "recommendation": "mechanic",
+                "guidance": "See a mechanic.",
+            }
+
+            response = client.post(
+                "/ai-advisor/classify",
+                json={"car_id": "car-1", "description": "Engine noise"},
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "conversation_id": "conv-1",
+            "recommendation": "mechanic",
+            "guidance": "See a mechanic.",
+            "video_title": None,
+            "video_url": None,
+        }
+        mock_classify.assert_called_once()
 
 
 def test_classify_requires_authentication():

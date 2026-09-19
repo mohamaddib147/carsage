@@ -1,12 +1,21 @@
 # POST /ai-advisor/classify: takes a car issue description + car_id and
-# returns a DIY-vs-mechanic recommendation with short guidance, via the
-# LLM classification isolated in app.services.llm_client (CAR-19), and
-# persists the exchange to advisor_conversations/advisor_messages
-# (CAR-21) — a new conversation is created the first time a caller omits
-# conversation_id, and subsequent messages pass it back to append to the
-# same conversation. On a 'diy' recommendation, also looks up a matching
-# YouTube tutorial (CAR-40) and saves it onto the AI's message row — a
-# 'mechanic' recommendation never triggers this lookup, conserving quota
+# returns a DIY-vs-mechanic recommendation with short guidance. Before
+# falling back to the LLM classification (app.services.llm_client,
+# CAR-19), checks NHTSA's official Recalls/Complaints data for a match
+# (app.services.nhtsa_safety, CAR-36) — a matching open recall or a
+# complaint pattern skips the LLM entirely and forces 'mechanic' with an
+# NHTSA-grounded explanation (avoids the LLM's from-scratch guidance
+# text contradicting a forced override); no match, or the NHTSA APIs
+# being unreachable, proceeds with the normal LLM path unchanged; a
+# vehicle NHTSA doesn't recognize at all gets an explicit disclaimer
+# appended rather than being silently treated as "no match" (NHTSA is
+# US-market only). Persists the exchange to advisor_conversations/
+# advisor_messages (CAR-21) — a new conversation is created the first
+# time a caller omits conversation_id, and subsequent messages pass it
+# back to append to the same conversation. On a 'diy' recommendation,
+# also looks up a matching YouTube tutorial (CAR-40) and saves it onto
+# the AI's message row — a 'mechanic' recommendation (including one
+# forced by an NHTSA match) never triggers this lookup, conserving quota
 # per that task's AC. Requires auth so car_id/conversation_id can be
 # checked against the caller's own rows — the backend's service-role
 # client bypasses RLS, so this is checked explicitly here, same as the
@@ -19,6 +28,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import get_current_user_id
 from app.services.llm_client import LLMError, classify_issue
+from app.services.nhtsa_safety import check_safety_data
 from app.services.youtube_client import search_diy_video
 from app.supabase_client import supabase
 
@@ -115,10 +125,45 @@ def post_classify_issue(
         }
     ).execute()
 
-    try:
-        result = classify_issue(payload.description, car_data)
-    except LLMError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+    safety = check_safety_data(
+        car_data.get("make", ""),
+        car_data.get("model", ""),
+        car_data.get("year"),
+        payload.description,
+    )
+
+    if safety["status"] == "recall_match":
+        result = {
+            "recommendation": "mechanic",
+            "guidance": (
+                "NHTSA has an open recall matching this exact issue on your "
+                f"vehicle: {safety['summary']} Given this official recall, "
+                "please have a professional mechanic inspect this rather "
+                "than attempting a DIY fix."
+            ),
+        }
+    elif safety["status"] == "complaint_pattern":
+        result = {
+            "recommendation": "mechanic",
+            "guidance": (
+                f"NHTSA has received {safety['count']} similar owner "
+                "complaints about this exact issue on this vehicle. Given "
+                "this pattern, please have a professional mechanic inspect "
+                "this rather than attempting a DIY fix."
+            ),
+        }
+    else:
+        try:
+            result = classify_issue(payload.description, car_data)
+        except LLMError as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
+
+        if safety["status"] == "not_found":
+            result["guidance"] += (
+                " (Note: NHTSA safety data isn't available for this vehicle "
+                "— it may not be sold in the US market, or isn't in NHTSA's "
+                "database.)"
+            )
 
     ai_message = (
         supabase.table("advisor_messages")
