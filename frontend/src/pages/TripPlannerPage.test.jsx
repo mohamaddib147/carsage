@@ -417,3 +417,36 @@ describe("TripPlannerPage — light vs current-traffic estimates (CAR-42)", () =
     expect(screen.queryByText(/Current Traffic/)).not.toBeInTheDocument();
   });
 });
+
+describe("TripPlannerPage — ideal-conditions info tooltip (CAR-45)", () => {
+  it("explains the estimate assumes ideal conditions, next to the fuel cost", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1" }]);
+    mockApiFetch({
+      estimate: {
+        distance_km: 10,
+        duration_min: 10,
+        duration_in_traffic_min: 10,
+        fuel_price_used_lbp: 90000,
+        estimated_cost_lbp: 50000,
+        estimated_cost_usd: 0.56,
+      },
+    });
+
+    renderPage();
+    await user.type(await screen.findByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    const info = await screen.findByRole("button", {
+      name: "About this fuel cost estimate",
+    });
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    await user.hover(info);
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      /rated fuel efficiency under ideal conditions/,
+    );
+    expect(screen.getByRole("tooltip")).toHaveTextContent(/heavy traffic/);
+  });
+});
+

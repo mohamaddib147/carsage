@@ -17,6 +17,10 @@
 // the selected car's fuel grade. A "Full Tank Cost" stat is also shown,
 // using an editable tank size (default 20L, a common average).
 //
+// CAR-45: an info icon next to the (light-traffic / rated-efficiency) fuel
+// cost explains that it assumes ideal conditions — copy only, no change
+// to the calculation.
+//
 // CAR-42: the results show both a light-traffic estimate (the original
 // estimated_cost_lbp/usd — close to the car's rated fuel efficiency)
 // and a current-traffic estimate (estimated_cost_current_traffic_lbp/usd
@@ -26,6 +30,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import InfoTip from "../components/InfoTip.jsx";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
@@ -328,7 +333,14 @@ function TripPlannerPage() {
               <span className="trip-result__icon" aria-hidden="true">
                 ⛽
               </span>
-              <dt>Fuel Cost{hasTrafficComparison ? " (Light Traffic)" : ""}</dt>
+              <dt>
+                Fuel Cost{hasTrafficComparison ? " (Light Traffic)" : ""}
+                <InfoTip label="About this fuel cost estimate">
+                  This estimate uses your car&apos;s rated fuel efficiency under
+                  ideal conditions. Actual consumption may be higher in heavy
+                  traffic.
+                </InfoTip>
+              </dt>
               <dd>
                 ${result.estimated_cost_usd.toFixed(2)} (
                 {result.estimated_cost_lbp.toLocaleString()} LBP)
