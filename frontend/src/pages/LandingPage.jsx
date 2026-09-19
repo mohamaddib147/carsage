@@ -27,7 +27,7 @@ const FEATURES = [
   },
   {
     icon: "🧭",
-    eyebrow: "Predictive Route Engine",
+    eyebrow: "Live Route Costing",
     title: "Trip Planner",
     description:
       "Enter a destination and get real-world fuel cost and traffic-adjusted travel time, using live Google Maps data and Lebanon's current fuel prices.",
@@ -36,7 +36,7 @@ const FEATURES = [
   },
   {
     icon: "💬",
-    eyebrow: "Triage Intelligence",
+    eyebrow: "Smart Advisor",
     title: "AI Advisor",
     description:
       "Describe a car issue in plain language and get clear guidance on whether it's safe to fix yourself or time to see a mechanic.",

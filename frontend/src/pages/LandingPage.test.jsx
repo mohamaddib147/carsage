@@ -60,6 +60,19 @@ describe("LandingPage", () => {
     expect(screen.getByText("AI Advisor")).toBeInTheDocument();
   });
 
+  it("labels the feature cards accurately (no 'predictive' / 'triage' overclaims)", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderPage();
+
+    expect(await screen.findByText("Live Route Costing")).toBeInTheDocument();
+    expect(screen.getByText("Smart Advisor")).toBeInTheDocument();
+    expect(screen.queryByText("Predictive Route Engine")).not.toBeInTheDocument();
+    expect(screen.queryByText("Triage Intelligence")).not.toBeInTheDocument();
+    // The rest of each card is unchanged.
+    expect(screen.getByText(/real-world fuel cost and traffic-adjusted travel time/)).toBeInTheDocument();
+    expect(screen.getByText(/safe to fix yourself or time to see a mechanic/)).toBeInTheDocument();
+  });
+
   it("logged out: every primary CTA says 'Get Started Free' and links to Sign Up (normal case)", async () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
     renderPage();
