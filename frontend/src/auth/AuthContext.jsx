@@ -68,6 +68,21 @@ export function AuthProvider({ children }) {
 }
 
 /**
+ * The single "who is looking at this page?" check for UI that changes with
+ * sign-in state (header controls, nav links, landing-page CTAs). Derived
+ * from the real Supabase session held by <AuthProvider>. `status` is
+ * "loading" until the first getSession() call resolves — callers must not
+ * treat that as logged out, or a signed-in visitor would briefly see the
+ * logged-out UI on every page load.
+ * @returns {{ status: "loading" | "signedIn" | "signedOut", user: object|null, signOut: Function }}
+ */
+export function useAuthStatus() {
+  const { user, loading, signOut } = useAuth();
+  const status = loading ? "loading" : user ? "signedIn" : "signedOut";
+  return { status, user, signOut };
+}
+
+/**
  * Reads the current auth context. Must be used within an <AuthProvider>.
  * @returns {{ session: object|null, user: object|null, loading: boolean, signUp: Function, signIn: Function, signOut: Function }}
  */

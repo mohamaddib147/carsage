@@ -1,12 +1,13 @@
 # FastAPI application entry point. Hosts the Trip Planner cost
-# calculation and AI Advisor logic in later sprints; for now, just the
-# health-check endpoint and shared app configuration (CORS).
+# calculation and AI Advisor logic in later sprints; for now, the
+# health-check endpoint, Trip Planner directions lookup, and shared app
+# configuration (CORS).
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import ALLOWED_ORIGINS
-from app.routers import health
+from app.routers import ai_advisor, car_specs, health, trip_planner
 
 app = FastAPI(title="CarSage API")
 
@@ -19,3 +20,6 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(trip_planner.router)
+app.include_router(car_specs.router)
+app.include_router(ai_advisor.router)

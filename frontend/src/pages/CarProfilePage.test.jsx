@@ -23,6 +23,10 @@ const SAMPLE_CAR = {
   engine_type: "Inline-4",
   fuel_type: "Gasoline",
   fuel_efficiency: 32,
+  cylinders: 4,
+  drivetrain: "fwd",
+  transmission: "a",
+  fuel_tank_capacity_liters: 55,
   license_plate: "ABC-123",
   vin: "1HGCM82633A004352",
 };
@@ -40,8 +44,9 @@ vi.mock("../lib/supabaseClient.js", () => ({
 }));
 
 /** Wires supabase.from("cars") to resolve `selectResult` for both the
- * by-id and "mine" query shapes, and `updateResult` for update(). */
-function mockCarsTable({ selectResult, updateResult }) {
+ * by-id and "mine" query shapes, `updateResult` for update(), and
+ * `deleteResult` for delete() (CAR-38). */
+function mockCarsTable({ selectResult, updateResult, deleteResult }) {
   const maybeSingle = vi.fn().mockResolvedValue(selectResult);
   const limit = vi.fn(() => ({ maybeSingle }));
   const order = vi.fn(() => ({ limit }));
@@ -53,8 +58,11 @@ function mockCarsTable({ selectResult, updateResult }) {
   const eqForUpdate = vi.fn(() => ({ select: selectAfterUpdate }));
   const update = vi.fn(() => ({ eq: eqForUpdate }));
 
-  supabase.from.mockReturnValue({ select, update });
-  return { eqForSelect, eqForUpdate, update };
+  const eqForDelete = vi.fn().mockResolvedValue(deleteResult ?? { error: null });
+  const carDelete = vi.fn(() => ({ eq: eqForDelete }));
+
+  supabase.from.mockReturnValue({ select, update, delete: carDelete });
+  return { eqForSelect, eqForUpdate, update, eqForDelete, delete: carDelete };
 }
 
 function renderAt(path) {
@@ -65,6 +73,7 @@ function renderAt(path) {
           <Route path="/cars/mine" element={<CarProfilePage />} />
           <Route path="/cars/:carId" element={<CarProfilePage />} />
           <Route path="/cars/new" element={<p>Car onboarding placeholder</p>} />
+          <Route path="/dashboard" element={<p>Dashboard placeholder</p>} />
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
@@ -90,8 +99,29 @@ describe("CarProfilePage — viewing", () => {
     expect(screen.getByText("Inline-4")).toBeInTheDocument();
     expect(screen.getByText("Gasoline")).toBeInTheDocument();
     expect(screen.getByText("32")).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+    expect(screen.getByText("fwd")).toBeInTheDocument();
+    expect(screen.getByText("a")).toBeInTheDocument();
+    expect(screen.getByText("55")).toBeInTheDocument();
     expect(screen.getByText("ABC-123")).toBeInTheDocument();
     expect(screen.getByText("1HGCM82633A004352")).toBeInTheDocument();
+  });
+
+  it("shows a placeholder dash for spec-autofill fields that were never set (edge case)", async () => {
+    const {
+      cylinders,
+      drivetrain,
+      transmission,
+      fuel_tank_capacity_liters,
+      ...carWithoutAutofill
+    } = SAMPLE_CAR;
+    mockCarsTable({ selectResult: { data: carWithoutAutofill, error: null } });
+
+    renderAt("/cars/mine");
+
+    expect(await screen.findByText("Toyota")).toBeInTheDocument();
+    const dashes = screen.getAllByText("—");
+    expect(dashes.length).toBeGreaterThanOrEqual(4);
   });
 
   it("displays a car looked up by id at /cars/:carId (normal case)", async () => {
@@ -217,5 +247,135 @@ describe("CarProfilePage — editing", () => {
 
     expect(screen.getByText("Corolla")).toBeInTheDocument();
     expect(screen.queryByText("Discarded")).not.toBeInTheDocument();
+  });
+});
+
+describe("CarProfilePage — fuel tank capacity (CAR-44)", () => {
+  it("saves an edited tank capacity as a number scoped to the car's id", async () => {
+    const user = userEvent.setup();
+    const { update } = mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      updateResult: {
+        data: { ...SAMPLE_CAR, fuel_tank_capacity_liters: 60 },
+        error: null,
+      },
+    });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+
+    const input = screen.getByLabelText("Fuel Tank Capacity (L)");
+    expect(input).toHaveValue(55);
+    await user.clear(input);
+    await user.type(input, "60");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ fuel_tank_capacity_liters: 60 }),
+    );
+    await waitFor(() => expect(screen.getByText("60")).toBeInTheDocument());
+  });
+
+  it("allows clearing the tank capacity back to empty (saved as null)", async () => {
+    const user = userEvent.setup();
+    const { update } = mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      updateResult: { data: { ...SAMPLE_CAR, fuel_tank_capacity_liters: null }, error: null },
+    });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.clear(screen.getByLabelText("Fuel Tank Capacity (L)"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ fuel_tank_capacity_liters: null }),
+    );
+  });
+
+  it.each([["-5"], ["0"], ["430"], ["4"]])(
+    "rejects a tank capacity of %s (outside 5-200 L) without saving (invalid input)",
+    async (typed) => {
+      const user = userEvent.setup();
+      const { update } = mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+
+      renderAt("/cars/mine");
+      await user.click(await screen.findByRole("button", { name: "Edit" }));
+      const input = screen.getByLabelText("Fuel Tank Capacity (L)");
+      await user.clear(input);
+      await user.type(input, typed);
+      await user.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(
+        await screen.findByText("Tank capacity must be between 5 and 200 liters."),
+      ).toBeInTheDocument();
+      expect(update).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts the boundary values 5 and 200", async () => {
+    const user = userEvent.setup();
+    const { update } = mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      updateResult: { data: { ...SAMPLE_CAR, fuel_tank_capacity_liters: 200 }, error: null },
+    });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    const input = screen.getByLabelText("Fuel Tank Capacity (L)");
+    await user.clear(input);
+    await user.type(input, "200");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ fuel_tank_capacity_liters: 200 }),
+    );
+  });
+});
+
+describe("CarProfilePage — deleting (CAR-38)", () => {
+  it("deletes the car and navigates to the Dashboard after confirming (normal case)", async () => {
+    const user = userEvent.setup();
+    const { eqForDelete } = mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+    });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Delete Car" }));
+    await user.click(screen.getByRole("button", { name: "Yes, Delete" }));
+
+    expect(eqForDelete).toHaveBeenCalledWith("id", "car-456");
+    await waitFor(() =>
+      expect(screen.getByText("Dashboard placeholder")).toBeInTheDocument(),
+    );
+  });
+
+  it("does not delete when the confirmation is cancelled (edge case)", async () => {
+    const user = userEvent.setup();
+    const { delete: carDelete } = mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+    });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Delete Car" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(carDelete).not.toHaveBeenCalled();
+    expect(screen.getByText("Corolla")).toBeInTheDocument();
+  });
+
+  it("shows a clear error and stays on the page when the delete fails", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      deleteResult: { error: { message: "new row violates row-level security policy" } },
+    });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Delete Car" }));
+    await user.click(screen.getByRole("button", { name: "Yes, Delete" }));
+
+    expect(await screen.findByText("new row violates row-level security policy")).toBeInTheDocument();
+    expect(screen.getByText("Corolla")).toBeInTheDocument();
   });
 });

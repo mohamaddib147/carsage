@@ -34,21 +34,24 @@ If a feature isn't listed in "Project Overview" above, treat it as out of scope.
 - **Frontend**: React (web)
 - **Backend/DB**: Supabase (Postgres + Auth + Storage) — already provisioned and schema deployed
 - **AI/Logic service**: FastAPI (Python) — for Trip Planner cost calculation and AI Advisor
-- **AI model**: Gemini (Google AI Studio free tier, e.g. `gemini-2.0-flash`) as primary, with automatic fallback to Groq's free tier (e.g. Llama 3.3 70B) if Gemini's rate limit is hit. Both have genuine free tiers with no credit card required. **Do not use xAI's Grok API** — it has no free tier and bills from the first call, so it doesn't serve the free-fallback purpose. The LLM call must be isolated in a single function/module so providers can be swapped without touching the rest of the codebase. See CAR-19.
+- **AI model**: Gemini (Google AI Studio free tier, `gemini-3.6-flash` — `gemini-2.0-flash` was retired by Google and returns 404; confirmed live on 2026-09-17) as primary, with automatic fallback to Groq's free tier (`openai/gpt-oss-120b` — `llama-3.3-70b-versatile` was retired from Groq's catalog and returns 404; confirmed live on 2026-09-17) if Gemini is rate-limited or temporarily unavailable. Both have genuine free tiers with no credit card required. **Do not use xAI's Grok API** — it has no free tier and bills from the first call, so it doesn't serve the free-fallback purpose. The LLM call must be isolated in a single function/module so providers can be swapped without touching the rest of the codebase. See CAR-19.
 - **Maps**: Google Maps API (Directions + Distance Matrix)
 - **Car identification/specs**: NHTSA vPIC API (`https://vpic.nhtsa.dot.gov/api/`, free, no key, official) for make/model/year/VIN lookup, combined with API Ninjas Cars API (free tier, api-ninjas.com) for detailed specs (MPG, cylinders, drivetrain, transmission). See CAR-34.
 - **Vehicle safety data (AI Advisor enrichment)**: NHTSA Recalls API + Complaints API (`api.nhtsa.gov`, free, no key, official, US-market only) — cross-check user-described issues against real recalls/complaints before falling back to LLM-only classification. See CAR-36.
+- **DIY video suggestions (AI Advisor enrichment)**: YouTube Data API v3 (`search.list`), free — 10,000 quota units/day, a search costs 100 units (~100 searches/day free). Only called when the recommendation is 'diy'. Requires two new nullable columns on `advisor_messages` (`video_url`, `video_title`) — apply via the Supabase MCP connector (already done). See CAR-40.
 - **Fuel prices**: no free live API covers Lebanon/Middle East (confirmed via research — GlobalPetrolPrices.com is paid, fuel-prices.eu only covers EU+UK). Built as a small scheduled scraper against Lebanon's Ministry of Energy and Water published weekly prices, cached in the database, with graceful fallback to the last known value and a user-overridable field on the Trip Planner form. See CAR-35.
 
-## Database (already live in Supabase — see `docs/CarSage_ERD.pdf`)
+## Database (schema evolves live in Supabase — docs/CarSage_ERD.pdf is a frozen historical snapshot, not maintained)
 
-Project: **CarSage** on Supabase (ref: `ehjvbkhoafldqfsivtrn`). Do not create new tables without checking the ERD first — the schema is finalized.
+Project: **CarSage** on Supabase (ref: `ehjvbkhoafldqfsivtrn`). The live Supabase schema is the sole source of truth — `docs/CarSage_ERD.pdf` was submitted as part of planning and is intentionally never updated again. Never edit it, regenerate it, or flag that it needs updating, even after a schema change.
+
+Always check the live schema via the Supabase MCP connector before writing queries or migrations — don't rely on the ERD PDF, which will drift out of date by design.
 
 Tables: `profiles`, `cars`, `trips`, `advisor_conversations`, `advisor_messages`. All have row-level security enabled — every policy scopes to `auth.uid()`. Never bypass RLS by using the service key from the frontend; the service key belongs in the FastAPI backend only.
 
-Full field-by-field definitions, types, and relationships are in `docs/CarSage_ERD.pdf`.
+Full field-by-field definitions, types, and relationships for the schema AS IT STOOD AT SUBMISSION are in `docs/CarSage_ERD.pdf` — historical reference only, not current.
 
-**If a Supabase MCP connector is configured** in this environment (scoped to project ref `ehjvbkhoafldqfsivtrn`): use it to check the live schema and RLS policies directly before writing queries, instead of relying on the ERD PDF alone — the live database is always the source of truth if the two ever disagree. You can also use it to apply migrations if a task genuinely requires a schema change, but confirm with me first since the schema is meant to be finalized.
+**If a Supabase MCP connector is configured** in this environment (scoped to project ref `ehjvbkhoafldqfsivtrn`): use it to check the live schema and RLS policies directly before writing queries — this is the only reliable source. You can also use it to apply migrations if a task genuinely requires a schema change, but confirm with me first. Never touch `docs/CarSage_ERD.pdf` when you do.
 
 ## Environment Variables
 
@@ -56,7 +59,39 @@ Create `.env` files (never commit them — see `.gitignore`) based on `frontend/
 
 **Frontend**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_BASE_URL`
 
-**Backend**: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_MAPS_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `API_NINJAS_KEY`, `ALLOWED_ORIGINS`
+**Backend**: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_MAPS_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `API_NINJAS_KEY`, `YOUTUBE_API_KEY`, `ALLOWED_ORIGINS`
+
+## Deployment Notes
+
+- **Fuel price scraper (CAR-50) must be re-verified after the backend is deployed.** Its source, L'Orient Today (`today.lorientlejour.com`), sits behind Cloudflare, which returns 403 to `httpx` even with a browser User-Agent — so `backend/app/services/fuel_prices.py` fetches with `urllib` instead (which Cloudflare currently lets through). A hosting provider's IP range can be blocked or challenged differently than local dev, so once deployed, call `GET /trip-planner/fuel-prices` against a stale/empty cache and confirm the `fuel_prices.source_label` in the database is a `today.lorientlejour.com/article/...` URL. If it is blocked, the app degrades gracefully to the last cached price rather than failing — but that price will go stale.
+
+## QA / Design Review Pass
+
+When asked to run a "QA pass" or "act as QA," do the following across all built screens:
+
+1. If Playwright isn't already a dev dependency, install it (`npm install -D playwright` or equivalent) — this is a one-time setup, not a new feature, so it doesn't need a Jira task.
+2. Start the dev server, then use Playwright to take a screenshot of each implemented screen (both logged-out and logged-in states where relevant — this matters, since auth-state bugs are easy to miss otherwise).
+3. Compare each screenshot against its reference in `docs/stitch_carsage_landing_page/` (see Design Reference above) and against the actual behavior expected per that screen's Jira task acceptance criteria — not just visually, but functionally (e.g., does the header correctly reflect whether someone is logged in).
+4. Categorize findings into two types:
+   - **Clear bugs** (layout broken, wrong data shown, auth state wrong, spacing/alignment clearly off from reference): fix these directly, no need to check in first.
+   - **Subjective/design-judgment calls** (a color that could arguably be different, copy tone, optional polish): report these and wait for a decision rather than guessing.
+5. Report back a summary: what was checked, what was fixed automatically, and what's flagged for a decision. Use the normal commit rules (one focused commit per fix, no AI attribution). No Jira task needed for this pass unless a fix uncovers something substantial enough to warrant one — use judgment, and ask if unsure.
+
+## Design Reference (in `docs/stitch_carsage_landing_page/`)
+
+This folder contains the actual Stitch-generated wireframes for every screen — the real visual source of truth, more detailed than the summary in `docs/CarSage_Wireframes.pdf`. Each subfolder has a `screen.png` (visual reference) and `code.html` (structure/layout reference) for one screen:
+
+- `carsage_modern_marketing_landing_page/` — Landing Page
+- `carsage_sign_up_authentication/` — Sign Up / Log In
+- `carsage_dashboard_vehicle_hub/` — Dashboard / Home
+- `carsage_add_your_car/` — Car Onboarding
+- `carsage_car_profile/` — Car Profile
+- `carsage_trip_planner/` — Trip Planner
+- `carsage_ai_advisor/` — AI Advisor
+- `carsage_logo/` — Logo
+- `carsage/` — overall design system reference (colors, typography, spacing)
+
+**Rule: before and while building or fixing any screen's UI, open the matching subfolder here and match its layout, spacing, and visual style** — not just the color palette from the Design System section below. If the built UI doesn't visually match its `screen.png`, that's a bug, not a style preference. Remember these are MVP-trimmed references (see "Explicitly OUT OF SCOPE" above) — match the visual style, not any out-of-scope features still visible in these images.
 
 ## Design System
 
@@ -75,7 +110,7 @@ British Racing Green (`#00594C`) primary, cream (`#F5F1E8`) background, dark gra
 
 Follow this exact loop for every single task. Do not skip or reorder steps.
 
-1. **Check existing state first.** Before writing anything, review what's already in the repo (existing files, `docs/FILE_INDEX.md`, recent commits) so you don't duplicate work or contradict something already built. Read the task's acceptance criteria directly from Jira via the connector and restate them back before starting.
+1. **Check existing state first.** Before writing anything, review what's already in the repo (existing files, `docs/FILE_INDEX.md`, recent commits) so you don't duplicate work or contradict something already built. Read the task's acceptance criteria directly from Jira via the connector and restate them back before starting. **If the task touches UI, also open the matching subfolder in `docs/stitch_carsage_landing_page/` (see Design Reference below) and match it visually — do not guess the layout.**
 2. **Implement just this one task.** Nothing from later tasks, nothing "while I'm at it."
 3. **Document as you go:**
    - Every file starts with a header comment stating its purpose in one or two lines (e.g., "Handles Trip Planner cost calculation logic").
@@ -84,10 +119,10 @@ Follow this exact loop for every single task. Do not skip or reorder steps.
    - Update `docs/FILE_INDEX.md` with one line per new or changed file, in the format: `path/to/file.ext — what this file does`. This is the project-wide map of what every file is for; keep it current every task, not just at the end.
 4. **Write unit test(s) and run them.** Cover the normal/expected case, invalid input, and at least one edge case. Actually run the test suite and show me the passing output — a task is not done until its tests are written *and* run *and* pass, not just written.
 5. **Commit and push to the current sprint branch.** One focused, meaningful commit (see Git & Commit Rules for the branch strategy). Never move to step 6 with uncommitted or unpushed work.
-6. **Update Jira, report back, and stop.** Transition the task's status and add a comment summarizing what was done directly in Jira via the connector. Then tell me:
+6. **Update Jira, report back, and stop.** Add a comment on the Jira task summarizing what was done, directly via the connector. Set the status to **In Progress** (or leave it as-is if already there) — **do not transition it to Done**. I log my own hours and mark tasks Done myself once I've verified and logged time. Then tell me:
    - What was built and which files changed.
    - The test results.
-   - What you just updated in Jira (status + comment text).
+   - What you just updated in Jira (comment text).
    - Then explicitly ask me to verify before continuing, and wait for my go-ahead. Do not start the next task in the sprint on your own.
 
 ## Git & Commit Rules
@@ -123,7 +158,7 @@ All work is tracked in Jira (project key `CAR`) via a connected Jira/Atlassian M
 
 Epics: Foundation (CAR-1), Onboarding & Profile (CAR-2), Trip Planner (CAR-3), AI Advisor (CAR-4), Security Review (CAR-5), Documentation & Submission (CAR-6), Project Planning (CAR-29). Each task has detailed acceptance criteria in Jira — read them directly via the connector at the start of each task and treat them as the source of truth for what "done" means.
 
-**Since the connector is live**: read each task's acceptance criteria directly from Jira rather than waiting for me to paste them. When a task is finished (step 6 of the task loop), update the Jira task yourself — transition its status and add a comment summarizing what was done — rather than just drafting text for me to paste. Still stop and tell me what you updated, and wait for my verification before starting the next task.
+**Since the connector is live**: read each task's acceptance criteria directly from Jira rather than waiting for me to paste them. When a task is finished (step 6 of the task loop), add a comment in Jira summarizing what was done and set status to In Progress — **never transition a task to Done yourself**. I log my own hours on each task and mark it Done myself once I've verified the work. Still stop and tell me what you updated, and wait for my verification before starting the next task.
 
 ## Reference Documents (in `docs/`)
 

@@ -21,6 +21,7 @@ def _require_env(name: str) -> str:
 
 SUPABASE_URL = _require_env("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = _require_env("SUPABASE_SERVICE_KEY")
+GOOGLE_MAPS_API_KEY = _require_env("GOOGLE_MAPS_API_KEY")
 
 # Comma-separated list of allowed frontend origins for CORS, e.g.
 # "http://localhost:5173,https://carsage.example.com"
@@ -30,6 +31,19 @@ ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 
-# Optional for this task — required once Trip Planner / AI Advisor are built.
-GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
-LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+# AI Advisor (CAR-19): Gemini is the primary provider (required). Groq is
+# an automatic fallback used only when Gemini rate-limits (429) — if it
+# isn't configured, that rare case surfaces as a clear error instead of
+# silently guessing.
+GEMINI_API_KEY = _require_env("GEMINI_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+
+# Optional: powers Car Onboarding's spec autofill (CAR-34). If unset, that
+# lookup just returns no API Ninjas data and the user fills specs manually
+# — it must never block onboarding.
+API_NINJAS_KEY = os.environ.get("API_NINJAS_KEY", "")
+
+# Optional: powers AI Advisor's DIY video suggestions (CAR-40). If unset,
+# that lookup just returns no video — it must never block or break a
+# classification response.
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")

@@ -1,7 +1,10 @@
 // Tests for the Add Your Car screen: required-field validation (normal
 // case + missing-field and invalid-year edge cases), a successful submit
-// writing the logged-in user's id onto the new row, and the insert-error
-// case. The Supabase client is mocked so no real network calls happen.
+// writing the logged-in user's id onto the new row, the insert-error
+// case, and the CAR-34 background spec-autofill lookup (fills empty
+// fields on success, leaves the form usable on failure). The Supabase
+// client and the backend apiFetch call are both mocked so no real
+// network calls happen.
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -9,7 +12,12 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import CarOnboardingPage from "./CarOnboardingPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
+import { apiFetch } from "../lib/apiClient.js";
 import { supabase } from "../lib/supabaseClient.js";
+
+vi.mock("../lib/apiClient.js", () => ({
+  apiFetch: vi.fn(),
+}));
 
 const LOGGED_IN_USER = { id: "user-123", email: "driver@example.com" };
 
@@ -51,6 +59,9 @@ beforeEach(() => {
   supabase.auth.getSession.mockResolvedValue({
     data: { session: { user: LOGGED_IN_USER } },
   });
+  // Default: no autofill data, so tests that don't care about CAR-34's
+  // lookup aren't affected by it running in the background.
+  apiFetch.mockResolvedValue({});
 });
 
 describe("CarOnboardingPage", () => {
@@ -197,4 +208,282 @@ describe("CarOnboardingPage", () => {
       screen.queryByText("Car profile placeholder"),
     ).not.toBeInTheDocument();
   });
+
+  it(
+    "auto-fills empty spec fields from the backend lookup and includes them in the insert (normal case)",
+    async () => {
+      const user = userEvent.setup();
+      apiFetch.mockResolvedValue({
+        vehicle_confirmed: true,
+        engine_type: "Passenger Car",
+        fuel_efficiency: 14.5,
+        cylinders: 4,
+        drivetrain: "fwd",
+        transmission: "a",
+      });
+      const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+      const select = vi.fn(() => ({ single }));
+      const insert = vi.fn(() => ({ select }));
+      supabase.from.mockReturnValue({ insert });
+
+      renderPage();
+      await fillRequiredFields(user);
+
+      await waitFor(
+        () =>
+          expect(screen.getByLabelText("Fuel Efficiency (km/L)")).toHaveValue(14.5),
+        { timeout: 3000 },
+      );
+      expect(apiFetch).toHaveBeenCalledWith(
+        expect.stringContaining("/cars/spec-suggestions?make=Toyota&model=Corolla&year=2020"),
+      );
+
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+      expect(insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          engine_type: "Passenger Car",
+          fuel_efficiency: 14.5,
+          cylinders: 4,
+          drivetrain: "fwd",
+          transmission: "a",
+        }),
+      );
+    },
+    10000,
+  );
+
+  it(
+    "leaves spec fields blank and still submits normally when the lookup fails (edge case)",
+    async () => {
+      const user = userEvent.setup();
+      apiFetch.mockRejectedValue(new Error("Could not reach the server."));
+      const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+      const select = vi.fn(() => ({ single }));
+      const insert = vi.fn(() => ({ select }));
+      supabase.from.mockReturnValue({ insert });
+
+      renderPage();
+      await fillRequiredFields(user);
+
+      await waitFor(() => expect(apiFetch).toHaveBeenCalled(), { timeout: 3000 });
+
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+      expect(insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          engine_type: null,
+          fuel_efficiency: null,
+          cylinders: null,
+          drivetrain: null,
+          transmission: null,
+        }),
+      );
+    },
+    10000,
+  );
+});
+
+describe("CarOnboardingPage — fuel tank capacity (CAR-44)", () => {
+  it(
+    "auto-fills the tank capacity when the lookup provides one, and saves it",
+    async () => {
+      const user = userEvent.setup();
+      apiFetch.mockResolvedValue({ fuel_tank_capacity_liters: 50 });
+      const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+      const select = vi.fn(() => ({ single }));
+      const insert = vi.fn(() => ({ select }));
+      supabase.from.mockReturnValue({ insert });
+
+      renderPage();
+      await fillRequiredFields(user);
+
+      await waitFor(
+        () => expect(screen.getByLabelText("Fuel Tank Capacity (L)")).toHaveValue(50),
+        { timeout: 3000 },
+      );
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+      expect(insert).toHaveBeenCalledWith(
+        expect.objectContaining({ fuel_tank_capacity_liters: 50 }),
+      );
+    },
+    10000,
+  );
+
+  it("accepts a manually entered tank capacity when the lookup has none", async () => {
+    const user = userEvent.setup();
+    apiFetch.mockResolvedValue({ fuel_tank_capacity_liters: null });
+    const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+    const select = vi.fn(() => ({ single }));
+    const insert = vi.fn(() => ({ select }));
+    supabase.from.mockReturnValue({ insert });
+
+    renderPage();
+    await fillRequiredFields(user);
+    await user.type(screen.getByLabelText("Fuel Tank Capacity (L)"), "45.5");
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ fuel_tank_capacity_liters: 45.5 }),
+    );
+  });
+
+  it("saves null (and never blocks) when tank capacity is left blank", async () => {
+    const user = userEvent.setup();
+    const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+    const select = vi.fn(() => ({ single }));
+    const insert = vi.fn(() => ({ select }));
+    supabase.from.mockReturnValue({ insert });
+
+    renderPage();
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ fuel_tank_capacity_liters: null }),
+    );
+  });
+
+  it.each([["0"], ["-5"], ["430"], ["4"]])(
+    "rejects a tank capacity of %s (outside 5-200 L) without saving (invalid input)",
+    async (typed) => {
+      const user = userEvent.setup();
+      renderPage();
+      await fillRequiredFields(user);
+      await user.type(screen.getByLabelText("Fuel Tank Capacity (L)"), typed);
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+      expect(
+        await screen.findByText("Tank capacity must be between 5 and 200 liters."),
+      ).toBeInTheDocument();
+      expect(supabase.from).not.toHaveBeenCalled();
+    },
+  );
+});
+
+
+describe("CarOnboardingPage — tank capacity source note (CAR-44)", () => {
+  const AI_NOTE = /Estimated by AI for this model/;
+  const LOOKUP_NOTE = /Looked up on auto-data\.net/;
+  const waitForTank = (value) =>
+    waitFor(() => expect(screen.getByLabelText("Fuel Tank Capacity (L)")).toHaveValue(value), {
+      timeout: 3000,
+    });
+
+  it(
+    "fills a looked-up tank capacity, says it came from auto-data.net, and saves it",
+    async () => {
+      const user = userEvent.setup();
+      apiFetch.mockResolvedValue({
+        fuel_tank_capacity_liters: 64,
+        fuel_tank_capacity_source: "auto_data",
+      });
+      const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+      const select = vi.fn(() => ({ single }));
+      const insert = vi.fn(() => ({ select }));
+      supabase.from.mockReturnValue({ insert });
+
+      renderPage();
+      await fillRequiredFields(user);
+      await waitForTank(64);
+
+      expect(screen.getByText(LOOKUP_NOTE)).toBeInTheDocument();
+      expect(screen.queryByText(AI_NOTE)).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+      expect(insert).toHaveBeenCalledWith(
+        expect.objectContaining({ fuel_tank_capacity_liters: 64 }),
+      );
+    },
+    10000,
+  );
+
+  it(
+    "flags an AI-estimated tank capacity as an estimate and saves it",
+    async () => {
+      const user = userEvent.setup();
+      apiFetch.mockResolvedValue({
+        fuel_tank_capacity_liters: 62.1,
+        fuel_tank_capacity_source: "ai_estimate",
+      });
+      const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+      const select = vi.fn(() => ({ single }));
+      const insert = vi.fn(() => ({ select }));
+      supabase.from.mockReturnValue({ insert });
+
+      renderPage();
+      await fillRequiredFields(user);
+      await waitForTank(62.1);
+
+      expect(screen.getByText(AI_NOTE)).toBeInTheDocument();
+      expect(screen.queryByText(LOOKUP_NOTE)).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+      expect(insert).toHaveBeenCalledWith(
+        expect.objectContaining({ fuel_tank_capacity_liters: 62.1 }),
+      );
+    },
+    10000,
+  );
+
+  it(
+    "drops the note as soon as the user edits the value",
+    async () => {
+      const user = userEvent.setup();
+      apiFetch.mockResolvedValue({
+        fuel_tank_capacity_liters: 64,
+        fuel_tank_capacity_source: "auto_data",
+      });
+
+      renderPage();
+      await fillRequiredFields(user);
+      await waitFor(() => expect(screen.getByText(LOOKUP_NOTE)).toBeInTheDocument(), {
+        timeout: 3000,
+      });
+
+      await user.type(screen.getByLabelText("Fuel Tank Capacity (L)"), "1");
+
+      expect(screen.queryByText(LOOKUP_NOTE)).not.toBeInTheDocument();
+    },
+    10000,
+  );
+
+  it(
+    "shows no note for a value from API Ninjas or when there is no source",
+    async () => {
+      const user = userEvent.setup();
+      apiFetch.mockResolvedValue({
+        fuel_tank_capacity_liters: 50,
+        fuel_tank_capacity_source: "api_ninjas",
+      });
+
+      renderPage();
+      await fillRequiredFields(user);
+      await waitForTank(50);
+
+      expect(screen.queryByText(LOOKUP_NOTE)).not.toBeInTheDocument();
+      expect(screen.queryByText(AI_NOTE)).not.toBeInTheDocument();
+    },
+    10000,
+  );
+
+  it(
+    "does not overwrite a tank capacity the user already typed, or label it",
+    async () => {
+      const user = userEvent.setup();
+      let resolveLookup;
+      apiFetch.mockReturnValue(new Promise((resolve) => (resolveLookup = resolve)));
+
+      renderPage();
+      await fillRequiredFields(user);
+      await user.type(screen.getByLabelText("Fuel Tank Capacity (L)"), "55");
+      await waitFor(() => expect(apiFetch).toHaveBeenCalled(), { timeout: 3000 });
+      resolveLookup({ fuel_tank_capacity_liters: 64, fuel_tank_capacity_source: "auto_data" });
+
+      await waitForTank(55);
+      expect(screen.queryByText(LOOKUP_NOTE)).not.toBeInTheDocument();
+    },
+    10000,
+  );
 });

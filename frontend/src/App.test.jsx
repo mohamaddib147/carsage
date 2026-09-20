@@ -68,10 +68,36 @@ describe("App routing — public screens", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders nav links for all 7 screens", () => {
+  it("logged out: the nav is only the brand, the two marketing anchors and Sign Up / Log In", async () => {
     renderAtPath("/");
+    // Wait for the session to resolve so the auth control has rendered.
+    await screen.findByRole("link", { name: "Sign Up / Log In" });
     const nav = screen.getByRole("navigation");
-    expect(nav.querySelectorAll("a")).toHaveLength(7);
+
+    expect([...nav.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
+      "/",
+      "/#features",
+      "/#how-it-works",
+      "/login",
+    ]);
+  });
+
+  it("logged in: the nav shows the full app menu (brand + 5 screens) and a Log Out button", async () => {
+    supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: "user-123", email: "driver@example.com" } } },
+    });
+    renderAtPath("/");
+    await screen.findByRole("button", { name: "Log Out" });
+    const nav = screen.getByRole("navigation");
+
+    expect([...nav.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
+      "/",
+      "/dashboard",
+      "/cars/new",
+      "/cars/mine",
+      "/trip-planner",
+      "/advisor",
+    ]);
   });
 });
 

@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base { html, body { margin: 0; padding: 0; } body { overscroll-behavior: none; } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "on-secondary": "#ffffff",
+          "primary-container": "#00594c",
+          "on-primary-fixed-variant": "#005145",
+          "outline-variant": "#bec9c5",
+          "surface-tint": "#1e6a5c",
+          "surface-container-lowest": "#ffffff",
+          "tertiary": "#383734",
+          "surface-container-low": "#f6f3f2",
+          "on-primary": "#ffffff",
+          "primary": "#004036",
+          "secondary-container": "#fdd275",
+          "surface-bright": "#fcf9f8",
+          "surface": "#fcf9f8",
+          "on-tertiary-fixed-variant": "#474743",
+          "surface-container-highest": "#e4e2e1",
+          "background": "#fcf9f8",
+          "on-primary-fixed": "#00201a",
+          "surface-variant": "#e4e2e1",
+          "on-tertiary-fixed": "#1c1c19",
+          "on-primary-container": "#87cdbd",
+          "surface-dim": "#dcd9d9",
+          "on-secondary-fixed": "#261a00",
+          "on-secondary-fixed-variant": "#5b4300",
+          "on-background": "#1b1c1c",
+          "on-tertiary-container": "#c2bfbb",
+          "secondary-fixed": "#ffdf9e",
+          "tertiary-fixed-dim": "#c8c6c2",
+          "secondary-fixed-dim": "#ebc166",
+          "outline": "#6f7976",
+          "on-secondary-container": "#775800",
+          "error": "#ba1a1a",
+          "tertiary-fixed": "#e5e2dd",
+          "on-error-container": "#93000a",
+          "tertiary-container": "#4f4e4b",
+          "inverse-on-surface": "#f3f0f0",
+          "error-container": "#ffdad6",
+          "secondary": "#795902",
+          "on-surface-variant": "#3f4946",
+          "inverse-primary": "#8dd4c3",
+          "on-surface": "#1b1c1c",
+          "primary-fixed-dim": "#8dd4c3",
+          "inverse-surface": "#303030",
+          "on-tertiary": "#ffffff",
+          "primary-fixed": "#a9f0df",
+          "on-error": "#ffffff",
+          "surface-container-high": "#eae7e7",
+          "surface-container": "#f0eded"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "gutter-desktop": "2rem",
+          "gutter": "1rem",
+          "space-lg": "1.5rem",
+          "space-xl": "2.5rem",
+          "margin-desktop": "3rem",
+          "gutter-tablet": "1.5rem",
+          "margin": "1rem",
+          "space-md": "1rem",
+          "space-xs": "0.25rem",
+          "space-sm": "0.5rem",
+          "margin-tablet": "2rem"
+        },
+        "fontFamily": {
+          "body-md": [
+            "Plus Jakarta Sans"
+          ],
+          "headline-sm": [
+            "Plus Jakarta Sans"
+          ],
+          "headline-lg-mobile": [
+            "Plus Jakarta Sans"
+          ],
+          "label-sm": [
+            "Plus Jakarta Sans"
+          ],
+          "display": [
+            "Plus Jakarta Sans"
+          ],
+          "headline-md": [
+            "Plus Jakarta Sans"
+          ],
+          "body-lg": [
+            "Plus Jakarta Sans"
+          ],
+          "label-md": [
+            "Plus Jakarta Sans"
+          ],
+          "headline-lg": [
+            "Plus Jakarta Sans"
+          ],
+          "display-mobile": [
+            "Plus Jakarta Sans"
+          ],
+          "body-sm": [
+            "Plus Jakarta Sans"
+          ],
+          "caption": [
+            "Plus Jakarta Sans"
+          ]
+        },
+        "fontSize": {
+          "body-md": [
+            "15px",
+            {
+              "lineHeight": "24px",
+              "letterSpacing": "0em",
+              "fontWeight": "400"
+            }
+          ],
+          "headline-sm": [
+            "18px",
+            {
+              "lineHeight": "26px",
+              "letterSpacing": "0em",
+              "fontWeight": "600"
+            }
+          ],
+          "headline-lg-mobile": [
+            "26px",
+            {
+              "lineHeight": "34px",
+              "letterSpacing": "-0.01em",
+              "fontWeight": "600"
+            }
+          ],
+          "label-sm": [
+            "12px",
+            {
+              "lineHeight": "16px",
+              "letterSpacing": "0.03em",
+              "fontWeight": "600"
+            }
+          ],
+          "display": [
+            "40px",
+            {
+              "lineHeight": "48px",
+              "letterSpacing": "-0.02em",
+              "fontWeight": "700"
+            }
+          ],
+          "headline-md": [
+            "22px",
+            {
+              "lineHeight": "30px",
+              "letterSpacing": "-0.01em",
+              "fontWeight": "600"
+            }
+          ],
+          "body-lg": [
+            "17px",
+            {
+              "lineHeight": "26px",
+              "letterSpacing": "-0.005em",
+              "fontWeight": "400"
+            }
+          ],
+          "label-md": [
+            "14px",
+            {
+              "lineHeight": "20px",
+              "letterSpacing": "0.01em",
+              "fontWeight": "500"
+            }
+          ],
+          "headline-lg": [
+            "32px",
+            {
+              "lineHeight": "40px",
+              "letterSpacing": "-0.015em",
+              "fontWeight": "600"
+            }
+          ],
+          "display-mobile": [
+            "32px",
+            {
+              "lineHeight": "40px",
+              "letterSpacing": "-0.01em",
+              "fontWeight": "700"
+            }
+          ],
+          "body-sm": [
+            "13px",
+            {
+              "lineHeight": "20px",
+              "letterSpacing": "0.005em",
+              "fontWeight": "400"
+            }
+          ],
+          "caption": [
+            "11px",
+            {
+              "lineHeight": "14px",
+              "letterSpacing": "0.04em",
+              "fontWeight": "500"
+            }
+          ]
+        }
+      }
+    }
+  }</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased selection:bg-primary-fixed selection:text-on-primary-fixed"><header class="fixed top-0 left-0 right-0 z-50 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 w-full max-w-[1200px] mx-auto px-margin md:px-margin-tablet lg:px-margin-desktop flex items-center justify-between"><div class="flex items-center gap-space-sm"><img alt="Brand logo. - Primary color: #00594c
+- Font: plusJakartaSans
+- Mode: light
+- Roundness: rounded-md
+" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VsHRtxtG1Sm8Y86yoV4-Hwc5QHodXQPj3PHg3FSVXxeQ43f-ySIKvdGxLahcSx7nSt7Dfx7zdVDryAYa5dETZ85ZZGfgtHN70imFYISujG9EYVBVym_7KeSL9x1ctDJtGUxNkpdo2V6w_58Bwxx8Ora-Qvr8I69lg9Nh6PfJeVSwVXkWLiFdHjc6dspz2ogkfUQ72QwB8OervnZlKZtNGa7IKl-gY7zbJpoxI9f6VQLYKPbo5z90zOs3I"/><span class="font-headline-sm text-headline-sm text-primary tracking-tight">CarSage</span></div><div class="flex items-center gap-space-md"><div class="hidden sm:flex items-center gap-space-xs px-space-sm py-space-xs rounded-full bg-surface-container-low text-on-surface-variant"><span class="material-symbols-outlined text-[16px] text-primary">verified_user</span><span class="font-label-sm text-label-sm">Verified Co-Pilot Encryption</span></div><a class="flex items-center gap-space-xs font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">arrow_back</span><span>Back to Home</span></a></div></div></header><main class="w-full min-h-screen pt-16 flex flex-col justify-center items-center px-margin py-space-xl bg-surface"><div class="flex flex-col w-full items-center justify-center py-space-md">
+<!-- Decorative Ambient Glow Behind Card -->
+<div class="relative w-full max-w-[480px]">
+<div class="absolute -top-12 left-1/2 -translate-x-1/2 w-96 h-96 bg-primary/5 rounded-full blur-3xl pointer-events-none -z-10"></div>
+<div class="absolute -bottom-8 right-0 w-64 h-64 bg-secondary-fixed/30 rounded-full blur-2xl pointer-events-none -z-10"></div>
+<!-- Main Authentication Card -->
+<div class="w-full bg-surface-container-lowest rounded-xl shadow-[0_12px_36px_rgba(43,43,43,0.06),0_2px_8px_rgba(43,43,43,0.03)] p-space-lg md:p-space-xl transition-all duration-300">
+<!-- Card Brand & Badge Header -->
+<div class="flex flex-col items-center text-center mb-space-lg">
+<div class="relative flex items-center justify-center w-12 h-12 rounded-xl bg-surface-container-low text-primary mb-space-sm shadow-sm">
+<span class="material-symbols-outlined text-[26px]">garage_home</span>
+<span class="absolute -top-1 -right-1 flex h-3 w-3">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-3 w-3 bg-secondary"></span>
+</span>
+</div>
+<!-- Segmented Tab Switcher -->
+<div class="w-full bg-surface-container-low p-1 rounded-xl flex items-center mb-space-md max-w-[280px]">
+<button class="flex-1 py-1.5 rounded-lg font-label-md text-label-md text-on-primary bg-primary shadow-sm transition-all duration-200" id="tab-signup" type="button">
+            Sign Up
+          </button>
+<button class="flex-1 py-1.5 rounded-lg font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-all duration-200" id="tab-login" type="button">
+            Log In
+          </button>
+</div>
+<!-- Title & Quiet Subtitle -->
+<h1 class="font-headline-md text-headline-md text-on-surface tracking-tight mb-1" id="auth-title">
+          Create your account
+        </h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant max-w-[340px]" id="auth-subtitle">
+          Join mindful drivers managing maintenance, service logs, and road trips with ease.
+        </p>
+</div>
+<!-- Form Container -->
+<form class="space-y-space-md" id="auth-form" onsubmit="event.preventDefault();">
+<!-- Full Name Field -->
+<div class="space-y-1.5" id="field-name-group">
+<label class="block font-label-md text-label-md text-on-surface" for="fullname">
+            Full Name
+          </label>
+<div class="relative">
+<input class="w-full h-12 px-space-md rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none shadow-sm transition-all duration-150" id="fullname" placeholder="Eleanor Vance" type="text"/>
+<span class="material-symbols-outlined absolute right-3.5 top-3 text-outline text-[20px] pointer-events-none">
+              person
+            </span>
+</div>
+</div>
+<!-- Email Address Field -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md text-on-surface" for="email">
+            Email Address
+          </label>
+<div class="relative">
+<input class="w-full h-12 px-space-md rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none shadow-sm transition-all duration-150" id="email" placeholder="eleanor@example.com" type="email"/>
+<span class="material-symbols-outlined absolute right-3.5 top-3 text-outline text-[20px] pointer-events-none">
+              mail
+            </span>
+</div>
+</div>
+<!-- Password Field & Inline Helper/Error -->
+<div class="space-y-1.5">
+<div class="flex items-center justify-between">
+<label class="block font-label-md text-label-md text-on-surface" for="password" id="password-label">
+              Create Password
+            </label>
+<a class="hidden font-caption text-caption text-primary hover:underline" href="#" id="forgot-password-link">
+              Forgot password?
+            </a>
+</div>
+<div class="relative">
+<input class="w-full h-12 px-space-md pr-11 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none shadow-sm transition-all duration-150" id="password" placeholder="••••••••" type="password" value="roadtrip24"/>
+<button aria-label="Toggle password visibility" class="absolute right-3 top-3 text-outline hover:text-on-surface transition-colors p-0.5 rounded-lg flex items-center justify-center" id="toggle-password" type="button">
+<span class="material-symbols-outlined text-[20px]" id="eye-icon">visibility</span>
+</button>
+</div>
+<!-- Realistic Subtle Error / Helper Alert -->
+<div class="flex items-start gap-space-xs p-space-sm bg-error-container/40 rounded-lg transition-all mt-1">
+<span class="material-symbols-outlined text-error text-[18px] shrink-0 mt-0.5">error</span>
+<div class="flex-1">
+<p class="font-body-sm text-body-sm text-error leading-snug">
+                Password must be at least 8 characters and contain at least one special character.
+              </p>
+</div>
+</div>
+</div>
+<!-- Vehicle Quick-Add (Collapsible Drawer Option) -->
+<div class="p-space-sm rounded-xl bg-surface-container-low transition-all" id="vehicle-quick-add">
+<label class="flex items-center gap-space-sm cursor-pointer select-none">
+<input class="w-4 h-4 rounded text-primary accent-primary focus:ring-0 cursor-pointer" id="vin-toggle" type="checkbox"/>
+<span class="font-label-md text-label-md text-on-surface flex items-center gap-1.5">
+<span>I already have my vehicle VIN or Model</span>
+<span class="font-caption text-caption bg-secondary-container text-on-secondary-container px-1.5 py-0.5 rounded-full font-medium">Optional</span>
+</span>
+</label>
+<div class="hidden pt-space-sm mt-space-xs space-y-1.5" id="vin-input-panel">
+<input class="w-full h-10 px-space-sm rounded-lg bg-surface-container-lowest text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none uppercase tracking-wider" placeholder="e.g. 1HGCR2F83HA000000 or 2022 Volvo XC60" type="text"/>
+<p class="font-caption text-caption text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-primary">auto_awesome</span>
+              Auto-imports OEM recommended service schedules &amp; fluid specs.
+            </p>
+</div>
+</div>
+<!-- Terms Agreement Line -->
+<p class="font-caption text-caption text-on-surface-variant text-center px-space-sm" id="terms-line">
+          By signing up, you agree to CarSage’s <a class="text-primary hover:underline" href="#">Terms of Service</a> and <a class="text-primary hover:underline" href="#">Privacy Policy</a>.
+        </p>
+<!-- Primary Action Button -->
+<button class="w-full h-12 bg-primary hover:bg-primary-container active:scale-[0.99] text-on-primary font-headline-sm text-headline-sm font-semibold rounded-xl shadow-md transition-all duration-150 flex items-center justify-center gap-space-xs group" id="submit-button" type="submit">
+<span id="button-label">Sign Up</span>
+<span class="material-symbols-outlined text-[20px] transition-transform duration-200 group-hover:translate-x-0.5">arrow_forward</span>
+</button>
+</form>
+<!-- Bottom Account Switcher Link -->
+<div class="mt-space-md text-center">
+<p class="font-body-sm text-body-sm text-on-surface" id="bottom-switch-text">
+          Already have an account? 
+          <button class="font-semibold text-primary underline underline-offset-4 decoration-primary/40 hover:decoration-primary cursor-pointer transition-colors ml-1" id="switch-to-login" type="button">
+            Log In
+          </button>
+</p>
+</div>
+<!-- SSO Divider & Buttons -->
+<div class="relative my-space-lg flex items-center justify-center">
+<div class="w-full h-[1px] bg-surface-container-highest"></div>
+<span class="absolute px-space-sm bg-surface-container-lowest font-caption text-caption text-on-surface-variant uppercase tracking-wider">
+          Or continue with
+        </span>
+</div>
+<div class="grid grid-cols-2 gap-space-sm">
+<!-- Google SSO -->
+<button class="h-11 px-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-label-md text-label-md flex items-center justify-center gap-space-xs transition-colors shadow-sm" type="button">
+<svg class="w-4 h-4" viewbox="0 0 24 24">
+<path d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" fill="#4285F4"></path>
+<path d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z" fill="#34A853"></path>
+<path d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.14-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z" fill="#FBBC05"></path>
+<path d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" fill="#EA4335"></path>
+</svg>
+<span>Google</span>
+</button>
+<!-- Apple SSO -->
+<button class="h-11 px-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-label-md text-label-md flex items-center justify-center gap-space-xs transition-colors shadow-sm" type="button">
+<svg class="w-4 h-4 fill-current text-on-surface" viewbox="0 0 170 170">
+<path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.69-3.04-7.6-7.85-11.75-14.42-6.19-9.82-11.05-21.2-14.58-34.14-3.52-12.94-5.28-24.62-5.28-35.03 0-14.35 3.59-26.3 10.77-35.85 7.18-9.55 16.27-14.39 27.27-14.52 4.8 0 10.05 1.27 15.75 3.82 5.71 2.54 9.48 3.88 11.33 4 2.11-.12 6.09-1.52 11.95-4.18 5.86-2.66 11.06-3.88 15.6-3.66 12.18.66 21.84 5.3 28.98 13.91-10.68 6.42-15.91 15.35-15.69 26.8.22 8.92 3.63 16.34 10.23 22.26 6.6 5.92 14.43 9.4 23.49 10.45-2.07 6.32-4.58 12.72-7.53 19.2zm-28.53-109.91c0 6.64-2.4 12.92-7.2 17.84-4.8 4.92-10.76 7.9-17.88 7.9-.33-.88-.5-1.77-.5-2.67 0-6.64 2.58-13.06 7.74-18.25 5.16-5.19 11.37-8.08 17.6-8.67.14 1.27.24 2.55.24 3.85z"></path>
+</svg>
+<span>Apple</span>
+</button>
+</div>
+<!-- Feature Highlight / Testimonial micro-bar -->
+<div class="mt-space-md p-space-sm rounded-xl bg-surface-container-low flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[18px]">verified</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-1">
+<span class="font-semibold text-on-surface">Certified Service Log:</span> Digital warranty-safe ledger.
+        </p>
+</div>
+</div>
+<!-- Trust & Security Footer Outside Card -->
+<div class="mt-space-md flex flex-col sm:flex-row items-center justify-center gap-space-xs sm:gap-space-sm text-center">
+<div class="inline-flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container-low text-on-surface-variant shadow-sm">
+<span class="material-symbols-outlined text-secondary text-[16px]">lock</span>
+<span class="font-label-sm text-label-sm tracking-wide">
+          256-bit encrypted telemetry
+        </span>
+</div>
+<span class="hidden sm:inline text-outline text-xs">•</span>
+<span class="font-caption text-caption text-on-surface-variant">
+        We never sell your driving data or location history.
+      </span>
+</div>
+</div>
+</div>
+<script>
+  // Tab Switching & Interactive State Logic
+  const tabSignup = document.getElementById('tab-signup');
+  const tabLogin = document.getElementById('tab-login');
+  const authTitle = document.getElementById('auth-title');
+  const authSubtitle = document.getElementById('auth-subtitle');
+  const fieldNameGroup = document.getElementById('field-name-group');
+  const passwordLabel = document.getElementById('password-label');
+  const forgotPasswordLink = document.getElementById('forgot-password-link');
+  const vehicleQuickAdd = document.getElementById('vehicle-quick-add');
+  const termsLine = document.getElementById('terms-line');
+  const buttonLabel = document.getElementById('button-label');
+  const bottomSwitchText = document.getElementById('bottom-switch-text');
+  const switchToLoginBtn = document.getElementById('switch-to-login');
+  const vinToggle = document.getElementById('vin-toggle');
+  const vinInputPanel = document.getElementById('vin-input-panel');
+  const togglePasswordBtn = document.getElementById('toggle-password');
+  const passwordInput = document.getElementById('password');
+  const eyeIcon = document.getElementById('eye-icon');
+
+  let currentMode = 'signup';
+
+  function setMode(mode) {
+    currentMode = mode;
+    if (mode === 'signup') {
+      tabSignup.className = "flex-1 py-1.5 rounded-lg font-label-md text-label-md text-on-primary bg-primary shadow-sm transition-all duration-200";
+      tabLogin.className = "flex-1 py-1.5 rounded-lg font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-all duration-200";
+      authTitle.textContent = "Create your account";
+      authSubtitle.textContent = "Join mindful drivers managing maintenance, service logs, and road trips with ease.";
+      fieldNameGroup.classList.remove('hidden');
+      vehicleQuickAdd.classList.remove('hidden');
+      termsLine.classList.remove('hidden');
+      forgotPasswordLink.classList.add('hidden');
+      passwordLabel.textContent = "Create Password";
+      buttonLabel.textContent = "Sign Up";
+      bottomSwitchText.innerHTML = `Already have an account? <button type="button" id="switch-to-login" class="font-semibold text-primary underline underline-offset-4 decoration-primary/40 hover:decoration-primary cursor-pointer transition-colors ml-1">Log In</button>`;
+      document.getElementById('switch-to-login').addEventListener('click', () => setMode('login'));
+    } else {
+      tabLogin.className = "flex-1 py-1.5 rounded-lg font-label-md text-label-md text-on-primary bg-primary shadow-sm transition-all duration-200";
+      tabSignup.className = "flex-1 py-1.5 rounded-lg font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-all duration-200";
+      authTitle.textContent = "Welcome back";
+      authSubtitle.textContent = "Sign in to inspect real-time vehicle health, records, and trip forecasts.";
+      fieldNameGroup.classList.add('hidden');
+      vehicleQuickAdd.classList.add('hidden');
+      termsLine.classList.add('hidden');
+      forgotPasswordLink.classList.remove('hidden');
+      passwordLabel.textContent = "Password";
+      buttonLabel.textContent = "Sign In";
+      bottomSwitchText.innerHTML = `Don&rsquo;t have an account? <button type="button" id="switch-to-signup" class="font-semibold text-primary underline underline-offset-4 decoration-primary/40 hover:decoration-primary cursor-pointer transition-colors ml-1">Create one</button>`;
+      document.getElementById('switch-to-signup').addEventListener('click', () => setMode('signup'));
+    }
+  }
+
+  tabSignup.addEventListener('click', () => setMode('signup'));
+  tabLogin.addEventListener('click', () => setMode('login'));
+  switchToLoginBtn.addEventListener('click', () => setMode('login'));
+
+  // VIN Drawer Expansion
+  vinToggle.addEventListener('change', (e) => {
+    if (e.target.checked) {
+      vinInputPanel.classList.remove('hidden');
+    } else {
+      vinInputPanel.classList.add('hidden');
+    }
+  });
+
+  // Password Visibility Toggle
+  togglePasswordBtn.addEventListener('click', () => {
+    if (passwordInput.type === 'password') {
+      passwordInput.type = 'text';
+      eyeIcon.textContent = 'visibility_off';
+    } else {
+      passwordInput.type = 'password';
+      eyeIcon.textContent = 'visibility';
+    }
+  });
+</script></main></body></html>

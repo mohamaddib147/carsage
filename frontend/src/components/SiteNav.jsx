@@ -1,13 +1,17 @@
-// Top navigation bar linking to every screen. Temporary aid for manually
-// verifying routing during development; also shows Log In/Sign Up vs Log
-// Out depending on auth state.
+// Top navigation bar shown on every screen: the CarSage brand mark on
+// the left (click to go to the Landing page), the centered links, and one
+// auth control on the right. The centered links depend on who is looking:
+// signed-out visitors get a simple marketing nav (Features / How it works,
+// anchors on the Landing page — no internal app routes), signed-in users
+// get the full app menu. The auth control — "Sign Up / Log In" when
+// signed out, "Log Out" when signed in, never both (and neither while the
+// session is still being restored, so nothing flashes the wrong state).
 
-import { NavLink, useNavigate } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext.jsx";
+import { Link, NavLink, useNavigate } from "react-router-dom";
+import { useAuthStatus } from "../auth/AuthContext.jsx";
+import Logo from "./Logo.jsx";
 
-const NAV_LINKS = [
-  { to: "/", label: "Landing" },
-  { to: "/login", label: "Sign Up / Log In" },
+const CENTER_LINKS = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/cars/new", label: "Car Onboarding" },
   { to: "/cars/mine", label: "Car Profile" },
@@ -15,13 +19,20 @@ const NAV_LINKS = [
   { to: "/advisor", label: "AI Advisor" },
 ];
 
+// Signed-out nav: anchors on the Landing page (its sections carry these ids).
+const MARKETING_LINKS = [
+  { hash: "#features", label: "Features" },
+  { hash: "#how-it-works", label: "How it works" },
+];
+
 /**
- * Renders the top-level navigation bar used to move between placeholder
- * screens, plus a Log Out action when a user is logged in.
+ * Renders the top-level navigation bar: brand (left), the centered links
+ * (marketing anchors when signed out, app screens when signed in, none
+ * while the session loads), and the auth control (right).
  * @returns {JSX.Element}
  */
 function SiteNav() {
-  const { user, signOut } = useAuth();
+  const { status, signOut } = useAuthStatus();
   const navigate = useNavigate();
 
   async function handleLogOut() {
@@ -31,25 +42,43 @@ function SiteNav() {
 
   return (
     <nav className="site-nav">
-      <span className="site-nav__brand">CarSage</span>
+      <NavLink to="/" end className="site-nav__brand">
+        <Logo onDark size={28} />
+      </NavLink>
+
       <ul className="site-nav__links">
-        {NAV_LINKS.map((link) => (
-          <li key={link.to}>
-            <NavLink to={link.to} end={link.to === "/"}>
-              {link.label}
-            </NavLink>
-          </li>
-        ))}
+        {status === "signedIn" &&
+          CENTER_LINKS.map((link) => (
+            <li key={link.to}>
+              <NavLink to={link.to}>{link.label}</NavLink>
+            </li>
+          ))}
+        {status === "signedOut" &&
+          MARKETING_LINKS.map((link) => (
+            <li key={link.hash}>
+              {/* Works from any screen: goes to the Landing page and the
+                  page scrolls to the section (see LandingPage). */}
+              <Link to={{ pathname: "/", hash: link.hash }}>{link.label}</Link>
+            </li>
+          ))}
       </ul>
-      {user && (
-        <button
-          type="button"
-          className="site-nav__logout"
-          onClick={handleLogOut}
-        >
-          Log Out ({user.email})
-        </button>
-      )}
+
+      <div className="site-nav__actions">
+        {status === "signedOut" && (
+          <NavLink to="/login" className="site-nav__auth-link">
+            Sign Up / Log In
+          </NavLink>
+        )}
+        {status === "signedIn" && (
+          <button
+            type="button"
+            className="site-nav__logout"
+            onClick={handleLogOut}
+          >
+            Log Out
+          </button>
+        )}
+      </div>
     </nav>
   );
 }
