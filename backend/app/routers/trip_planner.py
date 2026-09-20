@@ -25,13 +25,16 @@ from app.services.fuel_prices import (
 )
 from app.services.google_maps import GoogleMapsError, get_route_summary
 from app.supabase_client import supabase
+from app.validation import FuelPriceLbp, PlaceText, RecordId
 
 router = APIRouter(prefix="/trip-planner", tags=["trip-planner"])
 
 
 class DirectionsRequest(BaseModel):
-    destination: str = Field(min_length=1)
-    origin: str | None = Field(default=None, min_length=1)
+    # PlaceText: trimmed, 1-300 characters (CAR-23) — blank, whitespace-only
+    # and oversized places are refused with a 422 before Google is called.
+    destination: PlaceText
+    origin: PlaceText | None = None
 
 
 class DirectionsResponse(BaseModel):
@@ -151,12 +154,14 @@ def _price_bucket_for_car_fuel_type(car_fuel_type: str) -> str | None:
 
 
 class EstimateTripRequest(BaseModel):
-    car_id: str
-    destination: str = Field(min_length=1)
-    origin: str | None = Field(default=None, min_length=1)
+    # RecordId (UUID): a malformed id is a clean 422, not a Postgres error.
+    car_id: RecordId
+    destination: PlaceText
+    origin: PlaceText | None = None
     # Manual override for the fuel price, in LBP per liter. If omitted,
     # the current scraped/cached default for the car's fuel grade is used.
-    fuel_price_per_liter_lbp: float | None = Field(default=None, gt=0)
+    # Positive, bounded, and never NaN/Infinity (CAR-23).
+    fuel_price_per_liter_lbp: FuelPriceLbp | None = None
 
 
 class EstimateTripResponse(BaseModel):
@@ -205,7 +210,7 @@ def post_estimate(
     car_result = (
         supabase.table("cars")
         .select("fuel_efficiency, fuel_type")
-        .eq("id", payload.car_id)
+        .eq("id", str(payload.car_id))
         .eq("user_id", user_id)
         .maybe_single()
         .execute()
@@ -264,7 +269,7 @@ def post_estimate(
 
     trip_row = {
         "user_id": user_id,
-        "car_id": payload.car_id,
+        "car_id": str(payload.car_id),
         "origin": payload.origin,
         "destination": payload.destination,
         "distance_km": route["distance_km"],

@@ -374,3 +374,29 @@ def test_get_spec_suggestions_leaves_the_tank_empty_when_nothing_finds_one():
 
     assert result["fuel_tank_capacity_liters"] is None
     assert result["fuel_tank_capacity_source"] is None
+
+
+# --- CAR-23: user input in outbound URLs ------------------------------------
+
+
+@pytest.mark.parametrize(
+    "make",
+    ["Honda/../../admin", "Honda?evil=1", "Honda#frag", "Ho nda", "a%2Fb", "../x", "Honda\\x"],
+)
+def test_lookup_nhtsa_percent_encodes_the_make_so_it_cannot_alter_the_url_path(make):
+    captured = []
+
+    def fake_get(url, **kwargs):
+        captured.append(url)
+        return _mock_response({"Results": []})
+
+    with patch("app.services.vehicle_lookup.httpx.get", side_effect=fake_get):
+        lookup_nhtsa(make, "Civic", 2020)
+
+    url = captured[0]
+    assert url.startswith("https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/")
+    make_segment = url.split("/make/")[1].split("/modelyear/")[0]
+    # Nothing that could add a path segment, a query or a fragment survives raw.
+    assert not any(char in make_segment for char in "/?#\\ ")
+    assert url.endswith("/modelyear/2020")
+    assert url.count("/modelyear/") == 1

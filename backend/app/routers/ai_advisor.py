@@ -36,24 +36,31 @@ from app.services.llm_client import LLMError, classify_issue
 from app.services.nhtsa_safety import check_safety_data
 from app.services.youtube_client import search_diy_video
 from app.supabase_client import supabase
+from app.validation import (
+    MAX_DESCRIPTION_CHARS,
+    MAX_MESSAGE_TEXT_CHARS,
+    RecordId,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ai-advisor", tags=["ai-advisor"])
 
-# CAR-22: a car-issue description is a sentence or two. The cap keeps huge
-# input out of the LLM prompt, NHTSA matching and the database; the letter
-# minimum rejects blank / symbol-only input (unicode-aware, so Arabic works).
-MAX_DESCRIPTION_CHARS = 1000
+# CAR-22: a car-issue description is a sentence or two. The cap
+# (MAX_DESCRIPTION_CHARS, app/validation.py) keeps huge input out of the LLM
+# prompt, NHTSA matching and the database; the letter minimum rejects blank /
+# symbol-only input (unicode-aware, so Arabic works).
 MIN_DESCRIPTION_LETTERS = 3
 
 
 class ClassifyIssueRequest(BaseModel):
-    car_id: str
+    # Ids are typed as UUIDs (CAR-23): a malformed id is a clean 422 instead
+    # of reaching Postgres and crashing with a 500.
+    car_id: RecordId
     description: str = Field(min_length=1)
     # Omit to start a new conversation; pass back a prior response's
     # conversation_id to append to that same conversation instead.
-    conversation_id: str | None = None
+    conversation_id: RecordId | None = None
 
 
 class ClassifyIssueResponse(BaseModel):
@@ -132,7 +139,7 @@ def post_classify_issue(
     car_result = (
         supabase.table("cars")
         .select("make, model, year")
-        .eq("id", payload.car_id)
+        .eq("id", str(payload.car_id))
         .eq("user_id", user_id)
         .maybe_single()
         .execute()
@@ -142,7 +149,9 @@ def post_classify_issue(
         raise HTTPException(status_code=404, detail="Car not found.")
 
     conversation_id = _get_or_create_conversation(
-        user_id, payload.car_id, payload.conversation_id
+        user_id,
+        str(payload.car_id),
+        str(payload.conversation_id) if payload.conversation_id else None,
     )
 
     supabase.table("advisor_messages").insert(
@@ -200,7 +209,8 @@ def post_classify_issue(
             {
                 "conversation_id": conversation_id,
                 "sender": "ai",
-                "message_text": result["guidance"],
+                # Capped to the database limit so a very long reply can never make the save fail.
+            "message_text": result["guidance"][:MAX_MESSAGE_TEXT_CHARS],
                 "recommendation": result["recommendation"],
             }
         )

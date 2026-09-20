@@ -152,3 +152,17 @@ def test_raises_clear_error_on_network_failure_without_leaking_detail(monkeypatc
 
     assert "internal-host" not in str(excinfo.value)
     assert "try again" in str(excinfo.value).lower()
+
+
+def test_an_invalid_url_error_becomes_a_clean_maps_error_not_a_crash(monkeypatch):
+    # CAR-23: an origin/destination that httpx refuses to put in a URL used to
+    # escape as an unhandled InvalidURL (HTTP 500).
+    def raise_invalid_url(*args, **kwargs):
+        raise httpx.InvalidURL("URL component 'query' too long")
+
+    monkeypatch.setattr("app.services.google_maps.httpx.get", raise_invalid_url)
+
+    with pytest.raises(GoogleMapsError) as excinfo:
+        get_route_summary("A" * 100, "B")
+
+    assert "too long" not in str(excinfo.value)

@@ -8,6 +8,7 @@
 # onboarding.
 
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import quote
 
 import httpx
 
@@ -46,7 +47,9 @@ def lookup_nhtsa(make: str, model: str, year: int) -> dict:
     """
     try:
         response = httpx.get(
-            f"{NHTSA_BASE_URL}/GetModelsForMakeYear/make/{make}/modelyear/{year}",
+            # make goes into the URL PATH, so it is percent-encoded (safe="" also
+            # encodes "/"): a make like "x/../y?z" can never change the path or query.
+            f"{NHTSA_BASE_URL}/GetModelsForMakeYear/make/{quote(make.strip(), safe='')}/modelyear/{int(year)}",
             params={"format": "json"},
             timeout=8.0,
         )
@@ -65,7 +68,7 @@ def lookup_nhtsa(make: str, model: str, year: int) -> dict:
     engine_type = None
     try:
         type_response = httpx.get(
-            f"{NHTSA_BASE_URL}/GetVehicleTypesForMake/{make}",
+            f"{NHTSA_BASE_URL}/GetVehicleTypesForMake/{quote(make.strip(), safe='')}",
             params={"format": "json"},
             timeout=8.0,
         )

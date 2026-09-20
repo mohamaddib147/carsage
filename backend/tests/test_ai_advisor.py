@@ -37,7 +37,7 @@ def _default_no_safety_match():
 
 
 def _build_mock_supabase(
-    car_data, conversation_lookup_data=None, new_conversation_id="conv-1"
+    car_data, conversation_lookup_data=None, new_conversation_id="00000000-0000-4000-8000-000000000c01"
 ):
     """
     Mocks supabase.table(...) for "cars" (ownership check),
@@ -132,12 +132,12 @@ class TestPostClassify:
 
             response = client.post(
                 "/ai-advisor/classify",
-                json={"car_id": "car-1", "description": "Washer fluid light is on"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "description": "Washer fluid light is on"},
             )
 
         assert response.status_code == 200
         assert response.json() == {
-            "conversation_id": "conv-1",
+            "conversation_id": "00000000-0000-4000-8000-000000000c01",
             "recommendation": "diy",
             "guidance": "Top up the washer fluid.",
             "video_title": None,
@@ -149,12 +149,12 @@ class TestPostClassify:
         )
         assert captured == [
             {
-                "conversation_id": "conv-1",
+                "conversation_id": "00000000-0000-4000-8000-000000000c01",
                 "sender": "user",
                 "message_text": "Washer fluid light is on",
             },
             {
-                "conversation_id": "conv-1",
+                "conversation_id": "00000000-0000-4000-8000-000000000c01",
                 "sender": "ai",
                 "message_text": "Top up the washer fluid.",
                 "recommendation": "diy",
@@ -163,7 +163,7 @@ class TestPostClassify:
 
     def test_appends_to_an_existing_conversation_when_conversation_id_is_provided(self):
         mock_supabase, captured, _ = _build_mock_supabase(
-            {"make": "Honda"}, conversation_lookup_data={"id": "conv-2"}
+            {"make": "Honda"}, conversation_lookup_data={"id": "00000000-0000-4000-8000-000000000c02"}
         )
         with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
             "app.routers.ai_advisor.classify_issue"
@@ -176,15 +176,15 @@ class TestPostClassify:
             response = client.post(
                 "/ai-advisor/classify",
                 json={
-                    "car_id": "car-1",
+                    "car_id": "00000000-0000-4000-8000-000000000001",
                     "description": "Still squeaking",
-                    "conversation_id": "conv-2",
+                    "conversation_id": "00000000-0000-4000-8000-000000000c02",
                 },
             )
 
         assert response.status_code == 200
-        assert response.json()["conversation_id"] == "conv-2"
-        assert all(row["conversation_id"] == "conv-2" for row in captured)
+        assert response.json()["conversation_id"] == "00000000-0000-4000-8000-000000000c02"
+        assert all(row["conversation_id"] == "00000000-0000-4000-8000-000000000c02" for row in captured)
         # No new conversation was created — only the two message inserts.
         mock_supabase.table("advisor_conversations").insert.assert_not_called()
 
@@ -196,9 +196,9 @@ class TestPostClassify:
             response = client.post(
                 "/ai-advisor/classify",
                 json={
-                    "car_id": "car-1",
+                    "car_id": "00000000-0000-4000-8000-000000000001",
                     "description": "Engine noise",
-                    "conversation_id": "someone-elses-conversation",
+                    "conversation_id": "00000000-0000-4000-8000-000000000c03",
                 },
             )
 
@@ -209,7 +209,7 @@ class TestPostClassify:
         with patch("app.routers.ai_advisor.supabase", mock_supabase):
             response = client.post(
                 "/ai-advisor/classify",
-                json={"car_id": "someone-elses-car", "description": "Engine noise"},
+                json={"car_id": "00000000-0000-4000-8000-000000000002", "description": "Engine noise"},
             )
 
         assert response.status_code == 404
@@ -225,7 +225,7 @@ class TestPostClassify:
 
             response = client.post(
                 "/ai-advisor/classify",
-                json={"car_id": "car-1", "description": "Engine noise"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "description": "Engine noise"},
             )
 
         assert response.status_code == 503
@@ -239,7 +239,7 @@ class TestPostClassify:
     def test_rejects_an_empty_description(self):
         response = client.post(
             "/ai-advisor/classify",
-            json={"car_id": "car-1", "description": ""},
+            json={"car_id": "00000000-0000-4000-8000-000000000001", "description": ""},
         )
 
         assert response.status_code == 422
@@ -262,13 +262,13 @@ class TestAuthorizationScoping:
         with patch("app.routers.ai_advisor.supabase", mock_supabase):
             response = client.post(
                 "/ai-advisor/classify",
-                json={"car_id": "car-owned-by-A", "description": "squeaky brakes"},
+                json={"car_id": "00000000-0000-4000-8000-0000000000a0", "description": "squeaky brakes"},
             )
 
         assert response.status_code == 404
         cars = mock_supabase.table("cars")
         first_eq = cars.select.return_value.eq
-        first_eq.assert_called_once_with("id", "car-owned-by-A")
+        first_eq.assert_called_once_with("id", "00000000-0000-4000-8000-0000000000a0")
         first_eq.return_value.eq.assert_called_once_with("user_id", "user-B")
 
     def test_the_conversation_lookup_is_filtered_by_the_callers_user_id(self):
@@ -279,16 +279,16 @@ class TestAuthorizationScoping:
             response = client.post(
                 "/ai-advisor/classify",
                 json={
-                    "car_id": "car-B",
+                    "car_id": "00000000-0000-4000-8000-00000000000b",
                     "description": "squeaky brakes",
-                    "conversation_id": "conversation-owned-by-A",
+                    "conversation_id": "00000000-0000-4000-8000-000000000ca0",
                 },
             )
 
         assert response.status_code == 404
         conversations = mock_supabase.table("advisor_conversations")
         first_eq = conversations.select.return_value.eq
-        first_eq.assert_called_once_with("id", "conversation-owned-by-A")
+        first_eq.assert_called_once_with("id", "00000000-0000-4000-8000-000000000ca0")
         first_eq.return_value.eq.assert_called_once_with("user_id", "user-B")
         # Nothing was written into someone else's conversation.
         assert captured == []
@@ -300,10 +300,10 @@ class TestAuthorizationScoping:
             "app.routers.ai_advisor.classify_issue",
             return_value={"recommendation": "mechanic", "guidance": "See a mechanic."},
         ):
-            client.post("/ai-advisor/classify", json={"car_id": "car-B", "description": "squeaky brakes"})
+            client.post("/ai-advisor/classify", json={"car_id": "00000000-0000-4000-8000-00000000000b", "description": "squeaky brakes"})
 
         inserted = mock_supabase.table("advisor_conversations").insert.call_args.args[0]
-        assert inserted == {"user_id": "user-B", "car_id": "car-B"}
+        assert inserted == {"user_id": "user-B", "car_id": "00000000-0000-4000-8000-00000000000b"}
 
 
 class TestDescriptionValidation:
@@ -326,7 +326,7 @@ class TestDescriptionValidation:
         ) as mock_classify, patch("app.routers.ai_advisor.search_diy_video", return_value=None):
             mock_classify.return_value = {"recommendation": "mechanic", "guidance": "See a mechanic."}
             response = client.post(
-                "/ai-advisor/classify", json={"car_id": "car-1", "description": description}
+                "/ai-advisor/classify", json={"car_id": "00000000-0000-4000-8000-000000000001", "description": description}
             )
         return response, mock_supabase, captured, mock_classify
 
@@ -409,7 +409,7 @@ class TestYouTubeVideoWiring:
 
             response = client.post(
                 "/ai-advisor/classify",
-                json={"car_id": "car-1", "description": "Washer fluid light is on"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "description": "Washer fluid light is on"},
             )
 
         assert response.status_code == 200
@@ -441,7 +441,7 @@ class TestYouTubeVideoWiring:
 
             response = client.post(
                 "/ai-advisor/classify",
-                json={"car_id": "car-1", "description": "Washer fluid light is on"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "description": "Washer fluid light is on"},
             )
 
         assert response.status_code == 200
@@ -464,7 +464,7 @@ class TestYouTubeVideoWiring:
 
             response = client.post(
                 "/ai-advisor/classify",
-                json={"car_id": "car-1", "description": "Brakes are grinding"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "description": "Brakes are grinding"},
             )
 
         assert response.status_code == 200
@@ -492,7 +492,7 @@ class TestYouTubeFailureNeverBreaksTheAnswer:
         ), patch("app.routers.ai_advisor.search_diy_video", **patches):
             return client.post(
                 "/ai-advisor/classify",
-                json={"car_id": "car-1", "description": "Washer fluid light is on"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "description": "Washer fluid light is on"},
             )
 
     def test_an_unexpected_error_in_the_video_lookup_still_returns_the_answer(self):
@@ -552,7 +552,7 @@ class TestNHTSASafetyWiring:
         ), patch("app.routers.ai_advisor.classify_issue") as mock_classify:
             response = client.post(
                 "/ai-advisor/classify",
-                json={"car_id": "car-1", "description": "Steering locks up"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "description": "Steering locks up"},
             )
 
         assert response.status_code == 200
@@ -575,7 +575,7 @@ class TestNHTSASafetyWiring:
         ), patch("app.routers.ai_advisor.classify_issue"):
             response = client.post(
                 "/ai-advisor/classify",
-                json={"car_id": "car-1", "description": "Brakes squeak a little"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "description": "Brakes squeak a little"},
             )
 
         guidance = response.json()["guidance"]
@@ -590,7 +590,7 @@ class TestNHTSASafetyWiring:
         ), patch("app.routers.ai_advisor.classify_issue") as mock_classify:
             response = client.post(
                 "/ai-advisor/classify",
-                json={"car_id": "car-1", "description": "Brakes are grinding"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "description": "Brakes are grinding"},
             )
 
         assert response.status_code == 200
@@ -614,7 +614,7 @@ class TestNHTSASafetyWiring:
 
             response = client.post(
                 "/ai-advisor/classify",
-                json={"car_id": "car-1", "description": "Washer fluid light is on"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "description": "Washer fluid light is on"},
             )
 
         assert response.status_code == 200
@@ -638,12 +638,12 @@ class TestNHTSASafetyWiring:
 
             response = client.post(
                 "/ai-advisor/classify",
-                json={"car_id": "car-1", "description": "Engine noise"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "description": "Engine noise"},
             )
 
         assert response.status_code == 200
         assert response.json() == {
-            "conversation_id": "conv-1",
+            "conversation_id": "00000000-0000-4000-8000-000000000c01",
             "recommendation": "mechanic",
             "guidance": "See a mechanic.",
             "video_title": None,
@@ -657,7 +657,52 @@ def test_classify_requires_authentication():
     # which requires a valid Authorization header.
     response = client.post(
         "/ai-advisor/classify",
-        json={"car_id": "car-1", "description": "Engine noise"},
+        json={"car_id": "00000000-0000-4000-8000-000000000001", "description": "Engine noise"},
     )
 
     assert response.status_code == 401
+
+
+class TestIdAndStorageValidation:
+    """CAR-23: ids must be UUIDs (malformed = clean 422, previously a 500
+    from Postgres), and a very long AI reply is capped so saving it can
+    never violate the database limit."""
+
+    VALID = "00000000-0000-4000-8000-000000000001"
+
+    def setup_method(self):
+        app.dependency_overrides[get_current_user_id] = lambda: "user-123"
+
+    def teardown_method(self):
+        app.dependency_overrides.pop(get_current_user_id, None)
+
+    @pytest.mark.parametrize("bad", ["not-a-uuid", "zzz", "", "1", "' OR '1'='1", "../../etc/passwd"])
+    @pytest.mark.parametrize("field", ["car_id", "conversation_id"])
+    def test_a_malformed_id_is_a_422_before_any_database_work(self, field, bad):
+        body = {"car_id": self.VALID, "description": "squeaky brakes"}
+        body[field] = bad
+        mock_supabase, captured, _ = _build_mock_supabase({"make": "Toyota", "model": "Camry", "year": 2016})
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.classify_issue"
+        ) as mock_classify:
+            response = client.post("/ai-advisor/classify", json=body)
+
+        assert response.status_code == 422
+        mock_supabase.table.assert_not_called()
+        mock_classify.assert_not_called()
+        assert captured == []
+
+    def test_a_very_long_ai_reply_is_capped_to_the_database_limit(self):
+        mock_supabase, captured, _ = _build_mock_supabase({"make": "Toyota", "model": "Camry", "year": 2016})
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.classify_issue",
+            return_value={"recommendation": "mechanic", "guidance": "G" * 20_000},
+        ):
+            response = client.post(
+                "/ai-advisor/classify",
+                json={"car_id": self.VALID, "description": "squeaky brakes"},
+            )
+
+        assert response.status_code == 200
+        saved_ai_message = [row for row in captured if row["sender"] == "ai"][0]
+        assert len(saved_ai_message["message_text"]) == 8000

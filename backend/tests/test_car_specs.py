@@ -110,3 +110,46 @@ def test_reports_where_the_tank_capacity_came_from():
     body = response.json()
     assert body["fuel_tank_capacity_liters"] == 64.3
     assert body["fuel_tank_capacity_source"] == "ai_estimate"
+
+
+# --- CAR-23: query parameter validation -----------------------------------
+# make / model / year end up in outbound API URLs, so they are bounded and
+# non-blank, and the year must be sane. Rejected values never reach the lookup.
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"make": "   ", "model": "Civic", "year": 2020},
+        {"make": "Honda", "model": "   ", "year": 2020},
+        {"make": "H" * 61, "model": "Civic", "year": 2020},
+        {"make": "Honda", "model": "C" * 61, "year": 2020},
+        {"make": "Honda", "model": "Civic", "year": 1899},
+        {"make": "Honda", "model": "Civic", "year": 2101},
+        {"make": "Honda", "model": "Civic", "year": -5},
+        {"make": "Honda", "model": "Civic", "year": 99999999},
+        {"make": "Honda", "model": "Civic", "year": "abc"},
+    ],
+)
+def test_invalid_query_params_are_a_422_and_never_reach_the_lookup(params):
+    with patch("app.routers.car_specs.get_spec_suggestions") as mock_lookup:
+        response = client.get("/cars/spec-suggestions", params=params)
+
+    assert response.status_code == 422
+    mock_lookup.assert_not_called()
+
+
+@pytest.mark.parametrize("year", [1900, 2016, 2100])
+def test_boundary_years_and_a_60_character_make_are_accepted(year):
+    with patch("app.routers.car_specs.get_spec_suggestions") as mock_lookup:
+        mock_lookup.return_value = {
+            "vehicle_confirmed": False, "engine_type": None, "fuel_efficiency": None,
+            "cylinders": None, "drivetrain": None, "transmission": None,
+        }
+        response = client.get(
+            "/cars/spec-suggestions", params={"make": "H" * 60, "model": "Civic", "year": year}
+        )
+
+    assert response.status_code == 200
