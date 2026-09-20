@@ -44,7 +44,16 @@ from app.validation import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/ai-advisor", tags=["ai-advisor"])
+# CAR-24: authentication is required for EVERY route on this router, declared
+# once at the router level (`dependencies=[...]`) so an endpoint added later is
+# protected by default instead of relying on someone remembering to add it.
+# The caller's Supabase JWT is verified server-side (app/auth.py) before any
+# handler — or request-body validation — runs. Only /health is public.
+router = APIRouter(
+    prefix="/ai-advisor",
+    tags=["ai-advisor"],
+    dependencies=[Depends(get_current_user_id)],
+)
 
 # CAR-22: a car-issue description is a sentence or two. The cap
 # (MAX_DESCRIPTION_CHARS, app/validation.py) keeps huge input out of the LLM

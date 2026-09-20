@@ -1,20 +1,31 @@
 # GET /cars/spec-suggestions: best-effort autofill for Car Onboarding
 # (CAR-34) — looks up make/model/year against NHTSA vPIC + API Ninjas +
 # fueleconomy.gov (plus an auto-data.net lookup / AI estimate for tank capacity) and returns
-# whatever specs are available. No auth required (it's a public
-# data lookup, not a write), and never errors even if both lookups fail —
+# whatever specs are available. Requires a logged-in caller (CAR-24: it
+# was public, which let anyone burn the NHTSA / API Ninjas / LLM quotas and
+# trigger the auto-data.net lookup), and never errors even if the lookups fail —
 # callers should treat every field as optional and fall back to manual
 # entry.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
+from app.auth import get_current_user_id
 from app.services.vehicle_lookup import get_spec_suggestions
 from app.validation import MAX_CAR_YEAR, MAX_MAKE_MODEL_CHARS, MIN_CAR_YEAR
 
-router = APIRouter(prefix="/cars", tags=["cars"])
+# CAR-24: authentication is required for EVERY route on this router, declared
+# once at the router level (`dependencies=[...]`) so an endpoint added later is
+# protected by default instead of relying on someone remembering to add it.
+# The caller's Supabase JWT is verified server-side (app/auth.py) before any
+# handler — or request-body validation — runs. Only /health is public.
+router = APIRouter(
+    prefix="/cars",
+    tags=["cars"],
+    dependencies=[Depends(get_current_user_id)],
+)
 
 
 class SpecSuggestionsResponse(BaseModel):

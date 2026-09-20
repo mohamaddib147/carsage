@@ -5,11 +5,23 @@
 
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
+from app.auth import get_current_user_id
 from app.main import app
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _logged_in_user():
+    """CAR-24: every route now requires a logged-in caller, so these tests run
+    as one (the real token check is covered by test_auth.py and
+    test_auth_required.py)."""
+    app.dependency_overrides[get_current_user_id] = lambda: "user-123"
+    yield
+    app.dependency_overrides.pop(get_current_user_id, None)
 
 
 def test_returns_suggestions_for_a_valid_request():

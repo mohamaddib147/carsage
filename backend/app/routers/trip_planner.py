@@ -27,7 +27,16 @@ from app.services.google_maps import GoogleMapsError, get_route_summary
 from app.supabase_client import supabase
 from app.validation import FuelPriceLbp, PlaceText, RecordId
 
-router = APIRouter(prefix="/trip-planner", tags=["trip-planner"])
+# CAR-24: authentication is required for EVERY route on this router, declared
+# once at the router level (`dependencies=[...]`) so an endpoint added later is
+# protected by default instead of relying on someone remembering to add it.
+# The caller's Supabase JWT is verified server-side (app/auth.py) before any
+# handler — or request-body validation — runs. Only /health is public.
+router = APIRouter(
+    prefix="/trip-planner",
+    tags=["trip-planner"],
+    dependencies=[Depends(get_current_user_id)],
+)
 
 
 class DirectionsRequest(BaseModel):

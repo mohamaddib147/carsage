@@ -22,6 +22,16 @@ from app.services.google_maps import GoogleMapsError
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def _logged_in_user():
+    """CAR-24: every route now requires a logged-in caller, so these tests run
+    as one (the real token check is covered by test_auth.py and
+    test_auth_required.py)."""
+    app.dependency_overrides[get_current_user_id] = lambda: "user-123"
+    yield
+    app.dependency_overrides.pop(get_current_user_id, None)
+
+
 def test_returns_distance_and_durations_for_a_valid_request():
     with patch("app.routers.trip_planner.get_route_summary") as mock_get_route:
         mock_get_route.return_value = {
@@ -400,8 +410,9 @@ class TestPostEstimate:
 
 
 def test_estimate_requires_authentication():
-    # No dependency override here — hits the real get_current_user_id,
-    # which requires a valid Authorization header.
+    # Hits the real get_current_user_id (the autouse logged-in-user fixture is
+    # switched off for this test), which requires a valid Authorization header.
+    app.dependency_overrides.pop(get_current_user_id, None)
     response = client.post(
         "/trip-planner/estimate",
         json={"car_id": "00000000-0000-4000-8000-000000000001", "origin": "A", "destination": "B"},
