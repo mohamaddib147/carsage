@@ -38,18 +38,20 @@ If a feature isn't listed in "Project Overview" above, treat it as out of scope.
 - **Maps**: Google Maps API (Directions + Distance Matrix)
 - **Car identification/specs**: NHTSA vPIC API (`https://vpic.nhtsa.dot.gov/api/`, free, no key, official) for make/model/year/VIN lookup, combined with API Ninjas Cars API (free tier, api-ninjas.com) for detailed specs (MPG, cylinders, drivetrain, transmission). See CAR-34.
 - **Vehicle safety data (AI Advisor enrichment)**: NHTSA Recalls API + Complaints API (`api.nhtsa.gov`, free, no key, official, US-market only) — cross-check user-described issues against real recalls/complaints before falling back to LLM-only classification. See CAR-36.
-- **DIY video suggestions (AI Advisor enrichment)**: YouTube Data API v3 (`search.list`), free — 10,000 quota units/day, a search costs 100 units (~100 searches/day free). Only called when the recommendation is 'diy'. Requires two new nullable columns on `advisor_messages` (`video_url`, `video_title`) — a genuine schema change, apply via the Supabase MCP connector and note it needs reflecting in `docs/CarSage_ERD.pdf` afterward. See CAR-40.
+- **DIY video suggestions (AI Advisor enrichment)**: YouTube Data API v3 (`search.list`), free — 10,000 quota units/day, a search costs 100 units (~100 searches/day free). Only called when the recommendation is 'diy'. Requires two new nullable columns on `advisor_messages` (`video_url`, `video_title`) — apply via the Supabase MCP connector (already done). See CAR-40.
 - **Fuel prices**: no free live API covers Lebanon/Middle East (confirmed via research — GlobalPetrolPrices.com is paid, fuel-prices.eu only covers EU+UK). Built as a small scheduled scraper against Lebanon's Ministry of Energy and Water published weekly prices, cached in the database, with graceful fallback to the last known value and a user-overridable field on the Trip Planner form. See CAR-35.
 
-## Database (already live in Supabase — see `docs/CarSage_ERD.pdf`)
+## Database (schema evolves live in Supabase — docs/CarSage_ERD.pdf is a frozen historical snapshot, not maintained)
 
-Project: **CarSage** on Supabase (ref: `ehjvbkhoafldqfsivtrn`). Do not create new tables without checking the ERD first — the schema is finalized.
+Project: **CarSage** on Supabase (ref: `ehjvbkhoafldqfsivtrn`). The live Supabase schema is the sole source of truth — `docs/CarSage_ERD.pdf` was submitted as part of planning and is intentionally never updated again. Never edit it, regenerate it, or flag that it needs updating, even after a schema change.
+
+Always check the live schema via the Supabase MCP connector before writing queries or migrations — don't rely on the ERD PDF, which will drift out of date by design.
 
 Tables: `profiles`, `cars`, `trips`, `advisor_conversations`, `advisor_messages`. All have row-level security enabled — every policy scopes to `auth.uid()`. Never bypass RLS by using the service key from the frontend; the service key belongs in the FastAPI backend only.
 
-Full field-by-field definitions, types, and relationships are in `docs/CarSage_ERD.pdf`.
+Full field-by-field definitions, types, and relationships for the schema AS IT STOOD AT SUBMISSION are in `docs/CarSage_ERD.pdf` — historical reference only, not current.
 
-**If a Supabase MCP connector is configured** in this environment (scoped to project ref `ehjvbkhoafldqfsivtrn`): use it to check the live schema and RLS policies directly before writing queries, instead of relying on the ERD PDF alone — the live database is always the source of truth if the two ever disagree. You can also use it to apply migrations if a task genuinely requires a schema change, but confirm with me first since the schema is meant to be finalized.
+**If a Supabase MCP connector is configured** in this environment (scoped to project ref `ehjvbkhoafldqfsivtrn`): use it to check the live schema and RLS policies directly before writing queries — this is the only reliable source. You can also use it to apply migrations if a task genuinely requires a schema change, but confirm with me first. Never touch `docs/CarSage_ERD.pdf` when you do.
 
 ## Environment Variables
 
@@ -62,6 +64,18 @@ Create `.env` files (never commit them — see `.gitignore`) based on `frontend/
 ## Deployment Notes
 
 - **Fuel price scraper (CAR-50) must be re-verified after the backend is deployed.** Its source, L'Orient Today (`today.lorientlejour.com`), sits behind Cloudflare, which returns 403 to `httpx` even with a browser User-Agent — so `backend/app/services/fuel_prices.py` fetches with `urllib` instead (which Cloudflare currently lets through). A hosting provider's IP range can be blocked or challenged differently than local dev, so once deployed, call `GET /trip-planner/fuel-prices` against a stale/empty cache and confirm the `fuel_prices.source_label` in the database is a `today.lorientlejour.com/article/...` URL. If it is blocked, the app degrades gracefully to the last cached price rather than failing — but that price will go stale.
+
+## QA / Design Review Pass
+
+When asked to run a "QA pass" or "act as QA," do the following across all built screens:
+
+1. If Playwright isn't already a dev dependency, install it (`npm install -D playwright` or equivalent) — this is a one-time setup, not a new feature, so it doesn't need a Jira task.
+2. Start the dev server, then use Playwright to take a screenshot of each implemented screen (both logged-out and logged-in states where relevant — this matters, since auth-state bugs are easy to miss otherwise).
+3. Compare each screenshot against its reference in `docs/stitch_carsage_landing_page/` (see Design Reference above) and against the actual behavior expected per that screen's Jira task acceptance criteria — not just visually, but functionally (e.g., does the header correctly reflect whether someone is logged in).
+4. Categorize findings into two types:
+   - **Clear bugs** (layout broken, wrong data shown, auth state wrong, spacing/alignment clearly off from reference): fix these directly, no need to check in first.
+   - **Subjective/design-judgment calls** (a color that could arguably be different, copy tone, optional polish): report these and wait for a decision rather than guessing.
+5. Report back a summary: what was checked, what was fixed automatically, and what's flagged for a decision. Use the normal commit rules (one focused commit per fix, no AI attribution). No Jira task needed for this pass unless a fix uncovers something substantial enough to warrant one — use judgment, and ask if unsure.
 
 ## Design Reference (in `docs/stitch_carsage_landing_page/`)
 
