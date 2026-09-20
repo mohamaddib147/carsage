@@ -50,12 +50,24 @@ function guidanceSteps(guidance) {
     .filter(Boolean);
 }
 
-/** Derives a YouTube thumbnail URL from a watch URL's video id, or null
- * if it isn't a recognizable YouTube watch URL. */
-function youtubeThumbnailUrl(videoUrl) {
+const YOUTUBE_HOSTS = new Set(["www.youtube.com", "youtube.com", "m.youtube.com"]);
+
+/**
+ * The video id of a saved YouTube watch URL, or null if it isn't one. Only
+ * https youtube.com/watch?v=<id> with a well-formed id qualifies (CAR-23):
+ * the stored value is rendered as a link, so anything else — a `javascript:`
+ * URL, another host, a path-tricking id — is never turned into a link. (The
+ * database also only allows youtube.com/watch links; this doesn't rely on it.)
+ * @param {string | null | undefined} videoUrl
+ * @returns {string | null}
+ */
+function youtubeVideoId(videoUrl) {
   try {
-    const videoId = new URL(videoUrl).searchParams.get("v");
-    return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
+    const url = new URL(videoUrl);
+    if (url.protocol !== "https:" || !YOUTUBE_HOSTS.has(url.hostname)) return null;
+    if (url.pathname !== "/watch") return null;
+    const id = url.searchParams.get("v");
+    return id && /^[A-Za-z0-9_-]{6,20}$/.test(id) ? id : null;
   } catch {
     return null;
   }
@@ -313,25 +325,23 @@ function AIAdvisorPage() {
               ) : (
                 <p className="advisor-guidance-text">{message.guidance}</p>
               )}
-              {message.videoUrl && (
+              {youtubeVideoId(message.videoUrl) && (
                 <a
                   className="advisor-video-card"
-                  href={message.videoUrl}
+                  href={`https://www.youtube.com/watch?v=${youtubeVideoId(message.videoUrl)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {youtubeThumbnailUrl(message.videoUrl) && (
-                    <span className="advisor-video-card__thumbnail-wrap">
-                      <img
-                        className="advisor-video-card__thumbnail"
-                        src={youtubeThumbnailUrl(message.videoUrl)}
-                        alt=""
-                      />
-                      <span className="advisor-video-card__play" aria-hidden="true">
-                        ▶
-                      </span>
+                  <span className="advisor-video-card__thumbnail-wrap">
+                    <img
+                      className="advisor-video-card__thumbnail"
+                      src={`https://img.youtube.com/vi/${youtubeVideoId(message.videoUrl)}/hqdefault.jpg`}
+                      alt=""
+                    />
+                    <span className="advisor-video-card__play" aria-hidden="true">
+                      ▶
                     </span>
-                  )}
+                  </span>
                   <span className="advisor-video-card__body">
                     <span className="advisor-video-card__title">
                       {message.videoTitle}

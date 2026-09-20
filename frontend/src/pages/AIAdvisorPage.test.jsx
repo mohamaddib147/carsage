@@ -369,6 +369,56 @@ describe("AIAdvisorPage — DIY video suggestion (CAR-40)", () => {
     );
   });
 
+  it.each([
+    ["javascript: URL", "javascript:alert(document.cookie)"],
+    ["data: URL", "data:text/html,<script>alert(1)</script>"],
+    ["plain http", "http://www.youtube.com/watch?v=abc123XYZ"],
+    ["another host", "https://evil.example.com/watch?v=abc123XYZ"],
+    ["lookalike host", "https://www.youtube.com.evil.example/watch?v=abc123XYZ"],
+    ["not a watch page", "https://www.youtube.com/redirect?v=abc123XYZ"],
+    ["path-tricking video id", "https://www.youtube.com/watch?v=../../evil"],
+    ["not a URL at all", "not a url"],
+  ])("never turns an unsafe saved video URL into a link (%s)", async (_label, badUrl) => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      recommendation: "diy",
+      guidance: "Top it up.",
+      video_title: "Sneaky video",
+      video_url: badUrl,
+    });
+
+    renderPage();
+    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    await user.type(input, "Washer fluid light is on");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    // The answer itself still shows; only the video card is dropped.
+    expect(await screen.findByText("Top it up.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Sneaky video/ })).not.toBeInTheDocument();
+    expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
+  });
+
+  it("rebuilds the link from the video id instead of using the stored URL verbatim", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      recommendation: "diy",
+      guidance: "Top it up.",
+      video_title: "A video",
+      video_url: "https://youtube.com/watch?v=abc123XYZ&list=evil&t=99#frag",
+    });
+
+    renderPage();
+    await user.type(await screen.findByPlaceholderText("Describe your car issue..."), "Washer fluid");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByRole("link", { name: /A video/ })).toHaveAttribute(
+      "href",
+      "https://www.youtube.com/watch?v=abc123XYZ",
+    );
+  });
+
   it("shows no video card when the response has no video (edge case)", async () => {
     const user = userEvent.setup();
     mockSupabaseTables({ cars: [{ id: "car-1" }] });
