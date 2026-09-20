@@ -15,6 +15,7 @@ Format: `path/to/file — what this file does`
 - `docs/CarSage_ERD.pdf` — database schema and entity relationships.
 - `docs/CarSage_Wireframes.pdf` — UI screens and user flow.
 - `docs/FILE_INDEX.md` — this file.
+- `docs/db_migrations/2026-09-20_car23_input_validation_constraints.sql` — CAR-23 audit trail (the live Supabase schema is the source of truth): CHECK constraints for every column the app writes (cars, trips, advisor_messages, profiles) — text length limits, year/efficiency/cylinder ranges, fuel_type allow-list, a youtube.com-only video_url — plus `cars.fuel_type` NOT NULL. Server-side enforcement for the browser's direct writes, which RLS alone (who may write, not what) does not cover.
 - `docs/stitch_carsage_landing_page/` — Stitch-generated design reference (screen.png + code.html per screen), the visual source of truth for UI alignment; see CLAUDE.md's Design Reference section.
 
 ## frontend/
