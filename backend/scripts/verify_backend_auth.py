@@ -88,6 +88,19 @@ try:
         if not probe(label, header, want, body=body):
             fails += 1
 
+    print("\n== Positive controls: a VALID session can still use every protected endpoint ==")
+    good = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}
+    for label, method, path, payload in [
+        ("fuel prices", "GET", "/trip-planner/fuel-prices", None),
+        ("directions (real Google call)", "POST", "/trip-planner/directions", {"origin": "Beirut, Lebanon", "destination": "Byblos, Lebanon"}),
+        ("spec suggestions (real lookups)", "GET", "/cars/spec-suggestions?make=Toyota&model=Camry&year=2016", None),
+    ]:
+        r = httpx.request(method, BASE + path, headers=good, json=payload, timeout=120)
+        ok = r.status_code == 200
+        print(f"  {'PASS' if ok else '** FAIL **'}  [{r.status_code}] {label} with a valid session")
+        if not ok:
+            fails += 1
+
     print("\n== Revoked sessions ==")
     # Sign out (revokes the session server-side), then reuse the old access token.
     httpx.post(f"{URL}/auth/v1/logout", headers={"apikey": ANON, "Authorization": f"Bearer {tok}"}, timeout=30)
