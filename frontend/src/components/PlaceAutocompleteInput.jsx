@@ -20,10 +20,10 @@ const MIN_CHARS = 3;
 
 /**
  * @param {{ id: string, value: string, onChange: (text: string) => void,
- *   placeholder?: string }} props
+ *   placeholder?: string, maxLength?: number }} props
  * @returns {JSX.Element}
  */
-function PlaceAutocompleteInput({ id, value, onChange, placeholder }) {
+function PlaceAutocompleteInput({ id, value, onChange, placeholder, maxLength }) {
   const listId = useId();
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
@@ -109,6 +109,7 @@ function PlaceAutocompleteInput({ id, value, onChange, placeholder }) {
         }
         autoComplete="off"
         placeholder={placeholder}
+        maxLength={maxLength}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={handleKeyDown}

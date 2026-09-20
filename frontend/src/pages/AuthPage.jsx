@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
+import { LIMITS } from "../lib/limits.js";
 
 /**
  * Combined Sign Up / Log In screen. Mode is determined by the route
@@ -35,6 +36,13 @@ function AuthPage() {
 
     if (!email.trim() || !password) {
       setError("Email and password are required.");
+      return;
+    }
+    // Supabase Auth enforces the same minimum on the server; catching it here
+    // just saves a round trip. (Not applied to Log In: an existing account
+    // must always be able to try its own password.)
+    if (isSignUp && password.length < LIMITS.PASSWORD_MIN) {
+      setError(`Password must be at least ${LIMITS.PASSWORD_MIN} characters.`);
       return;
     }
 
@@ -104,6 +112,7 @@ function AuthPage() {
               name="email"
               type="email"
               autoComplete="email"
+              maxLength={LIMITS.EMAIL}
               placeholder="eleanor@example.com"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
@@ -117,6 +126,7 @@ function AuthPage() {
               type="password"
               autoComplete={isSignUp ? "new-password" : "current-password"}
               placeholder="••••••••"
+              maxLength={LIMITS.PASSWORD_MAX}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />

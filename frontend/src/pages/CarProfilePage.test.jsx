@@ -4,7 +4,7 @@
 // exist) renders the same safe "not found" state rather than leaking
 // anything about it or crashing.
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -377,5 +377,79 @@ describe("CarProfilePage — deleting (CAR-38)", () => {
 
     expect(await screen.findByText("new row violates row-level security policy")).toBeInTheDocument();
     expect(screen.getByText("Corolla")).toBeInTheDocument();
+  });
+});
+
+describe("CarProfilePage — input limits (CAR-23)", () => {
+  async function openEdit(user) {
+    const table = mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    return table;
+  }
+
+  it.each([
+    ["Make *", 60],
+    ["Model *", 60],
+    ["Engine Type", 60],
+    ["License Plate", 20],
+    ["Drivetrain", 60],
+    ["Transmission", 60],
+    ["VIN", 32],
+  ])("caps the %s field at %i characters", async (label, max) => {
+    const user = userEvent.setup();
+    await openEdit(user);
+
+    expect(screen.getByLabelText(label)).toHaveAttribute("maxlength", String(max));
+  });
+
+  it.each([
+    ["Model *", 61, "Model must be 60 characters or fewer."],
+    ["Engine Type", 61, "Engine type must be 60 characters or fewer."],
+    ["License Plate", 21, "License plate must be 20 characters or fewer."],
+    ["VIN", 33, "VIN must be 32 characters or fewer."],
+  ])("still refuses an oversized %s if the input cap is bypassed, without saving", async (label, length, message) => {
+    const user = userEvent.setup();
+    const { update } = await openEdit(user);
+
+    fireEvent.change(screen.getByLabelText(label), { target: { value: "x".repeat(length) } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Fuel Efficiency (km/L)", "500", "Fuel efficiency must be between 0 and 100 km/L."],
+    ["Cylinders", "99", "Cylinders must be a whole number between 1 and 16."],
+  ])("rejects %s = %s and does not save", async (label, value, message) => {
+    const user = userEvent.setup();
+    const { update } = await openEdit(user);
+
+    const input = screen.getByLabelText(label);
+    await user.clear(input);
+    await user.type(input, value);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("describes a database rule violation in plain words, never the constraint name", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      updateResult: {
+        data: null,
+        error: { code: "23514", message: 'violates check constraint "cars_cylinders_range_check"' },
+      },
+    });
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("outside the allowed range or length");
+    expect(alert).not.toHaveTextContent("cars_cylinders_range_check");
   });
 });

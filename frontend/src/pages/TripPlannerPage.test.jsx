@@ -1035,3 +1035,73 @@ describe("TripPlannerPage — Advanced options & thousand separators (polish)", 
     expect(await screen.findByText(/Enter a tank size under Advanced options/)).toBeInTheDocument();
   });
 });
+
+describe("TripPlannerPage — input limits (CAR-23)", () => {
+  it("caps both place fields at 300 characters", async () => {
+    mockCarsLookup([{ id: "car-1" }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Destination *")).toHaveAttribute("maxlength", "300");
+    expect(screen.getByLabelText(/Starting Location/)).toHaveAttribute("maxlength", "300");
+  });
+
+  it("refuses a fuel price above 10,000,000 with a visible message, opens Advanced options, and sends nothing", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+    await screen.findByLabelText("Destination *");
+    await user.click(screen.getByText("Advanced options"));
+    const price = screen.getByLabelText(/Fuel Price/);
+    await user.clear(price);
+    await user.type(price, "99999999999");
+    await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    expect(
+      await screen.findByText(/Fuel price must be between 1 and 10,000,000/),
+    ).toBeVisible();
+    expect(apiFetch).not.toHaveBeenCalledWith("/trip-planner/estimate", expect.anything());
+  });
+
+  it("shows the fuel price error even while Advanced options is closed (it opens by itself)", async () => {
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    mockApiFetch({
+      fuelPrices: {
+        prices: { "95_octane": { lbp_per_liter: 99999999999, usd_per_liter: 1 } },
+        lbp_per_usd: 89000,
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByText(/Fuel price must be between 1 and 10,000,000/)).toBeVisible();
+  });
+
+  it("sends a fuel price of exactly 10,000,000 (the upper bound)", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+    await screen.findByLabelText("Destination *");
+    await user.click(screen.getByText("Advanced options"));
+    const price = screen.getByLabelText(/Fuel Price/);
+    await user.clear(price);
+    await user.type(price, "10000000");
+    await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/trip-planner/estimate",
+        expect.objectContaining({
+          body: expect.objectContaining({ fuel_price_per_liter_lbp: 10000000 }),
+        }),
+      ),
+    );
+  });
+});

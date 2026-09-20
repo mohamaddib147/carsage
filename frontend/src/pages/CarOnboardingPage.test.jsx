@@ -6,7 +6,7 @@
 // client and the backend apiFetch call are both mocked so no real
 // network calls happen.
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -146,36 +146,35 @@ describe("CarOnboardingPage", () => {
     expect(yearInput).toHaveValue(null);
   });
 
-  it("accepts and submits very long text in Make/Model unchanged (edge case)", async () => {
+  it("cannot type more than 60 characters into Make/Model, so oversized text is never submitted (edge case)", async () => {
     const user = userEvent.setup();
     const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
     const select = vi.fn(() => ({ single }));
     const insert = vi.fn(() => ({ select }));
     supabase.from.mockReturnValue({ insert });
 
-    const longMake = "A".repeat(300);
-    const longModel = "B".repeat(300);
-
     renderPage();
-    await user.type(screen.getByLabelText("Make *"), longMake);
-    await user.type(screen.getByLabelText("Model *"), longModel);
+    await user.type(screen.getByLabelText("Make *"), "A".repeat(300));
+    await user.type(screen.getByLabelText("Model *"), "B".repeat(300));
     await user.type(screen.getByLabelText("Year *"), "2020");
     await user.selectOptions(screen.getByLabelText("Fuel Type *"), "Gasoline");
     await user.click(screen.getByRole("button", { name: "Add Car" }));
 
+    // CAR-23: capped at the server/database limit instead of "unchanged".
     expect(insert).toHaveBeenCalledWith(
-      expect.objectContaining({ make: longMake, model: longModel }),
+      expect.objectContaining({ make: "A".repeat(60), model: "B".repeat(60) }),
     );
   });
 
-  it("accepts and submits special characters in VIN unchanged (edge case)", async () => {
+  it("submits special characters in VIN unchanged, as data and not code (edge case)", async () => {
     const user = userEvent.setup();
     const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
     const select = vi.fn(() => ({ single }));
     const insert = vi.fn(() => ({ select }));
     supabase.from.mockReturnValue({ insert });
 
-    const trickyVin = "<script>alert(1)</script>O'Brien\"; DROP TABLE cars;--";
+    // Kept within the 32-character VIN limit.
+    const trickyVin = "';DROP TABLE cars;--<b>x</b>";
 
     renderPage();
     await fillRequiredFields(user);
@@ -486,4 +485,104 @@ describe("CarOnboardingPage — tank capacity source note (CAR-44)", () => {
     },
     10000,
   );
+});
+
+describe("CarOnboardingPage — input limits (CAR-23)", () => {
+  const TEXT_LIMITS = [
+    ["Make *", 60],
+    ["Model *", 60],
+    ["Engine Type", 60],
+    ["License Plate", 20],
+    ["Drivetrain", 60],
+    ["Transmission", 60],
+    ["VIN", 32],
+  ];
+
+  it.each(TEXT_LIMITS)("caps the %s field at %i characters", (label, max) => {
+    renderPage();
+
+    expect(screen.getByLabelText(label)).toHaveAttribute("maxlength", String(max));
+  });
+
+  it.each([
+    ["Make *", 61, "Make must be 60 characters or fewer."],
+    ["Model *", 61, "Model must be 60 characters or fewer."],
+    ["VIN", 33, "VIN must be 32 characters or fewer."],
+    ["License Plate", 21, "License plate must be 20 characters or fewer."],
+  ])(
+    "still refuses an oversized %s if the input cap is bypassed, without saving",
+    async (label, length, message) => {
+      const user = userEvent.setup();
+      const insert = vi.fn();
+      supabase.from.mockReturnValue({ insert });
+      renderPage();
+      await fillRequiredFields(user);
+
+      // fireEvent.change ignores maxLength, like a script or pasted-in devtools value would.
+      fireEvent.change(screen.getByLabelText(label), { target: { value: "x".repeat(length) } });
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      expect(insert).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["Fuel Efficiency (km/L)", "500", "Fuel efficiency must be between 0 and 100 km/L."],
+    ["Fuel Efficiency (km/L)", "-5", "Fuel efficiency must be between 0 and 100 km/L."],
+    ["Cylinders", "99", "Cylinders must be a whole number between 1 and 16."],
+    ["Cylinders", "-3", "Cylinders must be a whole number between 1 and 16."],
+    ["Cylinders", "4.5", "Cylinders must be a whole number between 1 and 16."],
+  ])("rejects %s = %s with a visible message and does not save", async (label, value, message) => {
+    const user = userEvent.setup();
+    const insert = vi.fn();
+    supabase.from.mockReturnValue({ insert });
+    renderPage();
+    await fillRequiredFields(user);
+
+    await user.type(screen.getByLabelText(label), value);
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("accepts the boundary values (efficiency 100, cylinders 16, 60-char make)", async () => {
+    const user = userEvent.setup();
+    const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+    const insert = vi.fn(() => ({ select: vi.fn(() => ({ single })) }));
+    supabase.from.mockReturnValue({ insert });
+    renderPage();
+    await fillRequiredFields(user);
+
+    await user.clear(screen.getByLabelText("Make *"));
+    await user.type(screen.getByLabelText("Make *"), "M".repeat(60));
+    await user.type(screen.getByLabelText("Fuel Efficiency (km/L)"), "100");
+    await user.type(screen.getByLabelText("Cylinders"), "16");
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ make: "M".repeat(60), fuel_efficiency: 100, cylinders: 16 }),
+    );
+  });
+
+  it("describes a database rule violation in plain words, never the constraint name", async () => {
+    const user = userEvent.setup();
+    const single = vi.fn().mockResolvedValue({
+      data: null,
+      error: {
+        code: "23514",
+        message: 'new row for relation "cars" violates check constraint "cars_year_range_check"',
+      },
+    });
+    supabase.from.mockReturnValue({ insert: vi.fn(() => ({ select: vi.fn(() => ({ single })) })) });
+    renderPage();
+    await fillRequiredFields(user);
+
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("outside the allowed range or length");
+    expect(alert).not.toHaveTextContent(/cars_year_range_check|relation/);
+  });
 });

@@ -68,6 +68,7 @@ import RouteMapImage from "../components/RouteMapImage.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { apiFetch } from "../lib/apiClient.js";
+import { LIMITS, getFuelPriceError } from "../lib/limits.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { getTrafficLevel } from "../lib/trafficLevel.js";
 
@@ -179,10 +180,12 @@ function TripPlannerPage() {
     };
   }, []);
 
-  // An invalid tank size must never be hidden inside the closed section.
+  // An invalid tank size or fuel price must never be hidden inside the closed section.
   useEffect(() => {
-    if (getTankCapacityError(tankSizeInput)) setAdvancedOpen(true);
-  }, [tankSizeInput]);
+    if (getTankCapacityError(tankSizeInput) || getFuelPriceError(fuelPriceInput)) {
+      setAdvancedOpen(true);
+    }
+  }, [tankSizeInput, fuelPriceInput]);
 
   /** CAR-49: switching cars fully replaces the Tank Size text with the new
    * car's capacity (or empties it) in the same update — never appends to
@@ -214,6 +217,12 @@ function TripPlannerPage() {
       return;
     }
     setDestinationError("");
+
+    // Same 1 - 10,000,000 bound the server enforces; show it instead of sending.
+    if (getFuelPriceError(fuelPriceInput)) {
+      setAdvancedOpen(true);
+      return;
+    }
 
     const parsedFuelPrice = Number(fuelPriceInput);
     const fuelPriceOverride =
@@ -320,6 +329,7 @@ function TripPlannerPage() {
               />
               <PlaceAutocompleteInput
                 id="origin"
+                maxLength={LIMITS.PLACE}
                 placeholder="e.g. Beirut, Lebanon"
                 value={origin}
                 onChange={setOrigin}
@@ -336,6 +346,7 @@ function TripPlannerPage() {
               />
               <PlaceAutocompleteInput
                 id="destination"
+                maxLength={LIMITS.PLACE}
                 placeholder="e.g. Tripoli, Lebanon"
                 value={destination}
                 onChange={setDestination}
@@ -371,7 +382,13 @@ function TripPlannerPage() {
                     fuelPriceEditedRef.current = true;
                     setFuelPriceInput(raw);
                   }}
+                  aria-invalid={getFuelPriceError(fuelPriceInput) ? "true" : undefined}
                 />
+                {getFuelPriceError(fuelPriceInput) && (
+                  <p role="alert" className="auth-form__error">
+                    {getFuelPriceError(fuelPriceInput)}
+                  </p>
+                )}
               </div>
 
               <div className="form-field">

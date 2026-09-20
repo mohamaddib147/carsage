@@ -22,6 +22,11 @@ import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
 import { supabase } from "../lib/supabaseClient.js";
+import {
+  LIMITS,
+  describeSaveError,
+  getCarFieldErrors,
+} from "../lib/limits.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 
 // How long to wait after the user stops typing Make/Model/Year before
@@ -92,6 +97,12 @@ function validate(form) {
   if (form.fuelTankCapacity.trim()) {
     const capacityError = getTankCapacityError(form.fuelTankCapacity);
     if (capacityError) errors.fuelTankCapacity = capacityError;
+  }
+
+  // Length / range limits shared with the server (lib/limits.js); the
+  // required-field messages above win when both apply.
+  for (const [field, message] of Object.entries(getCarFieldErrors(form))) {
+    if (!errors[field]) errors[field] = message;
   }
 
   return errors;
@@ -245,7 +256,7 @@ function CarOnboardingPage() {
         .single();
 
       if (error) {
-        setSubmitError(error.message);
+        setSubmitError(describeSaveError(error));
         return;
       }
 
@@ -292,7 +303,7 @@ function CarOnboardingPage() {
             <input
               id="make"
               name="make"
-              type="text"
+              type="text" maxLength={LIMITS.MAKE_MODEL}
               placeholder="e.g. Toyota"
               value={form.make}
               onChange={handleChange("make")}
@@ -309,7 +320,7 @@ function CarOnboardingPage() {
             <input
               id="model"
               name="model"
-              type="text"
+              type="text" maxLength={LIMITS.MAKE_MODEL}
               placeholder="e.g. Corolla"
               value={form.model}
               onChange={handleChange("model")}
@@ -343,11 +354,16 @@ function CarOnboardingPage() {
             <input
               id="engineType"
               name="engineType"
-              type="text"
+              type="text" maxLength={LIMITS.ENGINE_TYPE}
               placeholder="e.g. 2.5L Inline-4"
               value={form.engineType}
               onChange={handleChange("engineType")}
             />
+              {fieldErrors.engineType && (
+                <p role="alert" className="auth-form__error">
+                  {fieldErrors.engineType}
+                </p>
+              )}
           </div>
 
           <div className="form-field">
@@ -377,11 +393,16 @@ function CarOnboardingPage() {
             <input
               id="licensePlate"
               name="licensePlate"
-              type="text"
+              type="text" maxLength={LIMITS.LICENSE_PLATE}
               placeholder="e.g. 7XYZ890"
               value={form.licensePlate}
               onChange={handleChange("licensePlate")}
             />
+              {fieldErrors.licensePlate && (
+                <p role="alert" className="auth-form__error">
+                  {fieldErrors.licensePlate}
+                </p>
+              )}
           </div>
 
           <div className="form-field">
@@ -389,12 +410,17 @@ function CarOnboardingPage() {
             <input
               id="fuelEfficiency"
               name="fuelEfficiency"
-              type="number"
+              type="number" max={LIMITS.MAX_FUEL_EFFICIENCY}
               step="0.1"
               placeholder="Auto-filled if available"
               value={form.fuelEfficiency}
               onChange={handleChange("fuelEfficiency")}
             />
+              {fieldErrors.fuelEfficiency && (
+                <p role="alert" className="auth-form__error">
+                  {fieldErrors.fuelEfficiency}
+                </p>
+              )}
           </div>
 
           <div className="form-field">
@@ -402,11 +428,16 @@ function CarOnboardingPage() {
             <input
               id="cylinders"
               name="cylinders"
-              type="number"
+              type="number" min={LIMITS.MIN_CYLINDERS} max={LIMITS.MAX_CYLINDERS}
               placeholder="Auto-filled if available"
               value={form.cylinders}
               onChange={handleChange("cylinders")}
             />
+              {fieldErrors.cylinders && (
+                <p role="alert" className="auth-form__error">
+                  {fieldErrors.cylinders}
+                </p>
+              )}
           </div>
 
           <div className="form-field">
@@ -414,11 +445,16 @@ function CarOnboardingPage() {
             <input
               id="drivetrain"
               name="drivetrain"
-              type="text"
+              type="text" maxLength={LIMITS.DRIVETRAIN}
               placeholder="e.g. fwd, rwd, awd"
               value={form.drivetrain}
               onChange={handleChange("drivetrain")}
             />
+              {fieldErrors.drivetrain && (
+                <p role="alert" className="auth-form__error">
+                  {fieldErrors.drivetrain}
+                </p>
+              )}
           </div>
 
           <div className="form-field">
@@ -452,11 +488,16 @@ function CarOnboardingPage() {
             <input
               id="transmission"
               name="transmission"
-              type="text"
+              type="text" maxLength={LIMITS.TRANSMISSION}
               placeholder="Auto-filled if available"
               value={form.transmission}
               onChange={handleChange("transmission")}
             />
+              {fieldErrors.transmission && (
+                <p role="alert" className="auth-form__error">
+                  {fieldErrors.transmission}
+                </p>
+              )}
           </div>
         </div>
 
@@ -465,11 +506,16 @@ function CarOnboardingPage() {
           <input
             id="vin"
             name="vin"
-            type="text"
+            type="text" maxLength={LIMITS.VIN}
             placeholder="e.g. 4S4BSANC8M3801249"
             value={form.vin}
             onChange={handleChange("vin")}
           />
+              {fieldErrors.vin && (
+                <p role="alert" className="auth-form__error">
+                  {fieldErrors.vin}
+                </p>
+              )}
         </div>
 
         {submitError && (
