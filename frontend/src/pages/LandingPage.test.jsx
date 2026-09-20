@@ -73,6 +73,17 @@ describe("LandingPage", () => {
     expect(screen.getByText(/safe to fix yourself or time to see a mechanic/)).toBeInTheDocument();
   });
 
+  it("the AI Advisor sample card shows an issue the advisor really treats as DIY", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderPage();
+
+    // "Loose gas cap" is confirmed DIY in the CAR-22 live testing; the old
+    // "squeaking brake" example is answered with "see a mechanic".
+    expect(await screen.findByText("“Loose gas cap”")).toBeInTheDocument();
+    expect(screen.getByText("Advice: safe for DIY inspection")).toBeInTheDocument();
+    expect(screen.queryByText(/Squeaking brake/)).not.toBeInTheDocument();
+  });
+
   it("logged out: every primary CTA says 'Get Started Free' and links to Sign Up (normal case)", async () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
     renderPage();

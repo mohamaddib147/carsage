@@ -40,7 +40,7 @@ const FEATURES = [
     title: "AI Advisor",
     description:
       "Describe a car issue in plain language and get clear guidance on whether it's safe to fix yourself or time to see a mechanic.",
-    previewLabel: "“Squeaking brake when cold”",
+    previewLabel: "“Loose gas cap”",
     previewMeta: "Advice: safe for DIY inspection",
   },
 ];
