@@ -16,6 +16,7 @@ Format: `path/to/file — what this file does`
 - `docs/CarSage_Wireframes.pdf` — UI screens and user flow.
 - `docs/FILE_INDEX.md` — this file.
 - `docs/db_migrations/2026-09-20_car23_input_validation_constraints.sql` — CAR-23 audit trail (the live Supabase schema is the source of truth): CHECK constraints for every column the app writes (cars, trips, advisor_messages, profiles) — text length limits, year/efficiency/cylinder ranges, fuel_type allow-list, a youtube.com-only video_url — plus `cars.fuel_type` NOT NULL. Server-side enforcement for the browser's direct writes, which RLS alone (who may write, not what) does not cover.
+- `docs/db_migrations/2026-09-20_car24_access_control_hardening.sql` — CAR-24 audit trail: trips and advisor_conversations INSERT/UPDATE policies now require the referenced car to belong to the caller (closes cross-user car_id references), and `anon` / unneeded `authenticated` table privileges (TRUNCATE, REFERENCES, TRIGGER; all of fuel_prices) are revoked.
 - `docs/stitch_carsage_landing_page/` — Stitch-generated design reference (screen.png + code.html per screen), the visual source of truth for UI alignment; see CLAUDE.md's Design Reference section.
 
 ## frontend/
@@ -84,6 +85,8 @@ Format: `path/to/file — what this file does`
 - `backend/conftest.py` — sets harmless default env vars so tests never need a real `.env` or real secrets.
 - `backend/Dockerfile` — container image for deploying the API to any Docker-based host.
 - `backend/.dockerignore` — excludes venv/tests/secrets from the built image.
+- `backend/scripts/verify_rls.py` — CAR-24 live RLS re-test (run after any policy/grant change): two throwaway users + anonymous against all five tables through the browser's REST API — positive controls plus read/forge/update/re-assign/delete attempts, embedded joins and cross-user car references, anon and fuel_prices; asserts the browser key is the anon key; cleans up; exit 1 on any gap.
+- `backend/scripts/verify_backend_auth.py` — CAR-24 live backend-authentication re-test against the running API: no/malformed/forged/expired/anon-key/signed-out/deleted-user tokens are all refused, and no route except /health answers without credentials; cleans up; exit 1 on any problem.
 - `backend/app/main.py` — FastAPI app instance, CORS middleware (from `ALLOWED_ORIGINS`), route registration. CAR-23: a RequestValidationError handler returns 422 with only where/why (never the rejected input, which reflected huge payloads and made `Infinity` crash into a 500).
 - `backend/app/validation.py` — CAR-23 shared server-side limits used by every router: 1-300 char trimmed place text, UUID record ids, bounded finite fuel price, car make/model/year bounds, AI Advisor description/message limits. Mirrors the database CHECK constraints (docs/db_migrations/) and the frontend (src/lib/limits.js) — change them together.
 - `backend/app/config.py` — loads and validates required env vars (`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_MAPS_API_KEY`); fails fast with a clear error if one is missing.
