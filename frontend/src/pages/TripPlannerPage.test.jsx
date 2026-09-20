@@ -1105,3 +1105,29 @@ describe("TripPlannerPage — input limits (CAR-23)", () => {
     );
   });
 });
+
+describe("TripPlannerPage — authenticated API calls (CAR-24)", () => {
+  it("sends the session token when loading the current fuel prices (the endpoint requires login)", async () => {
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    mockApiFetch({ fuelPrices: { prices: {}, lbp_per_usd: 89000 } });
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith("/trip-planner/fuel-prices", {
+        accessToken: "test-access-token",
+      }),
+    );
+  });
+
+  it("does not call the fuel prices endpoint at all without a session", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    mockCarsLookup([{ id: "car-1" }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+
+    renderPage();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(apiFetch).not.toHaveBeenCalledWith("/trip-planner/fuel-prices", expect.anything());
+  });
+});

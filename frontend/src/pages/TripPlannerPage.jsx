@@ -161,13 +161,16 @@ function TripPlannerPage() {
   // CAR-41: fetch the current default fuel prices once, to prefill the
   // editable fuel price field — non-critical, so a failure here just
   // leaves the field for the user to fill in (or the backend falls back
-  // to its own default if it's left blank).
+  // to its own default if it's left blank). CAR-24: the endpoint requires a
+  // logged-in caller, so the session token is sent.
+  const accessToken = session?.access_token;
   useEffect(() => {
+    if (!accessToken) return undefined;
     let cancelled = false;
 
     async function loadFuelPrices() {
       try {
-        const data = await apiFetch("/trip-planner/fuel-prices");
+        const data = await apiFetch("/trip-planner/fuel-prices", { accessToken });
         if (!cancelled) setFuelPrices(data);
       } catch {
         // Non-critical — see comment above.
@@ -178,7 +181,7 @@ function TripPlannerPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [accessToken]);
 
   // An invalid tank size or fuel price must never be hidden inside the closed section.
   useEffect(() => {

@@ -116,8 +116,12 @@ function validate(form) {
  * @returns {JSX.Element}
  */
 function CarOnboardingPage() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const navigate = useNavigate();
+  // The spec lookup endpoint requires a logged-in caller (CAR-24), so the
+  // session token is sent; a ref keeps the debounced callback current.
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -167,6 +171,7 @@ function CarOnboardingPage() {
       try {
         const suggestions = await apiFetch(
           `/cars/spec-suggestions?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&year=${yearNumber}`,
+          { accessToken: sessionRef.current?.access_token },
         );
 
         // Only label the tank value if the autofill is what actually fills

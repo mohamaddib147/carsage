@@ -57,7 +57,7 @@ async function fillRequiredFields(user, { year = "2020" } = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   supabase.auth.getSession.mockResolvedValue({
-    data: { session: { user: LOGGED_IN_USER } },
+    data: { session: { user: LOGGED_IN_USER, access_token: "test-access-token" } },
   });
   // Default: no autofill data, so tests that don't care about CAR-34's
   // lookup aren't affected by it running in the background.
@@ -233,8 +233,10 @@ describe("CarOnboardingPage", () => {
           expect(screen.getByLabelText("Fuel Efficiency (km/L)")).toHaveValue(14.5),
         { timeout: 3000 },
       );
+      // CAR-24: the endpoint requires a logged-in caller, so the session token is sent.
       expect(apiFetch).toHaveBeenCalledWith(
         expect.stringContaining("/cars/spec-suggestions?make=Toyota&model=Corolla&year=2020"),
+        { accessToken: "test-access-token" },
       );
 
       await user.click(screen.getByRole("button", { name: "Add Car" }));

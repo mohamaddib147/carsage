@@ -4,6 +4,7 @@
 
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import appSource from "./App.jsx?raw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App.jsx";
 import { AuthProvider } from "./auth/AuthContext.jsx";
@@ -114,5 +115,60 @@ describe("App routing — protected screens redirect logged-out users", () => {
     expect(
       await screen.findByRole("heading", { name: "Log In" }),
     ).toBeInTheDocument();
+  });
+});
+
+// --- CAR-24: the route table itself is checked, not a hand-kept list ----------
+// The routes are read from App.jsx's own source, so a route added later that is
+// neither wrapped in <ProtectedRoute> nor deliberately listed as public makes
+// this fail instead of silently shipping an unprotected screen.
+
+const PUBLIC_PATHS = ["*", "/", "/login", "/privacy", "/signup", "/terms"];
+
+const declaredRoutes = appSource
+  .split("<Route")
+  .slice(1)
+  .map((chunk) => ({
+    path: /path="([^"]+)"/.exec(chunk)?.[1],
+    protectedRoute: chunk.includes("<ProtectedRoute>"),
+  }))
+  .filter((route) => route.path);
+
+describe("App routing — every route is either protected or deliberately public (CAR-24)", () => {
+  it("found the real route table", () => {
+    expect(declaredRoutes.length).toBeGreaterThanOrEqual(11);
+    expect(declaredRoutes.some((route) => route.path === "/trip-planner")).toBe(true);
+  });
+
+  it("the unprotected routes are exactly the public allow-list (Landing, Log In, Sign Up, Terms, Privacy, 404)", () => {
+    const unprotected = declaredRoutes.filter((route) => !route.protectedRoute).map((route) => route.path);
+
+    expect([...unprotected].sort()).toEqual(PUBLIC_PATHS);
+  });
+
+  const protectedPaths = declaredRoutes.filter((route) => route.protectedRoute).map((route) => route.path);
+
+  it("protects the five app screens and the car profile routes", () => {
+    expect([...protectedPaths].sort()).toEqual(
+      ["/advisor", "/cars/:carId", "/cars/mine", "/cars/new", "/dashboard", "/trip-planner"].sort(),
+    );
+  });
+
+  it.each(protectedPaths)("a logged-out visitor to %s is sent to Log In and never sees the screen", async (path) => {
+    renderAtPath(path.replace(":carId", "abc-123"));
+
+    expect(await screen.findByRole("heading", { name: "Log In" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Dashboard" })).not.toBeInTheDocument();
+  });
+
+  it("the Log In screen a visitor lands on offers a way to Sign Up", async () => {
+    renderAtPath("/dashboard");
+
+    await screen.findByRole("heading", { name: "Log In" });
+    const signUpLinks = screen.getAllByRole("link", { name: "Sign Up" });
+    expect(signUpLinks.length).toBeGreaterThanOrEqual(1);
+    for (const link of signUpLinks) {
+      expect(link).toHaveAttribute("href", "/signup");
+    }
   });
 });
