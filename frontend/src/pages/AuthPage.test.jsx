@@ -221,3 +221,39 @@ describe("AuthPage — input limits (CAR-23)", () => {
     );
   });
 });
+
+describe("AuthPage — error wording (CAR-25)", () => {
+  it("never shows server-side wording from Supabase Auth, only a generic sentence", async () => {
+    const user = userEvent.setup();
+    supabase.auth.signInWithPassword.mockResolvedValue({
+      data: { session: null },
+      error: { message: "Database error saving new user at /var/app/gotrue/api.go:214" },
+    });
+
+    renderAuthPage("/login");
+    await user.type(screen.getByLabelText("Email"), "driver@example.com");
+    await user.type(screen.getByLabelText("Password"), "some-password");
+    await user.click(screen.getByRole("button", { name: "Log In" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Something went wrong. Please try again.");
+    expect(alert).not.toHaveTextContent(/database|gotrue|\.go/i);
+  });
+
+  it("says so in plain words when the server can't be reached", async () => {
+    const user = userEvent.setup();
+    supabase.auth.signInWithPassword.mockResolvedValue({
+      data: { session: null },
+      error: { name: "AuthRetryableFetchError", message: "Failed to fetch" },
+    });
+
+    renderAuthPage("/login");
+    await user.type(screen.getByLabelText("Email"), "driver@example.com");
+    await user.type(screen.getByLabelText("Password"), "some-password");
+    await user.click(screen.getByRole("button", { name: "Log In" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not reach the server. Check your connection and try again.",
+    );
+  });
+});

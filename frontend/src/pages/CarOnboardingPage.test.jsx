@@ -186,12 +186,22 @@ describe("CarOnboardingPage", () => {
     );
   });
 
-  it("shows a clear error and does not navigate when the insert fails", async () => {
+  // CAR-25: the database's own wording (table names, "row-level security policy",
+  // driver errors) is never shown — only a plain-language sentence.
+  it.each([
+    [
+      "a row-level security rejection",
+      { code: "42501", message: 'new row violates row-level security policy for table "cars"' },
+      "You don't have permission to do that.",
+    ],
+    [
+      "an unclassified database error",
+      { code: "XX000", message: 'relation "public.cars" does not exist at /var/lib/postgresql/x.c:88' },
+      "Could not save. Please try again.",
+    ],
+  ])("shows a clear plain-language error, never the database text, and does not navigate when the insert fails: %s", async (_label, dbError, expected) => {
     const user = userEvent.setup();
-    const single = vi.fn().mockResolvedValue({
-      data: null,
-      error: { message: "new row violates row-level security policy" },
-    });
+    const single = vi.fn().mockResolvedValue({ data: null, error: dbError });
     const select = vi.fn(() => ({ single }));
     const insert = vi.fn(() => ({ select }));
     supabase.from.mockReturnValue({ insert });
@@ -200,9 +210,9 @@ describe("CarOnboardingPage", () => {
     await fillRequiredFields(user);
     await user.click(screen.getByRole("button", { name: "Add Car" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "new row violates row-level security policy",
-    );
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(expected);
+    expect(alert).not.toHaveTextContent(/row-level|relation|public\.|postgresql|violates/i);
     expect(
       screen.queryByText("Car profile placeholder"),
     ).not.toBeInTheDocument();

@@ -4,7 +4,13 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  GENERIC_ERROR_MESSAGE,
   LIMITS,
+  NETWORK_ERROR_MESSAGE,
+  PERMISSION_ERROR_MESSAGE,
+  SESSION_EXPIRED_MESSAGE,
+  describeActionError,
+  describeAuthError,
   describeSaveError,
   getCarFieldErrors,
   getCylindersError,
@@ -109,9 +115,80 @@ describe("describeSaveError", () => {
     expect(message).not.toContain("fuel_type");
   });
 
-  it("keeps the message of any other error, with a fallback", () => {
-    expect(describeSaveError({ message: "Failed to fetch" })).toBe("Failed to fetch");
+  it("never shows the raw text of an unclassified error (CAR-25) — a generic sentence instead", () => {
+    expect(describeSaveError({ message: 'relation "public.cars" does not exist' })).toBe(
+      "Could not save. Please try again.",
+    );
     expect(describeSaveError(null)).toBe("Could not save. Please try again.");
     expect(describeSaveError({})).toBe("Could not save. Please try again.");
+  });
+
+  it("describes a network failure, an ended session and a permission rejection in plain words", () => {
+    expect(describeSaveError({ message: "TypeError: Failed to fetch" })).toBe(NETWORK_ERROR_MESSAGE);
+    expect(describeSaveError({ code: "PGRST301", message: "JWT expired" })).toBe(SESSION_EXPIRED_MESSAGE);
+    expect(
+      describeSaveError({ code: "42501", message: 'new row violates row-level security policy for table "cars"' }),
+    ).toBe(PERMISSION_ERROR_MESSAGE);
+  });
+});
+
+describe("describeActionError (CAR-25)", () => {
+  it("uses the caller's fallback for anything it cannot classify, never the raw message", () => {
+    const message = describeActionError({ code: "XX000", message: "internal: /srv/app/db.c:12" }, "Could not delete.");
+
+    expect(message).toBe("Could not delete.");
+  });
+
+  it("classifies network failures, expired sessions and permission errors before the fallback", () => {
+    expect(describeActionError({ name: "AuthRetryableFetchError", message: "x" }, "f")).toBe(NETWORK_ERROR_MESSAGE);
+    expect(describeActionError({ message: "Load failed" }, "f")).toBe(NETWORK_ERROR_MESSAGE);
+    expect(describeActionError({ code: "PGRST303", message: "x" }, "f")).toBe(SESSION_EXPIRED_MESSAGE);
+    expect(describeActionError({ code: "42501" }, "f")).toBe(PERMISSION_ERROR_MESSAGE);
+  });
+
+  it("copes with no error object at all", () => {
+    expect(describeActionError(undefined, "Fallback text")).toBe("Fallback text");
+  });
+});
+
+describe("describeAuthError (CAR-25)", () => {
+  it.each([
+    ["invalid_credentials", "Invalid login credentials"],
+    ["user_already_exists", "User already registered"],
+    ["email_exists", "User already registered"],
+    ["weak_password", "That password is too weak or too easy to guess. Please choose a stronger one."],
+    ["over_email_send_rate_limit", "Too many attempts. Please wait a moment and try again."],
+    ["over_request_rate_limit", "Too many attempts. Please wait a moment and try again."],
+    ["email_address_invalid", "Please enter a valid email address."],
+  ])("maps the Supabase Auth code %s to a plain sentence", (code, expected) => {
+    expect(describeAuthError({ code, message: "raw provider wording that is not shown" })).toBe(expected);
+  });
+
+  it.each([
+    "Invalid login credentials",
+    "User already registered",
+    "Email not confirmed",
+    "Password should be at least 6 characters.",
+  ])("keeps the user-meant Supabase message %j when it carries no code", (message) => {
+    expect(describeAuthError({ message })).toBe(message);
+  });
+
+  it.each([
+    "Database error saving new user",
+    "Error sending confirmation email",
+    "duplicate key value violates unique constraint \"users_email_key\"",
+    "Internal server error at /var/app/gotrue/api.go:214",
+  ])("replaces server-side wording %j with a generic sentence", (message) => {
+    const shown = describeAuthError({ message });
+
+    expect(shown).toBe(GENERIC_ERROR_MESSAGE);
+    expect(shown).not.toContain(message);
+  });
+
+  it("describes a network failure in plain words and copes with no error object", () => {
+    expect(describeAuthError({ name: "AuthRetryableFetchError", message: "Failed to fetch" })).toBe(
+      NETWORK_ERROR_MESSAGE,
+    );
+    expect(describeAuthError(null)).toBe(GENERIC_ERROR_MESSAGE);
   });
 });

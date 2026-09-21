@@ -8,7 +8,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
-import { LIMITS } from "../lib/limits.js";
+import { LIMITS, describeAuthError } from "../lib/limits.js";
 
 /**
  * Combined Sign Up / Log In screen. Mode is determined by the route
@@ -53,7 +53,9 @@ function AuthPage() {
         : await signIn(email.trim(), password);
 
       if (authError) {
-        setError(authError.message);
+        // Supabase's raw wording can be technical (e.g. "Database error
+        // saving new user"), so only known user-meant messages are passed on.
+        setError(describeAuthError(authError));
         return;
       }
 

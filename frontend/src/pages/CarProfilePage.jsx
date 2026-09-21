@@ -15,6 +15,7 @@ import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import {
   LIMITS,
+  describeActionError,
   describeSaveError,
   getCarFieldErrors,
 } from "../lib/limits.js";
@@ -228,7 +229,7 @@ function CarProfilePage() {
     try {
       const { error } = await supabase.from("cars").delete().eq("id", car.id);
       if (error) {
-        setDeleteError(error.message);
+        setDeleteError(describeActionError(error, "Could not delete this car. Please try again."));
         return;
       }
       navigate("/dashboard", { replace: true });

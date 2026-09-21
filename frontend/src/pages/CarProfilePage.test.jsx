@@ -221,7 +221,10 @@ describe("CarProfilePage — editing", () => {
       selectResult: { data: SAMPLE_CAR, error: null },
       updateResult: {
         data: null,
-        error: { message: "new row violates row-level security policy" },
+        error: {
+          code: "42501",
+          message: 'new row violates row-level security policy for table "cars"',
+        },
       },
     });
 
@@ -229,9 +232,10 @@ describe("CarProfilePage — editing", () => {
     await user.click(await screen.findByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "new row violates row-level security policy",
-    );
+    // CAR-25: plain language, never the database's own wording.
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("You don't have permission to do that.");
+    expect(alert).not.toHaveTextContent(/row-level|violates|table/i);
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
@@ -364,18 +368,35 @@ describe("CarProfilePage — deleting (CAR-38)", () => {
     expect(screen.getByText("Corolla")).toBeInTheDocument();
   });
 
-  it("shows a clear error and stays on the page when the delete fails", async () => {
+  it.each([
+    [
+      "an unclassified database error",
+      { code: "XX000", message: 'update or delete on table "cars" violates foreign key constraint "trips_car_id_fkey"' },
+      "Could not delete this car. Please try again.",
+    ],
+    [
+      "a permission rejection",
+      { code: "42501", message: 'new row violates row-level security policy for table "cars"' },
+      "You don't have permission to do that.",
+    ],
+    [
+      "an ended session",
+      { code: "PGRST301", message: "JWT expired" },
+      "Your session has expired. Please log in again.",
+    ],
+  ])("shows a plain-language error (never the database text) and stays on the page when the delete fails: %s", async (_label, dbError, expected) => {
     const user = userEvent.setup();
     mockCarsTable({
       selectResult: { data: SAMPLE_CAR, error: null },
-      deleteResult: { error: { message: "new row violates row-level security policy" } },
+      deleteResult: { error: dbError },
     });
 
     renderAt("/cars/mine");
     await user.click(await screen.findByRole("button", { name: "Delete Car" }));
     await user.click(screen.getByRole("button", { name: "Yes, Delete" }));
 
-    expect(await screen.findByText("new row violates row-level security policy")).toBeInTheDocument();
+    expect(await screen.findByText(expected)).toBeInTheDocument();
+    expect(screen.queryByText(/row-level|foreign key|trips_car_id_fkey|JWT/i)).not.toBeInTheDocument();
     expect(screen.getByText("Corolla")).toBeInTheDocument();
   });
 });
