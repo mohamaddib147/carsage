@@ -7,6 +7,7 @@
 # that isn't in either database (e.g. not sold in the US) never blocks
 # onboarding.
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 
@@ -30,6 +31,62 @@ MAX_TANK_LITERS = 200
 MPG_TO_KM_PER_LITER = 1.60934 / 3.78541
 
 
+# NHTSA often lists a vehicle by its model FAMILY rather than the badge on the
+# car: a Mercedes "C230 Kompressor" is "C-Class", a BMW "328i" is "3 Series".
+_MODEL_FAMILY = re.compile(r"^(?P<base>.+?)[\s-]+(class|series)$", re.IGNORECASE)
+
+
+def match_nhtsa_model(model: str, official_names: list[str]) -> str | None:
+    """
+    Finds the name NHTSA uses for the model the user typed.
+
+    Tried in order, first hit wins:
+      1. the same name, ignoring case ("civic" -> "Civic");
+      2. the user's text is an official name plus a trim ("Camry LE" -> "Camry"),
+         preferring the longest such name ("Corolla Cross LE" -> "Corolla Cross");
+      3. the official name is a family and the user's text is the family letter or
+         number followed by digits ("C230 Kompressor" -> "C-Class", "328i" ->
+         "3 Series"). The digit is required so "CLK320" is not read as "C-Class".
+
+    Parameters:
+        model: what the user saved as the car's model.
+        official_names: the model names NHTSA lists for that make and year.
+
+    Returns:
+        The NHTSA spelling, or None if nothing matches.
+    """
+    wanted = " ".join(model.lower().split())
+    names = [name.strip() for name in official_names if name and name.strip()]
+    if not wanted:
+        return None
+
+    for name in names:
+        if name.lower() == wanted:
+            return name
+
+    with_trim = [
+        name
+        for name in names
+        if wanted.startswith(name.lower())
+        and len(wanted) > len(name)
+        and wanted[len(name)] in " -"
+    ]
+    if with_trim:
+        return max(with_trim, key=len)
+
+    compact = re.sub(r"[^a-z0-9]", "", wanted)
+    families = []
+    for name in names:
+        family = _MODEL_FAMILY.match(name)
+        if not family:
+            continue
+        base = re.sub(r"[^a-z0-9]", "", family["base"].lower())
+        if base and len(compact) > len(base) and compact.startswith(base) and compact[len(base)].isdigit():
+            families.append((len(base), name))
+    # A longer family letter wins, so "CL500" picks "CL-Class" over "C-Class".
+    return max(families)[1] if families else None
+
+
 def lookup_nhtsa(make: str, model: str, year: int) -> dict:
     """
     Confirms a make/model/year exists in NHTSA vPIC and returns an
@@ -41,9 +98,12 @@ def lookup_nhtsa(make: str, model: str, year: int) -> dict:
     closest available signal, not a literal engine spec.
 
     Returns:
-        {"vehicle_confirmed": bool, "engine_type": str | None}. Always
-        this shape, even on a network/API failure — never raises, since
-        this is a non-critical autofill lookup.
+        {"vehicle_confirmed": bool, "engine_type": str | None,
+        "model_name": str | None} — model_name is NHTSA's own name for the
+        model (see match_nhtsa_model), which the safety check needs because
+        NHTSA's recall/complaint data is filed under it. Always this shape,
+        even on a network/API failure — never raises, since this is a
+        non-critical autofill lookup.
     """
     try:
         response = httpx.get(
@@ -56,14 +116,11 @@ def lookup_nhtsa(make: str, model: str, year: int) -> dict:
         response.raise_for_status()
         results = response.json().get("Results", [])
     except httpx.HTTPError:
-        return {"vehicle_confirmed": False, "engine_type": None}
+        return {"vehicle_confirmed": False, "engine_type": None, "model_name": None}
 
-    confirmed = any(
-        result.get("Model_Name", "").strip().lower() == model.strip().lower()
-        for result in results
-    )
-    if not confirmed:
-        return {"vehicle_confirmed": False, "engine_type": None}
+    official_name = match_nhtsa_model(model, [result.get("Model_Name", "") for result in results])
+    if official_name is None:
+        return {"vehicle_confirmed": False, "engine_type": None, "model_name": None}
 
     engine_type = None
     try:
@@ -79,7 +136,7 @@ def lookup_nhtsa(make: str, model: str, year: int) -> dict:
     except httpx.HTTPError:
         pass
 
-    return {"vehicle_confirmed": True, "engine_type": engine_type}
+    return {"vehicle_confirmed": True, "engine_type": engine_type, "model_name": official_name}
 
 
 def _extract_tank_capacity(car: dict) -> float | None:
@@ -314,7 +371,8 @@ def get_spec_suggestions(make: str, model: str, year: int) -> dict:
         tank_source = "ai_estimate" if tank_capacity is not None else None
 
     return {
-        **nhtsa,
+        # model_name is only for the safety check, not part of this response.
+        **{key: value for key, value in nhtsa.items() if key != "model_name"},
         **ninjas,
         "fuel_efficiency": fuel_efficiency,
         "fuel_tank_capacity_liters": tank_capacity,
