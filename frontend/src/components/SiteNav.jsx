@@ -10,6 +10,7 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuthStatus } from "../auth/AuthContext.jsx";
 import Logo from "./Logo.jsx";
+import CurrencyToggle from "./CurrencyToggle.jsx";
 
 const CENTER_LINKS = [
   { to: "/dashboard", label: "Dashboard" },
@@ -71,13 +72,16 @@ function SiteNav() {
           </NavLink>
         )}
         {status === "signedIn" && (
-          <button
-            type="button"
-            className="site-nav__logout"
-            onClick={handleLogOut}
-          >
-            Log Out
-          </button>
+          <>
+            <CurrencyToggle />
+            <button
+              type="button"
+              className="site-nav__logout"
+              onClick={handleLogOut}
+            >
+              Log Out
+            </button>
+          </>
         )}
       </div>
     </nav>

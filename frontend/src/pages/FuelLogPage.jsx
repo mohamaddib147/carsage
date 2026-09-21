@@ -10,18 +10,22 @@
 // is the selected car, so one car's fill-ups can never appear under another — not
 // after a switch, not when a slow reply arrives late, not when a save finishes late.
 //
-// The cost is kept exactly as typed with its currency (USD or LBP).
+// The cost is kept exactly as typed with its currency (USD or LBP). The form's
+// currency starts on the user's primary currency (CAR-54) and follows the header
+// toggle until they pick one here themselves; every figure in the list is shown
+// through <Price>, so the toggle changes them all.
 
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
+import Price from "../components/Price.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
+import { useCurrency } from "../currency/CurrencyContext.jsx";
+import { CURRENCIES } from "../lib/currency.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { describeActionError, describeSaveError, LIMITS } from "../lib/limits.js";
 import {
-  CURRENCIES,
   formatFillDate,
-  formatFillUpMoney,
   formatLiters,
   getFillUpErrors,
   pricePerLiter,
@@ -55,7 +59,10 @@ function FuelLogPage() {
   const [date, setDate] = useState(todayLocal());
   const [liters, setLiters] = useState("");
   const [cost, setCost] = useState("");
-  const [currency, setCurrency] = useState("USD");
+  const { currency: primaryCurrency } = useCurrency();
+  // null = the user hasn't chosen here, so the form follows the header toggle.
+  const [chosenCurrency, setChosenCurrency] = useState(null);
+  const currency = chosenCurrency ?? primaryCurrency;
   const [fieldErrors, setFieldErrors] = useState({});
   const [saveError, setSaveError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -281,7 +288,7 @@ function FuelLogPage() {
               <select
                 aria-label="Currency of the cost"
                 value={currency}
-                onChange={(event) => setCurrency(event.target.value)}
+                onChange={(event) => setChosenCurrency(event.target.value)}
               >
                 {CURRENCIES.map((code) => (
                   <option key={code} value={code}>
@@ -349,11 +356,15 @@ function FuelLogPage() {
                     <tr key={entry.id}>
                       <td>{formatFillDate(entry.filled_at)}</td>
                       <td>{formatLiters(entry.liters)} L</td>
-                      <td>{formatFillUpMoney(Number(entry.cost_amount), entry.cost_currency)}</td>
                       <td>
-                        {perLiter == null
-                          ? "—"
-                          : `${formatFillUpMoney(perLiter, entry.cost_currency)}/L`}
+                        <Price amount={Number(entry.cost_amount)} currency={entry.cost_currency} />
+                      </td>
+                      <td>
+                        {perLiter == null ? (
+                          "—"
+                        ) : (
+                          <Price amount={perLiter} currency={entry.cost_currency} suffix="/L" />
+                        )}
                       </td>
                     </tr>
                   );

@@ -13,6 +13,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SiteNav from "./SiteNav.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
+import { CurrencyProvider } from "../currency/CurrencyContext.jsx";
+import { CURRENCY_STORAGE_KEY } from "../lib/currency.js";
 import { supabase } from "../lib/supabaseClient.js";
 
 const LOGGED_IN_USER = { id: "user-123", email: "driver@example.com" };
@@ -178,5 +180,59 @@ describe("SiteNav center links", () => {
 
     expect(await screen.findByRole("link", { name: "Features" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
+  });
+});
+
+describe("SiteNav currency toggle (CAR-54)", () => {
+  function renderNavWithCurrency() {
+    window.localStorage.clear();
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <AuthProvider>
+          <CurrencyProvider>
+            <SiteNav />
+          </CurrencyProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  const toggle = () => screen.queryByRole("group", { name: "Show prices in" });
+
+  it("logged in: shows the USD | LBP switch next to Log Out, with USD pressed by default", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+    renderNavWithCurrency();
+
+    expect(await screen.findByRole("group", { name: "Show prices in" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "USD" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "LBP" })).toHaveAttribute("aria-pressed", "false");
+    expect(logOut()).toBeInTheDocument();
+  });
+
+  it("logged out: no switch (there are no prices to show)", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderNavWithCurrency();
+
+    await screen.findByRole("link", { name: "Sign Up / Log In" });
+    expect(toggle()).not.toBeInTheDocument();
+  });
+
+  it("no switch while the session is still loading", () => {
+    supabase.auth.getSession.mockReturnValue(new Promise(() => {}));
+    renderNavWithCurrency();
+
+    expect(toggle()).not.toBeInTheDocument();
+  });
+
+  it("choosing LBP presses it and saves the choice", async () => {
+    const user = userEvent.setup();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+    renderNavWithCurrency();
+
+    await user.click(await screen.findByRole("button", { name: "LBP" }));
+
+    expect(screen.getByRole("button", { name: "LBP" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "USD" })).toHaveAttribute("aria-pressed", "false");
+    expect(window.localStorage.getItem(CURRENCY_STORAGE_KEY)).toBe("LBP");
   });
 });

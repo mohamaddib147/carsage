@@ -1,5 +1,6 @@
 // Helpers for the Fuel Log (CAR-53): validating the "add a fill-up" form, today's
-// date, price per liter, sorting, and showing dates, liters and money. Pure
+// date, price per liter, sorting, and showing dates and liters (money is shown through
+// lib/currency.js and components/Price.jsx, CAR-54). Pure
 // functions so they are easy to test; the page (pages/FuelLogPage.jsx) wires
 // them to Supabase.
 //
@@ -9,8 +10,6 @@
 // live in limits.js next to the other mirrored limits — change them together.
 
 import { LIMITS } from "./limits.js";
-
-export const CURRENCIES = ["USD", "LBP"];
 
 /**
  * Today's date as YYYY-MM-DD in the user's own time zone. (toISOString would
@@ -99,18 +98,6 @@ export function sortFillUps(entries) {
       b.filled_at.localeCompare(a.filled_at) ||
       String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")),
   );
-}
-
-/**
- * An amount in its own currency: "$30.00" for USD, "2,691,000 LBP" for LBP
- * (Lebanese pounds have no useful decimals).
- * @param {number} amount
- * @param {"USD" | "LBP"} currency
- * @returns {string}
- */
-export function formatFillUpMoney(amount, currency) {
-  if (currency === "LBP") return `${Math.round(amount).toLocaleString("en-US")} LBP`;
-  return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 /** Liters with up to two decimals and no trailing zeros: 19.6 -> "19.6", 30 -> "30". */

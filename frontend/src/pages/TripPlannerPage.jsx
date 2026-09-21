@@ -63,6 +63,7 @@ import { Link } from "react-router-dom";
 import FormattedNumberInput from "../components/FormattedNumberInput.jsx";
 import InfoTip from "../components/InfoTip.jsx";
 import PageShell from "../components/PageShell.jsx";
+import Price from "../components/Price.jsx";
 import PlaceAutocompleteInput from "../components/PlaceAutocompleteInput.jsx";
 import RouteMapImage from "../components/RouteMapImage.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
@@ -71,10 +72,6 @@ import { apiFetch } from "../lib/apiClient.js";
 import { LIMITS, getFuelPriceError } from "../lib/limits.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { getTrafficLevel } from "../lib/trafficLevel.js";
-
-// Fallback if GET /trip-planner/fuel-prices hasn't loaded yet — matches
-// the backend's own documented fixed rate (see fuel_prices.LBP_PER_USD).
-const FALLBACK_LBP_PER_USD = 89000;
 
 /** Maps a car's general fuel_type onto the price bucket fuel-prices
  * tracks — mirrors app/routers/trip_planner.py's
@@ -280,18 +277,14 @@ function TripPlannerPage() {
   // Full Tank Cost is calculated from it.
   const tankSizeError = getTankCapacityError(tankSizeInput);
   const tankSizeUsable = tankSizeInput.trim() !== "" && !tankSizeError;
-  const lbpPerUsd = fuelPrices?.lbp_per_usd ?? FALLBACK_LBP_PER_USD;
   const tankCostLbp =
     result && tankSizeUsable
       ? Math.round(tankSizeLiters * result.fuel_price_used_lbp)
       : null;
-  const tankCostUsd = tankCostLbp != null ? tankCostLbp / lbpPerUsd : null;
   const trafficLevel = result
     ? getTrafficLevel(result.duration_min, result.duration_in_traffic_min)
     : null;
-  const hasTrafficComparison =
-    result?.estimated_cost_current_traffic_lbp != null &&
-    result?.estimated_cost_current_traffic_usd != null;
+  const hasTrafficComparison = result?.estimated_cost_current_traffic_lbp != null;
 
   return (
     <PageShell
@@ -459,11 +452,11 @@ function TripPlannerPage() {
                 </InfoTip>
               </dt>
               <dd>
-                ${result.estimated_cost_usd.toFixed(2)} (
-                {result.estimated_cost_lbp.toLocaleString()} LBP)
+                <Price amount={result.estimated_cost_lbp} currency="LBP" />
               </dd>
               <p className="trip-result__caption">
-                Based on {result.fuel_price_used_lbp.toLocaleString()} LBP/L
+                Based on{" "}
+                <Price amount={result.fuel_price_used_lbp} currency="LBP" suffix="/L" />
               </p>
             </div>
             {hasTrafficComparison && (
@@ -473,8 +466,7 @@ function TripPlannerPage() {
                 </span>
                 <dt>Fuel Cost (Current Traffic)</dt>
                 <dd>
-                  ${result.estimated_cost_current_traffic_usd.toFixed(2)} (
-                  {result.estimated_cost_current_traffic_lbp.toLocaleString()} LBP)
+                  <Price amount={result.estimated_cost_current_traffic_lbp} currency="LBP" />
                 </dd>
                 <p className="trip-result__caption">
                   Adjusted for current congestion
@@ -512,11 +504,11 @@ function TripPlannerPage() {
               {tankCostLbp != null ? (
                 <>
                   <dd>
-                    ${tankCostUsd.toFixed(2)} ({tankCostLbp.toLocaleString()} LBP)
+                    <Price amount={tankCostLbp} currency="LBP" />
                   </dd>
                   <p className="trip-result__caption">
                     {tankSizeLiters}L at{" "}
-                    {result.fuel_price_used_lbp.toLocaleString()} LBP/L
+                    <Price amount={result.fuel_price_used_lbp} currency="LBP" suffix="/L" />
                   </p>
                 </>
               ) : tankSizeError ? (

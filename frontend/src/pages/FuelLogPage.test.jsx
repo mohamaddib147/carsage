@@ -13,6 +13,9 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import FuelLogPage from "./FuelLogPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
+import CurrencyToggle from "../components/CurrencyToggle.jsx";
+import { CurrencyProvider } from "../currency/CurrencyContext.jsx";
+import { CURRENCY_STORAGE_KEY } from "../lib/currency.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { todayLocal } from "../lib/fuelLog.js";
 
@@ -143,9 +146,9 @@ describe("FuelLogPage — viewing", () => {
     expect(screen.getByRole("columnheader", { name: "Cost" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Price per liter" })).toBeInTheDocument();
     expect(tableRows()).toEqual([
-      ["21 Sep 2026", "19.6 L", "$30.00", "$1.53/L"],
-      ["15 Sep 2026", "25 L", "2,500,000 LBP", "100,000 LBP/L"],
-      ["1 Sep 2026", "30 L", "$45.00", "$1.50/L"],
+      ["21 Sep 2026", "19.6 L", "$30.00 (2,691,000 LBP)", "$1.53/L (137,296 LBP/L)"],
+      ["15 Sep 2026", "25 L", "$27.87 (2,500,000 LBP)", "$1.11/L (100,000 LBP/L)"],
+      ["1 Sep 2026", "30 L", "$45.00 (4,036,500 LBP)", "$1.50/L (134,550 LBP/L)"],
     ]);
   });
 
@@ -234,8 +237,8 @@ describe("FuelLogPage — adding a fill-up", () => {
     ]);
     expect(await screen.findByRole("status")).toHaveTextContent("Fill-up added.");
     expect(tableRows()).toEqual([
-      [expect.stringMatching(/^\d{1,2} [A-Z][a-z]{2} \d{4}$/), "19.6 L", "$30.00", "$1.53/L"],
-      ["1 Sep 2026", "30 L", "$45.00", "$1.50/L"],
+      [expect.stringMatching(/^\d{1,2} [A-Z][a-z]{2} \d{4}$/), "19.6 L", "$30.00 (2,691,000 LBP)", "$1.53/L (137,296 LBP/L)"],
+      ["1 Sep 2026", "30 L", "$45.00 (4,036,500 LBP)", "$1.50/L (134,550 LBP/L)"],
     ]);
     // the form is ready for the next one
     expect(screen.getByLabelText("Liters *")).toHaveValue(null);
@@ -267,7 +270,7 @@ describe("FuelLogPage — adding a fill-up", () => {
 
     expect(calls.inserts[0]).toMatchObject({ cost_amount: 2700000, cost_currency: "LBP", liters: 25 });
     expect(await screen.findByRole("table")).toBeInTheDocument();
-    expect(tableRows()[0].slice(1)).toEqual(["25 L", "2,700,000 LBP", "108,000 LBP/L"]);
+    expect(tableRows()[0].slice(1)).toEqual(["25 L", "$30.10 (2,700,000 LBP)", "$1.20/L (108,000 LBP/L)"]);
   });
 
   it("puts a fill-up dated earlier below the newer ones", async () => {
@@ -454,7 +457,7 @@ describe("FuelLogPage — several cars", () => {
     await screen.findByRole("table");
     await user.selectOptions(screen.getByLabelText("Car"), "car-2");
 
-    await waitFor(() => expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00", "$1.50/L"]]));
+    await waitFor(() => expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)"]]));
     expect(screen.queryByText("21 Sep 2026")).not.toBeInTheDocument();
     expect(screen.queryByText("1 Sep 2026")).not.toBeInTheDocument();
     expect(calls.logQueries).toEqual([["car_id", "car-1"], ["car_id", "car-2"]]);
@@ -515,7 +518,7 @@ describe("FuelLogPage — several cars", () => {
     expect(screen.queryByText("No fill-ups logged yet")).not.toBeInTheDocument(); // not a false "empty" either
 
     await act(async () => answerCar2({ data: [ROW_OTHER_CAR], error: null }));
-    expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00", "$1.50/L"]]);
+    expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)"]]);
   });
 
   it("ignores a slow answer for a car the user has already switched away from", async () => {
@@ -531,11 +534,11 @@ describe("FuelLogPage — several cars", () => {
 
     renderPage();
     await user.selectOptions(await screen.findByLabelText("Car"), "car-2");
-    await waitFor(() => expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00", "$1.50/L"]]));
+    await waitFor(() => expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)"]]));
 
     await act(async () => answerCar1({ data: [ROW_A, ROW_B], error: null })); // car 1's reply lands now
 
-    expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00", "$1.50/L"]]);
+    expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)"]]);
     expect(screen.queryByText("21 Sep 2026")).not.toBeInTheDocument();
   });
 
@@ -549,11 +552,109 @@ describe("FuelLogPage — several cars", () => {
     await fillForm(user, { liters: "12", cost: "18" });
     await user.click(screen.getByRole("button", { name: "Add Fill-Up" })); // saving for car 1 ...
     await user.selectOptions(screen.getByLabelText("Car"), "car-2"); // ... then switch to car 2
-    await waitFor(() => expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00", "$1.50/L"]]));
+    await waitFor(() => expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)"]]));
 
     await act(async () => save.finish());
 
     expect(calls.inserts[0].car_id).toBe("car-1");
-    expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00", "$1.50/L"]]); // car 2's list is untouched
+    expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)"]]); // car 2's list is untouched
+  });
+});
+
+describe("FuelLogPage — currency toggle (CAR-54)", () => {
+  /** Renders the page with the currency provider and the header switch. */
+  function renderWithCurrency({ stored } = {}) {
+    window.localStorage.clear();
+    if (stored) window.localStorage.setItem(CURRENCY_STORAGE_KEY, stored);
+    return render(
+      <MemoryRouter initialEntries={["/fuel-log"]}>
+        <AuthProvider>
+          <CurrencyProvider>
+            <CurrencyToggle />
+            <Routes>
+              <Route path="/fuel-log" element={<FuelLogPage />} />
+            </Routes>
+          </CurrencyProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  const LOGS = { logsByCar: { "car-1": { data: [ROW_B, ROW_LBP], error: null } } };
+  const moneyCells = () => tableRows().map((row) => row.slice(2));
+
+  it("shows each fill-up's cost and price per liter dollars-first by default", async () => {
+    mockDatabase(LOGS);
+    renderWithCurrency();
+    await screen.findByRole("table");
+
+    expect(moneyCells()).toEqual([
+      ["$30.00 (2,691,000 LBP)", "$1.53/L (137,296 LBP/L)"],
+      ["$27.87 (2,500,000 LBP)", "$1.11/L (100,000 LBP/L)"],
+    ]);
+  });
+
+  it("shows them pounds-first when LBP is primary — the same amounts, an entry typed in either currency", async () => {
+    mockDatabase(LOGS);
+    renderWithCurrency({ stored: "LBP" });
+    await screen.findByRole("table");
+
+    expect(moneyCells()).toEqual([
+      ["2,691,000 LBP ($30.00)", "137,296 LBP/L ($1.53/L)"],
+      ["2,500,000 LBP ($27.87)", "100,000 LBP/L ($1.11/L)"],
+    ]);
+  });
+
+  it("flips the table when the header switch is used", async () => {
+    const user = userEvent.setup();
+    mockDatabase(LOGS);
+    renderWithCurrency();
+    await screen.findByRole("table");
+
+    await user.click(screen.getByRole("button", { name: "LBP" }));
+    expect(moneyCells()[0]).toEqual(["2,691,000 LBP ($30.00)", "137,296 LBP/L ($1.53/L)"]);
+
+    await user.click(screen.getByRole("button", { name: "USD" }));
+    expect(moneyCells()[0]).toEqual(["$30.00 (2,691,000 LBP)", "$1.53/L (137,296 LBP/L)"]);
+  });
+
+  it("starts the form's cost currency on the primary currency and follows the switch", async () => {
+    const user = userEvent.setup();
+    mockDatabase();
+    renderWithCurrency({ stored: "LBP" });
+    const currencyBox = await screen.findByLabelText("Currency of the cost");
+
+    expect(currencyBox).toHaveValue("LBP");
+    await user.click(screen.getByRole("button", { name: "USD" }));
+    expect(currencyBox).toHaveValue("USD");
+  });
+
+  it("stops following the switch once the user picks a currency for the cost themselves", async () => {
+    const user = userEvent.setup();
+    mockDatabase();
+    renderWithCurrency();
+    const currencyBox = await screen.findByLabelText("Currency of the cost");
+
+    await user.selectOptions(currencyBox, "LBP");
+    await user.click(screen.getByRole("button", { name: "USD" })); // header stays USD ...
+    await user.click(screen.getByRole("button", { name: "LBP" }));
+    await user.click(screen.getByRole("button", { name: "USD" }));
+
+    expect(currencyBox).toHaveValue("LBP"); // ... the entry keeps the user's own pick
+  });
+
+  it("saves what was typed in the currency shown in the form, whatever the primary currency", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase();
+    renderWithCurrency({ stored: "LBP" });
+    await screen.findByText("No fill-ups logged yet");
+
+    await user.type(screen.getByLabelText("Liters *"), "20");
+    await user.type(screen.getByLabelText("Cost *"), "1800000");
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    await screen.findByRole("status");
+    expect(calls.inserts[0]).toMatchObject({ cost_amount: 1800000, cost_currency: "LBP" });
+    expect(moneyCells()[0]).toEqual(["1,800,000 LBP ($20.07)", "90,000 LBP/L ($1.00/L)"]);
   });
 });

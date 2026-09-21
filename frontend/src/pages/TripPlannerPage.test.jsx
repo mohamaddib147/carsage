@@ -27,7 +27,11 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TripPlannerPage from "./TripPlannerPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
+import CurrencyToggle from "../components/CurrencyToggle.jsx";
+import { CurrencyProvider } from "../currency/CurrencyContext.jsx";
+import { CURRENCY_STORAGE_KEY } from "../lib/currency.js";
 import { supabase } from "../lib/supabaseClient.js";
+import { priceText } from "../test/priceText.js";
 import { apiFetch } from "../lib/apiClient.js";
 
 const LOGGED_IN_USER = { id: "user-123", email: "driver@example.com" };
@@ -163,7 +167,7 @@ describe("TripPlannerPage — planning a trip", () => {
       estimated_cost_usd: 6.4,
     });
 
-    expect(await screen.findByText("$6.40 (569,696 LBP)")).toBeInTheDocument();
+    expect(await screen.findByText(priceText("$6.35 (569,696 LBP)"))).toBeInTheDocument();
     expect(screen.getByText("92 min")).toBeInTheDocument();
     expect(screen.getByText("81.9 km")).toBeInTheDocument();
   });
@@ -334,7 +338,7 @@ describe("TripPlannerPage — editable fuel price & tank cost (CAR-41)", () => {
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     // 45L * 90000 LBP/L = 4,050,000 LBP.
-    expect(await screen.findByText("$45.51 (4,050,000 LBP)")).toBeInTheDocument();
+    expect(await screen.findByText(priceText("$45.15 (4,050,000 LBP)"))).toBeInTheDocument();
   });
 
   it("recalculates the full tank cost when the tank size is edited", async () => {
@@ -359,7 +363,7 @@ describe("TripPlannerPage — editable fuel price & tank cost (CAR-41)", () => {
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     // 40L * 90000 LBP/L = 3,600,000 LBP.
-    expect(await screen.findByText("$40.45 (3,600,000 LBP)")).toBeInTheDocument();
+    expect(await screen.findByText(priceText("$40.13 (3,600,000 LBP)"))).toBeInTheDocument();
   });
 });
 
@@ -389,8 +393,8 @@ describe("TripPlannerPage — light vs current-traffic estimates (CAR-42)", () =
 
     expect(await screen.findByText("Fuel Cost (Light Traffic)")).toBeInTheDocument();
     expect(screen.getByText("Fuel Cost (Current Traffic)")).toBeInTheDocument();
-    expect(screen.getByText("$10.11 (900,000 LBP)")).toBeInTheDocument();
-    expect(screen.getByText("$10.87 (967,500 LBP)")).toBeInTheDocument();
+    expect(screen.getByText(priceText("$10.03 (900,000 LBP)"))).toBeInTheDocument();
+    expect(screen.getByText(priceText("$10.79 (967,500 LBP)"))).toBeInTheDocument();
     expect(
       screen.getByText(/Heavy traffic means more stop-and-go driving/),
     ).toBeInTheDocument();
@@ -690,9 +694,9 @@ describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
   // numeric can serialize either way), the field and the cost must use the
   // value exactly, never 10x it.
   it.each([
-    [43, "43", "$43.48 (3,870,000 LBP)"],
-    ["43.0", "43", "$43.48 (3,870,000 LBP)"],
-    [43.5, "43.5", "$43.99 (3,915,000 LBP)"],
+    [43, "43", "$43.14 (3,870,000 LBP)"],
+    ["43.0", "43", "$43.14 (3,870,000 LBP)"],
+    [43.5, "43.5", "$43.65 (3,915,000 LBP)"],
   ])(
     "reads a stored tank capacity of %j as exactly %j litres (no 10x)",
     async (stored, expectedField, expectedCost) => {
@@ -706,7 +710,7 @@ describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
       );
       await planTrip(user);
 
-      expect(await screen.findByText(expectedCost)).toBeInTheDocument();
+      expect(await screen.findByText(priceText(expectedCost))).toBeInTheDocument();
       expect(screen.queryByText(/430L/)).not.toBeInTheDocument();
     },
   );
@@ -723,15 +727,15 @@ describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
     await waitFor(() => expect(screen.getByLabelText(/Tank Size/)).toHaveValue("40"));
     await planTrip(user);
     // 40L * 90000 = 3,600,000 LBP.
-    expect(await screen.findByText("$40.45 (3,600,000 LBP)")).toBeInTheDocument();
+    expect(await screen.findByText(priceText("$40.13 (3,600,000 LBP)"))).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Car"), "car-2");
     expect(screen.getByLabelText(/Tank Size/)).toHaveValue("55");
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     // 55L * 90000 = 4,950,000 LBP.
-    expect(await screen.findByText("$55.62 (4,950,000 LBP)")).toBeInTheDocument();
-    expect(screen.queryByText("$40.45 (3,600,000 LBP)")).not.toBeInTheDocument();
+    expect(await screen.findByText(priceText("$55.18 (4,950,000 LBP)"))).toBeInTheDocument();
+    expect(screen.queryByText(priceText("$40.13 (3,600,000 LBP)"))).not.toBeInTheDocument();
   });
 
   it("shows a clear message, not a fake default, when the car has no tank size (null case)", async () => {
@@ -766,7 +770,7 @@ describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
     await planTrip(user);
 
     // 30L * 90000 = 2,700,000 LBP.
-    expect(await screen.findByText("$30.34 (2,700,000 LBP)")).toBeInTheDocument();
+    expect(await screen.findByText(priceText("$30.10 (2,700,000 LBP)"))).toBeInTheDocument();
     expect(screen.queryByText("Tank size not set")).not.toBeInTheDocument();
   });
 
@@ -859,8 +863,8 @@ describe("TripPlannerPage — tank size reset and range check (CAR-49)", () => {
   });
 
   it.each([
-    ["5", "$5.06 (450,000 LBP)"],
-    ["200", "$202.25 (18,000,000 LBP)"],
+    ["5", "$5.02 (450,000 LBP)"],
+    ["200", "$200.67 (18,000,000 LBP)"],
   ])("accepts the boundary size %s L", async (typed, expectedCost) => {
     const user = userEvent.setup();
     mockCarsLookup([{ id: "car-1", fuel_tank_capacity_liters: null }]);
@@ -870,7 +874,7 @@ describe("TripPlannerPage — tank size reset and range check (CAR-49)", () => {
     await user.type(await screen.findByLabelText(/Tank Size/), typed);
     await planTrip(user);
 
-    expect(await screen.findByText(expectedCost)).toBeInTheDocument();
+    expect(await screen.findByText(priceText(expectedCost))).toBeInTheDocument();
     expect(screen.queryByText(/out of range/)).not.toBeInTheDocument();
   });
 });
@@ -936,7 +940,7 @@ describe("TripPlannerPage — Advanced options & thousand separators (polish)", 
       ),
     );
     // 64 L x 140,500 = 8,992,000 LBP.
-    expect(await screen.findByText("$101.03 (8,992,000 LBP)")).toBeInTheDocument();
+    expect(await screen.findByText(priceText("$100.25 (8,992,000 LBP)"))).toBeInTheDocument();
   });
 
   it("shows the prefilled fuel price and tank size with thousand separators", async () => {
@@ -995,7 +999,7 @@ describe("TripPlannerPage — Advanced options & thousand separators (polish)", 
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     // 43.5 L x 90,000 = 3,915,000 LBP.
-    expect(await screen.findByText("$43.99 (3,915,000 LBP)")).toBeInTheDocument();
+    expect(await screen.findByText(priceText("$43.65 (3,915,000 LBP)"))).toBeInTheDocument();
   });
 
   it("ignores letters typed into the number fields", async () => {
@@ -1141,5 +1145,101 @@ describe("TripPlannerPage — example placeholders", () => {
 
     expect(await screen.findByPlaceholderText("e.g. Beirut, Lebanon")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("e.g. Byblos, Lebanon")).toBeInTheDocument();
+  });
+});
+
+describe("TripPlannerPage — currency toggle (CAR-54)", () => {
+  // Round numbers at the app rate (1 USD = 89,700 LBP): 50 L x 89,700 = 4,485,000 LBP = $50.00.
+  const ESTIMATE = {
+    distance_km: 100,
+    duration_min: 60,
+    duration_in_traffic_min: 75,
+    fuel_price_used_lbp: 89700,
+    estimated_cost_lbp: 897000,
+    estimated_cost_usd: 999.99, // deliberately wrong: the page must use the app's own rate, not this
+    estimated_cost_current_traffic_lbp: 1794000,
+    estimated_cost_current_traffic_usd: 999.99,
+  };
+
+  /** Renders the Trip Planner with the currency provider (and, optionally, the header switch). */
+  function renderWithCurrency({ stored, withToggle = false } = {}) {
+    window.localStorage.clear();
+    if (stored) window.localStorage.setItem(CURRENCY_STORAGE_KEY, stored);
+    return render(
+      <MemoryRouter initialEntries={["/trip-planner"]}>
+        <AuthProvider>
+          <CurrencyProvider>
+            {withToggle && <CurrencyToggle />}
+            <Routes>
+              <Route path="/trip-planner" element={<TripPlannerPage />} />
+            </Routes>
+          </CurrencyProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  async function planTrip(user) {
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline", fuel_tank_capacity_liters: 50 }]);
+    mockApiFetch({ estimate: ESTIMATE });
+    await user.type(await screen.findByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+    await screen.findByText("Full Tank Cost");
+  }
+
+  const shownPrices = () => [...document.querySelectorAll(".trip-result-card .price")].map((node) => node.textContent);
+
+  it("shows every price dollars-first by default: fuel cost, current-traffic cost, full tank and the price per liter", async () => {
+    const user = userEvent.setup();
+    renderWithCurrency();
+    await planTrip(user);
+
+    expect(shownPrices()).toEqual([
+      "$10.00 (897,000 LBP)", // fuel cost (light traffic)
+      "$1.00/L (89,700 LBP/L)", // "Based on" price per liter
+      "$20.00 (1,794,000 LBP)", // fuel cost (current traffic)
+      "$50.00 (4,485,000 LBP)", // full tank
+      "$1.00/L (89,700 LBP/L)", // "50L at" price per liter
+    ]);
+    expect(document.querySelectorAll(".trip-result-card .price[data-primary='USD']")).toHaveLength(5);
+  });
+
+  it("shows every price pounds-first when LBP is the primary currency, with the same amounts", async () => {
+    const user = userEvent.setup();
+    renderWithCurrency({ stored: "LBP" });
+    await planTrip(user);
+
+    expect(shownPrices()).toEqual([
+      "897,000 LBP ($10.00)",
+      "89,700 LBP/L ($1.00/L)",
+      "1,794,000 LBP ($20.00)",
+      "4,485,000 LBP ($50.00)",
+      "89,700 LBP/L ($1.00/L)",
+    ]);
+    expect(document.querySelectorAll(".trip-result-card .price[data-primary='LBP']")).toHaveLength(5);
+  });
+
+  it("flips the whole results card the moment the header switch is used, without planning again", async () => {
+    const user = userEvent.setup();
+    renderWithCurrency({ withToggle: true });
+    await planTrip(user);
+    const callsBefore = apiFetch.mock.calls.length;
+
+    await user.click(screen.getByRole("button", { name: "LBP" }));
+    expect(shownPrices()[0]).toBe("897,000 LBP ($10.00)");
+    expect(shownPrices()[3]).toBe("4,485,000 LBP ($50.00)");
+
+    await user.click(screen.getByRole("button", { name: "USD" }));
+    expect(shownPrices()[0]).toBe("$10.00 (897,000 LBP)");
+    expect(apiFetch.mock.calls.length).toBe(callsBefore); // no new request
+  });
+
+  it("uses the app's one rate for dollars, never the API's own dollar figure", async () => {
+    const user = userEvent.setup();
+    renderWithCurrency();
+    await planTrip(user);
+
+    expect(screen.queryByText(/999\.99/)).not.toBeInTheDocument();
+    expect(screen.getByText(priceText("$10.00 (897,000 LBP)"))).toBeInTheDocument();
   });
 });

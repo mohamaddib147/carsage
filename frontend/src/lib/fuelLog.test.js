@@ -5,7 +5,6 @@
 import { describe, expect, it } from "vitest";
 import {
   formatFillDate,
-  formatFillUpMoney,
   formatLiters,
   getFillUpErrors,
   pricePerLiter,
@@ -160,17 +159,6 @@ describe("sortFillUps", () => {
 });
 
 describe("formatting", () => {
-  it("shows USD with a dollar sign and two decimals", () => {
-    expect(formatFillUpMoney(30, "USD")).toBe("$30.00");
-    expect(formatFillUpMoney(1.5306, "USD")).toBe("$1.53");
-    expect(formatFillUpMoney(1234567.891, "USD")).toBe("$1,234,567.89");
-  });
-
-  it("shows LBP with thousands separators and no decimals", () => {
-    expect(formatFillUpMoney(2691000, "LBP")).toBe("2,691,000 LBP");
-    expect(formatFillUpMoney(136224.49, "LBP")).toBe("136,224 LBP");
-  });
-
   it("shows liters with up to two decimals and no trailing zeros", () => {
     expect(formatLiters(19.6)).toBe("19.6");
     expect(formatLiters("30.00")).toBe("30");

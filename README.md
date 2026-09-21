@@ -195,17 +195,18 @@ The `fuel_prices` table starts empty; the backend fills it the first time fuel p
    - Pick the car (a selector appears when you have more than one).
    - Enter the **Starting Location** and the **Destination**. Address suggestions appear as you type. Both are needed to plan a route.
    - Optional: open **Advanced options** to change the fuel price (Lebanese pounds per litre, filled in from the latest published price) or the tank size.
-   - Choose **Plan Trip**. You get the fuel cost for light traffic and for current traffic, the driving time with a Light / Moderate / Heavy traffic label, the distance, the cost of a full tank, and a map of the route. Costs are shown in US dollars with the Lebanese pound amount beside them.
+   - Choose **Plan Trip**. You get the fuel cost for light traffic and for current traffic, the driving time with a Light / Moderate / Heavy traffic label, the distance, the cost of a full tank, and a map of the route. Every price shows both currencies; see **Choose your currency** below.
 5. **Ask the AI Advisor.**
    - Pick the car (if you have several).
    - Describe the problem, or tap an example such as "Squeaking brakes at low speed", and choose **Send**. Use real words: at least three letters and up to 1,000 characters.
    - You get a **DIY Fixable** badge with numbered steps (and a "Watch on YouTube" video when one is found) or a **See a Mechanic** badge with guidance. If the problem matches an open recall or a pattern of owner complaints for your car, the advisor points you to a mechanic. Your conversation is saved and reloads next time.
    - The advice is a starting point, not a professional diagnosis.
-6. **Log your fuel fill-ups** (Fuel Log). Open **Fuel Log** from the Dashboard or the header.
+6. **Choose your currency.** The **USD | LBP** switch in the header (shown when you are logged in) picks which currency every price shows first, in bold, with the other in parentheses. It applies everywhere at once (the Trip Planner's fuel and tank costs and the Fuel Log) and your choice is remembered in this browser. Prices are converted at a fixed rate of 1 USD = 89,700 LBP.
+7. **Log your fuel fill-ups** (Fuel Log). Open **Fuel Log** from the Dashboard or the header.
    - Pick the car (if you have several); every car keeps its own log.
-   - Enter the **Date** (today by default), the **Liters** and the **Cost**, choose whether the cost is in USD or LBP, and choose **Add Fill-Up**. All three are required and must be greater than 0; the date can't be in the future.
+   - Enter the **Date** (today by default), the **Liters** and the **Cost**, choose whether the cost is in USD or LBP (it starts on the currency you picked in the header), and choose **Add Fill-Up**. All three are required and must be greater than 0; the date can't be in the future.
    - The list shows that car's fill-ups newest first, with the price per liter of each. A car with no fill-ups yet shows an **Add your first fill-up** prompt.
-7. **Log out** from the header when you are done.
+8. **Log out** from the header when you are done.
 
 ## API reference
 
