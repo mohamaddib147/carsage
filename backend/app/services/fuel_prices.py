@@ -78,7 +78,10 @@ MAX_PLAUSIBLE_LBP_PER_LITER = 1_000_000
 # often enough that a live-rate API would just be another point of
 # failure for a capstone-scale app. Fixed by request; update this
 # constant by hand if it drifts far from the real rate.
-LBP_PER_USD = 89000
+# CAR-54: 1 USD = 89,700 LBP. The frontend has its own copy of this rate
+# (frontend/src/lib/currency.js, which is what the app's screens use);
+# tests/test_currency_rate.py fails if the two ever differ, so change both.
+LBP_PER_USD = 89700
 
 FUEL_TYPES = ("95_octane", "98_octane", "diesel")
 

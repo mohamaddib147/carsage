@@ -125,7 +125,7 @@ def test_traffic_adjusted_efficiency_guards_against_a_zero_duration():
 def test_returns_current_fuel_prices_in_lbp_and_usd():
     with patch("app.routers.trip_planner.get_current_fuel_prices") as mock_get_prices:
         mock_get_prices.return_value = {
-            "95_octane": 89000.0,
+            "95_octane": 89700.0,
             "98_octane": 88850.0,
             "diesel": 73300.0,
         }
@@ -134,9 +134,9 @@ def test_returns_current_fuel_prices_in_lbp_and_usd():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["lbp_per_usd"] == 89000
+    assert body["lbp_per_usd"] == 89700
     assert body["prices"]["95_octane"] == {
-        "lbp_per_liter": 89000.0,
+        "lbp_per_liter": 89700.0,
         "usd_per_liter": 1.0,
     }
 
@@ -225,12 +225,12 @@ class TestPostEstimate:
         body = response.json()
         # 100 km / 10 km/L = 10 L; 10 L * 90000 LBP/L = 900000 LBP.
         assert body["estimated_cost_lbp"] == 900000.0
-        assert body["estimated_cost_usd"] == round(900000 / 89000, 2)
+        assert body["estimated_cost_usd"] == round(900000 / 89700, 2)
         assert body["fuel_price_used_lbp"] == 90000.0
         # duration_in_traffic_min=75 vs duration_min=60 -> 1.25x -> a 7.5%
         # traffic penalty (half of the cap, since the cap is a 2x slowdown).
         assert body["estimated_cost_current_traffic_lbp"] == 967500.0
-        assert body["estimated_cost_current_traffic_usd"] == round(967500 / 89000, 2)
+        assert body["estimated_cost_current_traffic_usd"] == round(967500 / 89700, 2)
         assert captured["row"]["user_id"] == "user-123"
         assert captured["row"]["car_id"] == "00000000-0000-4000-8000-000000000001"
         # trips.estimated_cost stays the light-traffic figure, unchanged.
