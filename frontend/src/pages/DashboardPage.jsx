@@ -7,6 +7,9 @@
 // telemetry/maintenance widgets (odometer, system health, service
 // booking) are all out of scope and intentionally omitted — this app
 // uses a single top nav everywhere, and doesn't track live vehicle data.
+// Each car card also summarises the specs saved on the car (efficiency,
+// cylinders, drivetrain, transmission, tank size) from the row the page
+// already fetches, so the cards aren't just a name and a meta line.
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -19,6 +22,28 @@ function carMetaLine(car) {
   return [car.engine_type, car.fuel_type, car.license_plate]
     .filter(Boolean)
     .join(" • ");
+}
+
+/**
+ * The specs saved on a car, as label/value pairs for its summary grid. Only
+ * fields that are actually set are returned, so a card never shows blanks.
+ * @param {object} car - a `cars` row.
+ * @returns {{ label: string, value: string }[]}
+ */
+function carSpecs(car) {
+  const specs = [];
+  if (car.fuel_efficiency != null) {
+    specs.push({ label: "Efficiency", value: `${Number(car.fuel_efficiency)} km/L` });
+  }
+  if (car.cylinders != null) {
+    specs.push({ label: "Cylinders", value: String(car.cylinders) });
+  }
+  if (car.drivetrain) specs.push({ label: "Drivetrain", value: car.drivetrain });
+  if (car.transmission) specs.push({ label: "Transmission", value: car.transmission });
+  if (car.fuel_tank_capacity_liters != null) {
+    specs.push({ label: "Fuel tank", value: `${Number(car.fuel_tank_capacity_liters)} L` });
+  }
+  return specs;
 }
 
 /**
@@ -84,6 +109,7 @@ function DashboardPage() {
           <ul className="dashboard-car-list">
             {cars.map((car) => {
               const meta = carMetaLine(car);
+              const specs = carSpecs(car);
               return (
                 <li key={car.id} className="dashboard-car-card">
                   <Link
@@ -94,6 +120,24 @@ function DashboardPage() {
                   </Link>
                   {meta && (
                     <p className="dashboard-car-card__meta">{meta}</p>
+                  )}
+                  {specs.length > 0 ? (
+                    <dl
+                      className="dashboard-car-card__specs"
+                      aria-label={`${car.make} ${car.model} specifications`}
+                    >
+                      {specs.map((spec) => (
+                        <div key={spec.label} className="dashboard-car-card__spec">
+                          <dt>{spec.label}</dt>
+                          <dd>{spec.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : (
+                    <p className="dashboard-car-card__hint">
+                      Add efficiency, cylinders and more on the{" "}
+                      <Link to={`/cars/${car.id}`}>car profile</Link> to see them here.
+                    </p>
                   )}
                 </li>
               );

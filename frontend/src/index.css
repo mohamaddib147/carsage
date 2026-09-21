@@ -597,6 +597,38 @@ select:focus {
   overflow-wrap: break-word;
 }
 
+.dashboard-car-card__specs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: var(--spacing-unit) calc(var(--spacing-unit) * 2);
+  margin: calc(var(--spacing-unit) * 1.5) 0 0;
+  padding-top: calc(var(--spacing-unit) * 1.5);
+  border-top: 1px solid var(--color-border);
+}
+
+.dashboard-car-card__spec dt {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dashboard-car-card__spec dd {
+  margin: calc(var(--spacing-unit) * 0.25) 0 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-car-card__hint {
+  margin: calc(var(--spacing-unit) * 1.5) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.dashboard-car-card__hint a {
+  color: var(--color-primary);
+}
+
 .dashboard-modules {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
