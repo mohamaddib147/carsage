@@ -184,10 +184,12 @@ describe("SiteNav center links", () => {
 });
 
 describe("SiteNav currency toggle (CAR-54)", () => {
-  function renderNavWithCurrency() {
+  // The switch is only shown on screens that show prices, so these tests open the Trip Planner
+  // unless they are checking another screen.
+  function renderNavWithCurrency(path = "/trip-planner") {
     window.localStorage.clear();
     render(
-      <MemoryRouter initialEntries={["/dashboard"]}>
+      <MemoryRouter initialEntries={[path]}>
         <AuthProvider>
           <CurrencyProvider>
             <SiteNav />
@@ -234,5 +236,53 @@ describe("SiteNav currency toggle (CAR-54)", () => {
     expect(screen.getByRole("button", { name: "LBP" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "USD" })).toHaveAttribute("aria-pressed", "false");
     expect(window.localStorage.getItem(CURRENCY_STORAGE_KEY)).toBe("LBP");
+  });
+
+  // Item 7 of the Car Onboarding polish: only screens that display prices get the switch.
+  it.each(["/trip-planner", "/fuel-log", "/fuel-log/", "/trip-planner/"])(
+    "logged in on %s (a screen that shows prices): the switch is shown",
+    async (path) => {
+      supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+      renderNavWithCurrency(path);
+
+      expect(await screen.findByRole("group", { name: "Show prices in" })).toBeInTheDocument();
+    },
+  );
+
+  it.each(["/dashboard", "/cars/new", "/cars/mine", "/cars/car-1", "/advisor", "/"])(
+    "logged in on %s (no prices here): the switch is hidden but Log Out is still there",
+    async (path) => {
+      supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+      renderNavWithCurrency(path);
+
+      expect(await screen.findByRole("button", { name: "Log Out" })).toBeInTheDocument();
+      expect(toggle()).not.toBeInTheDocument();
+    },
+  );
+
+  it("appears when the user navigates to a price screen and goes away again when they leave it", async () => {
+    const user = userEvent.setup();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+    renderNavWithCurrency("/dashboard");
+    await screen.findByRole("button", { name: "Log Out" });
+    expect(toggle()).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Fuel Log" }));
+    expect(await screen.findByRole("group", { name: "Show prices in" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Dashboard" }));
+    expect(toggle()).not.toBeInTheDocument();
+  });
+
+  it("keeps the saved choice while the switch is hidden on other screens", async () => {
+    const user = userEvent.setup();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+    renderNavWithCurrency("/fuel-log");
+    await user.click(await screen.findByRole("button", { name: "LBP" }));
+
+    await user.click(screen.getByRole("link", { name: "Dashboard" })); // hidden here
+    await user.click(screen.getByRole("link", { name: "Trip Planner" })); // and back
+
+    expect(await screen.findByRole("button", { name: "LBP" })).toHaveAttribute("aria-pressed", "true");
   });
 });

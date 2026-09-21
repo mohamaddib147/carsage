@@ -7,10 +7,11 @@
 // signed out, "Log Out" when signed in, never both (and neither while the
 // session is still being restored, so nothing flashes the wrong state).
 
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStatus } from "../auth/AuthContext.jsx";
 import Logo from "./Logo.jsx";
 import CurrencyToggle from "./CurrencyToggle.jsx";
+import { PRICE_PAGES } from "../lib/currency.js";
 
 const CENTER_LINKS = [
   { to: "/dashboard", label: "Dashboard" },
@@ -36,6 +37,9 @@ const MARKETING_LINKS = [
 function SiteNav() {
   const { status, signOut } = useAuthStatus();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // The USD | LBP switch only appears on screens that show prices (Trip Planner, Fuel Log).
+  const showCurrencyToggle = PRICE_PAGES.includes(pathname.replace(/\/+$/, ""));
 
   async function handleLogOut() {
     await signOut();
@@ -73,7 +77,7 @@ function SiteNav() {
         )}
         {status === "signedIn" && (
           <>
-            <CurrencyToggle />
+            {showCurrencyToggle && <CurrencyToggle />}
             <button
               type="button"
               className="site-nav__logout"

@@ -13,6 +13,12 @@ export const LBP_PER_USD = 89_700;
 export const CURRENCIES = ["USD", "LBP"];
 export const DEFAULT_CURRENCY = "USD";
 
+/**
+ * The screens that show prices. The header's USD | LBP switch is shown only on these, since
+ * elsewhere it has nothing to change. Add a route here when a new screen starts showing prices.
+ */
+export const PRICE_PAGES = ["/trip-planner", "/fuel-log"];
+
 /** Where the chosen primary currency is kept in the browser (localStorage). */
 export const CURRENCY_STORAGE_KEY = "carsage.currency";
 
