@@ -350,7 +350,7 @@ function TripPlannerPage() {
               <PlaceAutocompleteInput
                 id="destination"
                 maxLength={LIMITS.PLACE}
-                placeholder="e.g. Tripoli, Lebanon"
+                placeholder="e.g. Byblos, Lebanon"
                 value={destination}
                 onChange={setDestination}
               />
@@ -379,7 +379,7 @@ function TripPlannerPage() {
                 </label>
                 <FormattedNumberInput
                   id="fuelPricePerLiter"
-                  placeholder="Current default used if blank"
+                  placeholder="e.g. 140,500 — current price used if blank"
                   value={fuelPriceInput}
                   onChange={(raw) => {
                     fuelPriceEditedRef.current = true;
@@ -402,7 +402,7 @@ function TripPlannerPage() {
                   key={selectedCarId}
                   id="tankSize"
                   allowDecimal
-                  placeholder="Not set for this car"
+                  placeholder="e.g. 60 — not set for this car"
                   value={tankSizeInput}
                   aria-invalid={tankSizeError ? "true" : undefined}
                   onChange={setTankSizeInput}

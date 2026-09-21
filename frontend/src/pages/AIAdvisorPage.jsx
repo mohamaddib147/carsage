@@ -377,7 +377,7 @@ function AIAdvisorPage() {
       <form onSubmit={handleSubmit} className="advisor-input-row">
         <input
           type="text"
-          placeholder="Describe your car issue..."
+          placeholder="Describe your issue, e.g. grinding noise when braking"
           // Same cap as the backend (MAX_DESCRIPTION_CHARS in ai_advisor.py).
           maxLength={1000}
           value={description}

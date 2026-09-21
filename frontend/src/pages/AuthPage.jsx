@@ -115,7 +115,7 @@ function AuthPage() {
               type="email"
               autoComplete="email"
               maxLength={LIMITS.EMAIL}
-              placeholder="eleanor@example.com"
+              placeholder="e.g. you@example.com"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
             />
@@ -127,7 +127,7 @@ function AuthPage() {
               name="password"
               type="password"
               autoComplete={isSignUp ? "new-password" : "current-password"}
-              placeholder="••••••••"
+              placeholder={isSignUp ? `At least ${LIMITS.PASSWORD_MIN} characters` : "Your password"}
               maxLength={LIMITS.PASSWORD_MAX}
               value={password}
               onChange={(event) => setPassword(event.target.value)}

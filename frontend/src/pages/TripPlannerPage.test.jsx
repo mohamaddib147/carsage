@@ -1131,3 +1131,15 @@ describe("TripPlannerPage — authenticated API calls (CAR-24)", () => {
     expect(apiFetch).not.toHaveBeenCalledWith("/trip-planner/fuel-prices", expect.anything());
   });
 });
+
+describe("TripPlannerPage — example placeholders", () => {
+  it("shows realistic examples in the route fields", async () => {
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    mockApiFetch({ fuelPrices: { prices: {}, lbp_per_usd: 89000 } });
+
+    renderPage();
+
+    expect(await screen.findByPlaceholderText("e.g. Beirut, Lebanon")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("e.g. Byblos, Lebanon")).toBeInTheDocument();
+  });
+});

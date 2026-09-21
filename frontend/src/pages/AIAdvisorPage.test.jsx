@@ -108,7 +108,7 @@ describe("AIAdvisorPage — chatting", () => {
     });
 
     renderPage();
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "Washer fluid light is on");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -137,7 +137,7 @@ describe("AIAdvisorPage — chatting", () => {
     });
 
     renderPage();
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "Brakes are grinding");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -176,7 +176,7 @@ describe("AIAdvisorPage — chatting", () => {
     );
 
     renderPage();
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "Engine noise");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -199,7 +199,7 @@ describe("AIAdvisorPage — chatting", () => {
     mockSupabaseTables({ cars: [{ id: "car-1" }] });
     renderPage();
 
-    await user.type(await screen.findByPlaceholderText("Describe your car issue..."), "     ");
+    await user.type(await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"), "     ");
 
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     expect(apiFetch).not.toHaveBeenCalled();
@@ -209,7 +209,7 @@ describe("AIAdvisorPage — chatting", () => {
     mockSupabaseTables({ cars: [{ id: "car-1" }] });
     renderPage();
 
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
 
     expect(input).toHaveAttribute("maxlength", "1000");
   });
@@ -220,7 +220,7 @@ describe("AIAdvisorPage — chatting", () => {
     apiFetch.mockRejectedValue(new Error("Please describe the problem in a few words."));
 
     renderPage();
-    await user.type(await screen.findByPlaceholderText("Describe your car issue..."), "!!!???");
+    await user.type(await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"), "!!!???");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -235,7 +235,7 @@ describe("AIAdvisorPage — car selector", () => {
     mockSupabaseTables({ cars: [{ id: "car-1", make: "Toyota", model: "Corolla", year: 2020 }] });
     renderPage();
 
-    await screen.findByPlaceholderText("Describe your car issue...");
+    await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     expect(screen.queryByLabelText("Car")).not.toBeInTheDocument();
   });
 
@@ -254,7 +254,7 @@ describe("AIAdvisorPage — car selector", () => {
     expect(carSelect).toHaveValue("car-1");
 
     await user.selectOptions(carSelect, "car-2");
-    const input = screen.getByPlaceholderText("Describe your car issue...");
+    const input = screen.getByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "Engine noise");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -320,7 +320,7 @@ describe("AIAdvisorPage — conversation history (CAR-21)", () => {
     });
 
     renderPage();
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "First issue");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("DIY Fixable");
@@ -351,7 +351,7 @@ describe("AIAdvisorPage — DIY video suggestion (CAR-40)", () => {
     });
 
     renderPage();
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "Washer fluid light is on");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -389,7 +389,7 @@ describe("AIAdvisorPage — DIY video suggestion (CAR-40)", () => {
     });
 
     renderPage();
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "Washer fluid light is on");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -410,7 +410,7 @@ describe("AIAdvisorPage — DIY video suggestion (CAR-40)", () => {
     });
 
     renderPage();
-    await user.type(await screen.findByPlaceholderText("Describe your car issue..."), "Washer fluid");
+    await user.type(await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"), "Washer fluid");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByRole("link", { name: /A video/ })).toHaveAttribute(
@@ -425,7 +425,7 @@ describe("AIAdvisorPage — DIY video suggestion (CAR-40)", () => {
     apiFetch.mockResolvedValue({ recommendation: "diy", guidance: "Top it up." });
 
     renderPage();
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "Washer fluid light is on");
     await user.click(screen.getByRole("button", { name: "Send" }));
 

@@ -318,7 +318,7 @@ function CarProfilePage() {
           <div className="form-grid">
             <div className="form-field">
               <label htmlFor="make">Make *</label>
-              <input id="make" type="text" maxLength={LIMITS.MAKE_MODEL} value={form.make} onChange={handleChange("make")} />
+              <input id="make" placeholder="e.g. Toyota" type="text" maxLength={LIMITS.MAKE_MODEL} value={form.make} onChange={handleChange("make")} />
               {fieldErrors.make && (
                 <p role="alert" className="auth-form__error">{fieldErrors.make}</p>
               )}
@@ -326,7 +326,7 @@ function CarProfilePage() {
 
             <div className="form-field">
               <label htmlFor="model">Model *</label>
-              <input id="model" type="text" maxLength={LIMITS.MAKE_MODEL} value={form.model} onChange={handleChange("model")} />
+              <input id="model" placeholder="e.g. Corolla" type="text" maxLength={LIMITS.MAKE_MODEL} value={form.model} onChange={handleChange("model")} />
               {fieldErrors.model && (
                 <p role="alert" className="auth-form__error">{fieldErrors.model}</p>
               )}
@@ -334,7 +334,7 @@ function CarProfilePage() {
 
             <div className="form-field">
               <label htmlFor="year">Year *</label>
-              <input id="year" type="number" value={form.year} onChange={handleChange("year")} />
+              <input id="year" placeholder="e.g. 2020" type="number" value={form.year} onChange={handleChange("year")} />
               {fieldErrors.year && (
                 <p role="alert" className="auth-form__error">{fieldErrors.year}</p>
               )}
@@ -344,6 +344,7 @@ function CarProfilePage() {
               <label htmlFor="engine_type">Engine Type</label>
               <input
                 id="engine_type"
+                placeholder="e.g. 2.5L Inline-4"
                 type="text" maxLength={LIMITS.ENGINE_TYPE}
                 value={form.engine_type}
                 onChange={handleChange("engine_type")}
@@ -378,6 +379,7 @@ function CarProfilePage() {
               <label htmlFor="fuel_efficiency">Fuel Efficiency (km/L)</label>
               <input
                 id="fuel_efficiency"
+                placeholder="e.g. 11.5"
                 type="number" max={LIMITS.MAX_FUEL_EFFICIENCY}
                 step="0.1"
                 value={form.fuel_efficiency}
@@ -392,6 +394,7 @@ function CarProfilePage() {
               <label htmlFor="cylinders">Cylinders</label>
               <input
                 id="cylinders"
+                placeholder="e.g. 4"
                 type="number" max={LIMITS.MAX_CYLINDERS}
                 value={form.cylinders}
                 onChange={handleChange("cylinders")}
@@ -405,6 +408,7 @@ function CarProfilePage() {
               <label htmlFor="fuel_tank_capacity_liters">Fuel Tank Capacity (L)</label>
               <input
                 id="fuel_tank_capacity_liters"
+                placeholder="e.g. 50"
                 type="number"
                 min="1"
                 step="0.1"
@@ -422,6 +426,7 @@ function CarProfilePage() {
               <label htmlFor="drivetrain">Drivetrain</label>
               <input
                 id="drivetrain"
+                placeholder="e.g. fwd, rwd, awd"
                 type="text" maxLength={LIMITS.DRIVETRAIN}
                 value={form.drivetrain}
                 onChange={handleChange("drivetrain")}
@@ -437,6 +442,7 @@ function CarProfilePage() {
               <label htmlFor="transmission">Transmission</label>
               <input
                 id="transmission"
+                placeholder="e.g. Automatic"
                 type="text" maxLength={LIMITS.TRANSMISSION}
                 value={form.transmission}
                 onChange={handleChange("transmission")}
@@ -452,6 +458,7 @@ function CarProfilePage() {
               <label htmlFor="license_plate">License Plate</label>
               <input
                 id="license_plate"
+                placeholder="e.g. 7XYZ890"
                 type="text" maxLength={LIMITS.LICENSE_PLATE}
                 value={form.license_plate}
                 onChange={handleChange("license_plate")}
@@ -465,7 +472,7 @@ function CarProfilePage() {
 
             <div className="form-field">
               <label htmlFor="vin">VIN</label>
-              <input id="vin" type="text" maxLength={LIMITS.VIN} value={form.vin} onChange={handleChange("vin")} />
+              <input id="vin" placeholder="e.g. 4S4BSANC8M3801249" type="text" maxLength={LIMITS.VIN} value={form.vin} onChange={handleChange("vin")} />
               {fieldErrors.vin && (
                 <p role="alert" className="auth-form__error">
                   {fieldErrors.vin}

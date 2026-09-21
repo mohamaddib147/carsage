@@ -474,3 +474,19 @@ describe("CarProfilePage — input limits (CAR-23)", () => {
     expect(alert).not.toHaveTextContent("cars_cylinders_range_check");
   });
 });
+
+describe("CarProfilePage — example placeholders", () => {
+  it("every text and number field in the edit form shows a realistic example", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+
+    const fields = [...screen.getAllByRole("textbox"), ...screen.getAllByRole("spinbutton")];
+    expect(fields.length).toBeGreaterThanOrEqual(10);
+    for (const field of fields) {
+      expect(field, `field #${field.id}`).toHaveAttribute("placeholder", expect.stringMatching(/^e\.g\. /));
+    }
+  });
+});

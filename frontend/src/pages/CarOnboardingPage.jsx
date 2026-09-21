@@ -417,7 +417,7 @@ function CarOnboardingPage() {
               name="fuelEfficiency"
               type="number" max={LIMITS.MAX_FUEL_EFFICIENCY}
               step="0.1"
-              placeholder="Auto-filled if available"
+              placeholder="e.g. 11.5 — auto-filled if available"
               value={form.fuelEfficiency}
               onChange={handleChange("fuelEfficiency")}
             />
@@ -434,7 +434,7 @@ function CarOnboardingPage() {
               id="cylinders"
               name="cylinders"
               type="number" min={LIMITS.MIN_CYLINDERS} max={LIMITS.MAX_CYLINDERS}
-              placeholder="Auto-filled if available"
+              placeholder="e.g. 4 — auto-filled if available"
               value={form.cylinders}
               onChange={handleChange("cylinders")}
             />
@@ -494,7 +494,7 @@ function CarOnboardingPage() {
               id="transmission"
               name="transmission"
               type="text" maxLength={LIMITS.TRANSMISSION}
-              placeholder="Auto-filled if available"
+              placeholder="e.g. Automatic — auto-filled if available"
               value={form.transmission}
               onChange={handleChange("transmission")}
             />
