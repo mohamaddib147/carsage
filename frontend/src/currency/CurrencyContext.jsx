@@ -4,11 +4,12 @@
 // Wrap the app in <CurrencyProvider> (main.jsx) and read it with useCurrency().
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import { DEFAULT_CURRENCY, isCurrency, readStoredCurrency, storeCurrency } from "../lib/currency.js";
+import { isCurrency, readStoredCurrency, storeCurrency } from "../lib/currency.js";
 
-// The default (used only if a component is rendered with no provider above it,
-// e.g. in a unit test) is a working USD-first, non-persisting setting.
-const CurrencyContext = createContext({ currency: DEFAULT_CURRENCY, setCurrency: () => {} });
+// No default value on purpose: a component rendered without a <CurrencyProvider> above
+// it must FAIL LOUDLY (see useCurrency). A silent fallback made the header switch look
+// like it worked while changing nothing, which is exactly the bug this replaced.
+const CurrencyContext = createContext(undefined);
 
 /**
  * Provides the primary currency and a way to change it.
@@ -32,9 +33,14 @@ export function CurrencyProvider({ children }) {
 }
 
 /**
- * The current primary currency and its setter.
+ * The current primary currency and its setter. Must be used within a <CurrencyProvider>
+ * (main.jsx), like useAuth within an AuthProvider.
  * @returns {{ currency: "USD" | "LBP", setCurrency: (next: "USD" | "LBP") => void }}
  */
 export function useCurrency() {
-  return useContext(CurrencyContext);
+  const context = useContext(CurrencyContext);
+  if (context === undefined) {
+    throw new Error("useCurrency must be used within a CurrencyProvider");
+  }
+  return context;
 }

@@ -31,7 +31,7 @@ import CurrencyToggle from "../components/CurrencyToggle.jsx";
 import { CurrencyProvider } from "../currency/CurrencyContext.jsx";
 import { CURRENCY_STORAGE_KEY } from "../lib/currency.js";
 import { supabase } from "../lib/supabaseClient.js";
-import { priceText } from "../test/priceText.js";
+import { priceText, unconvertedMoney } from "../test/priceText.js";
 import { apiFetch } from "../lib/apiClient.js";
 
 const LOGGED_IN_USER = { id: "user-123", email: "driver@example.com" };
@@ -90,12 +90,12 @@ const ESTIMATE_90K = {
 function renderPage() {
   render(
     <MemoryRouter initialEntries={["/trip-planner"]}>
-      <AuthProvider>
+      <AuthProvider><CurrencyProvider>
         <Routes>
           <Route path="/trip-planner" element={<TripPlannerPage />} />
           <Route path="/cars/new" element={<p>Car onboarding placeholder</p>} />
         </Routes>
-      </AuthProvider>
+      </CurrencyProvider></AuthProvider>
     </MemoryRouter>,
   );
 }
@@ -1022,9 +1022,12 @@ describe("TripPlannerPage — Advanced options & thousand separators (polish)", 
 
     renderPage();
 
-    const error = await screen.findByText("Tank capacity must be between 5 and 200 liters.");
-    expect(error).toBeVisible();
-    expect(screen.getByLabelText(/Tank Size/)).toBeVisible();
+    // The message renders first and the page opens the collapsed section in its next render,
+    // so wait until both are actually visible (a single check right after it appears was a race).
+    await waitFor(() => {
+      expect(screen.getByText("Tank capacity must be between 5 and 200 liters.")).toBeVisible();
+      expect(screen.getByLabelText(/Tank Size/)).toBeVisible();
+    });
   });
 
   it("points to Advanced options when the car has no tank size", async () => {
@@ -1065,9 +1068,7 @@ describe("TripPlannerPage — input limits (CAR-23)", () => {
     await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
-    expect(
-      await screen.findByText(/Fuel price must be between 1 and 10,000,000/),
-    ).toBeVisible();
+    await waitFor(() => expect(screen.getByText(/Fuel price must be between 1 and 10,000,000/)).toBeVisible());
     expect(apiFetch).not.toHaveBeenCalledWith("/trip-planner/estimate", expect.anything());
   });
 
@@ -1082,7 +1083,9 @@ describe("TripPlannerPage — input limits (CAR-23)", () => {
 
     renderPage();
 
-    expect(await screen.findByText(/Fuel price must be between 1 and 10,000,000/)).toBeVisible();
+    // The message renders first and the page opens the collapsed section in its next render,
+    // so wait until it is actually visible (a single check right after it appears was a race).
+    await waitFor(() => expect(screen.getByText(/Fuel price must be between 1 and 10,000,000/)).toBeVisible());
   });
 
   it("sends a fuel price of exactly 10,000,000 (the upper bound)", async () => {
@@ -1241,5 +1244,148 @@ describe("TripPlannerPage — currency toggle (CAR-54)", () => {
 
     expect(screen.queryByText(/999\.99/)).not.toBeInTheDocument();
     expect(screen.getByText(priceText("$10.00 (897,000 LBP)"))).toBeInTheDocument();
+  });
+});
+
+describe("TripPlannerPage — the switch visibly changes this screen (CAR-54 bug fix)", () => {
+  // Reported: "toggling USD | LBP has no visible effect on the Trip Planner". The switch was wired
+  // to every price here, but until a trip was planned the screen showed NO price, so there was
+  // nothing to change. These tests render the real page with the real switch, before AND after
+  // planning a trip, and check that what is on screen actually changes.
+  const FUEL_PRICES = {
+    prices: {
+      "95_octane": { lbp_per_liter: 140500, usd_per_liter: 1.57 },
+      "98_octane": { lbp_per_liter: 141400, usd_per_liter: 1.58 },
+      diesel: { lbp_per_liter: 138400, usd_per_liter: 1.54 },
+    },
+    lbp_per_usd: 89700,
+  };
+  const ESTIMATE = {
+    distance_km: 100,
+    duration_min: 60,
+    duration_in_traffic_min: 75,
+    fuel_price_used_lbp: 89700,
+    estimated_cost_lbp: 897000,
+    estimated_cost_usd: 1,
+    estimated_cost_current_traffic_lbp: 1794000,
+    estimated_cost_current_traffic_usd: 2,
+  };
+
+  function renderWithSwitch({ stored } = {}) {
+    window.localStorage.clear();
+    if (stored) window.localStorage.setItem(CURRENCY_STORAGE_KEY, stored);
+    return render(
+      <MemoryRouter initialEntries={["/trip-planner"]}>
+        <AuthProvider>
+          <CurrencyProvider>
+            <CurrencyToggle />
+            <Routes>
+              <Route path="/trip-planner" element={<TripPlannerPage />} />
+            </Routes>
+          </CurrencyProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  const pumpLine = () => document.querySelector(".trip-pump-price")?.textContent;
+  const allPrices = () => [...document.querySelectorAll(".price")];
+
+  it("shows the current pump price as soon as the page opens, and the switch changes it — no trip needed", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    mockApiFetch({ fuelPrices: FUEL_PRICES });
+    renderWithSwitch();
+
+    await waitFor(() => expect(pumpLine()).toBe("Current pump price (95 octane): $1.57/L (140,500 LBP/L)"));
+    expect(document.querySelector(".trip-result-card")).toBeNull(); // no trip has been planned
+
+    await user.click(screen.getByRole("button", { name: "LBP" }));
+    expect(pumpLine()).toBe("Current pump price (95 octane): 140,500 LBP/L ($1.57/L)");
+
+    await user.click(screen.getByRole("button", { name: "USD" }));
+    expect(pumpLine()).toBe("Current pump price (95 octane): $1.57/L (140,500 LBP/L)");
+  });
+
+  it("starts pounds-first when that is the saved choice", async () => {
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    mockApiFetch({ fuelPrices: FUEL_PRICES });
+    renderWithSwitch({ stored: "LBP" });
+
+    await waitFor(() => expect(pumpLine()).toBe("Current pump price (95 octane): 140,500 LBP/L ($1.57/L)"));
+  });
+
+  it("uses the price of the car's own fuel and follows a switch between cars", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([
+      { id: "car-1", make: "Toyota", model: "Corolla", year: 2020, fuel_type: "Gasoline" },
+      { id: "car-2", make: "Ford", model: "Transit", year: 2018, fuel_type: "Diesel" },
+    ]);
+    mockApiFetch({ fuelPrices: FUEL_PRICES });
+    renderWithSwitch();
+    await waitFor(() => expect(pumpLine()).toContain("95 octane"));
+
+    await user.selectOptions(screen.getByLabelText("Car"), "car-2");
+
+    expect(pumpLine()).toBe("Current pump price (diesel): $1.54/L (138,400 LBP/L)");
+  });
+
+  it("shows no pump price for an electric car, or when the prices could not be loaded", async () => {
+    mockCarsLookup([{ id: "car-1", fuel_type: "Electric" }]);
+    mockApiFetch({ fuelPrices: FUEL_PRICES });
+    const electric = renderWithSwitch();
+    await screen.findByLabelText("Destination *");
+    expect(pumpLine()).toBeUndefined();
+    electric.unmount();
+
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    apiFetch.mockRejectedValue(new Error("offline"));
+    renderWithSwitch();
+    await screen.findByLabelText("Destination *");
+    expect(pumpLine()).toBeUndefined();
+  });
+
+  it("flips EVERY price on the screen together once a trip is planned, and none is left behind", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline", fuel_tank_capacity_liters: 50 }]);
+    mockApiFetch({ fuelPrices: FUEL_PRICES, estimate: ESTIMATE });
+    renderWithSwitch();
+    await user.type(await screen.findByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+    await screen.findByText("Full Tank Cost");
+    await waitFor(() => expect(pumpLine()).toBeDefined());
+
+    expect(allPrices()).toHaveLength(6); // the pump price + the five in the result card
+    expect(allPrices().every((node) => node.dataset.primary === "USD")).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: "LBP" }));
+
+    expect(allPrices()).toHaveLength(6);
+    expect(allPrices().every((node) => node.dataset.primary === "LBP")).toBe(true);
+    expect(allPrices().every((node) => /^[\d,]+ LBP/.test(node.textContent))).toBe(true); // pounds really are first
+  });
+
+  it("draws no amount of money anywhere on the screen except through <Price>", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline", fuel_tank_capacity_liters: 50 }]);
+    mockApiFetch({ fuelPrices: FUEL_PRICES, estimate: ESTIMATE });
+    renderWithSwitch();
+    await waitFor(() => expect(pumpLine()).toBeDefined());
+    expect(unconvertedMoney(document.body)).toEqual([]); // before planning
+
+    await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+    await screen.findByText("Full Tank Cost");
+
+    expect(unconvertedMoney(document.body)).toEqual([]); // and with the whole result card showing
+  });
+
+  it("the guard itself flags money that bypasses <Price> (not vacuous)", () => {
+    const stray = document.createElement("div");
+    stray.innerHTML = '<p>Fuel cost: $5.29 (474,188 LBP)</p><p><span class="price"><strong>$5.29</strong></span></p>';
+    document.body.appendChild(stray);
+
+    expect(unconvertedMoney(stray)).toHaveLength(2); // "$5.29" and "474,188 LBP", both outside a .price
+    stray.remove();
   });
 });

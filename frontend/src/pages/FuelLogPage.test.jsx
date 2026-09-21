@@ -84,12 +84,12 @@ function mockDatabase({ cars = [CAR_1], logsByCar = {}, insertReply } = {}) {
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/fuel-log"]}>
-      <AuthProvider>
+      <AuthProvider><CurrencyProvider>
         <Routes>
           <Route path="/fuel-log" element={<FuelLogPage />} />
           <Route path="/cars/new" element={<p>Car onboarding placeholder</p>} />
         </Routes>
-      </AuthProvider>
+      </CurrencyProvider></AuthProvider>
     </MemoryRouter>,
   );
 }

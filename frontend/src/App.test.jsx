@@ -8,6 +8,7 @@ import appSource from "./App.jsx?raw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App.jsx";
 import { AuthProvider } from "./auth/AuthContext.jsx";
+import { CurrencyProvider } from "./currency/CurrencyContext.jsx";
 import { supabase } from "./lib/supabaseClient.js";
 
 vi.mock("./lib/supabaseClient.js", () => ({
@@ -35,9 +36,9 @@ beforeEach(() => {
 function renderAtPath(path) {
   render(
     <MemoryRouter initialEntries={[path]}>
-      <AuthProvider>
+      <AuthProvider><CurrencyProvider>
         <App />
-      </AuthProvider>
+      </CurrencyProvider></AuthProvider>
     </MemoryRouter>,
   );
 }

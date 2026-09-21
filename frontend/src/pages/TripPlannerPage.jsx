@@ -84,6 +84,9 @@ function priceBucketForFuelType(fuelType) {
   return "95_octane";
 }
 
+// How each price bucket is named on screen.
+const FUEL_GRADE_LABELS = { "95_octane": "95 octane", "98_octane": "98 octane", diesel: "diesel" };
+
 /**
  * The Tank Size field's text for a car: its stored capacity, or "" if it
  * has none — never a default.
@@ -272,6 +275,13 @@ function TripPlannerPage() {
     );
   }
 
+  // The current pump price for the selected car's fuel grade, from the same fuel-prices
+  // reply that prefills the Fuel Price box. Shown as a real price on load so the
+  // USD | LBP switch has something to change BEFORE a trip is planned (CAR-54 fix: until
+  // then this screen had no price on it at all, so the switch looked like it did nothing).
+  const pumpBucket = selectedCar ? priceBucketForFuelType(selectedCar.fuel_type) : null;
+  const pumpPriceLbp = pumpBucket ? Number(fuelPrices?.prices?.[pumpBucket]?.lbp_per_liter) : 0;
+
   const tankSizeLiters = Number(tankSizeInput);
   // CAR-49: blank = not set; anything outside 5-200 L is flagged, and no
   // Full Tank Cost is calculated from it.
@@ -293,6 +303,12 @@ function TripPlannerPage() {
     >
       <div className="route-params-card">
         <p className="form-section-label">Route Parameters</p>
+        {pumpPriceLbp > 0 && (
+          <p className="trip-pump-price">
+            Current pump price ({FUEL_GRADE_LABELS[pumpBucket]}):{" "}
+            <Price amount={pumpPriceLbp} currency="LBP" suffix="/L" />
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} noValidate className="car-form">
           {cars.length > 1 && (

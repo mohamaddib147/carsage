@@ -6,6 +6,8 @@
 import { act, render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import CurrencyToggle from "../components/CurrencyToggle.jsx";
+import Price from "../components/Price.jsx";
 import { CurrencyProvider, useCurrency } from "./CurrencyContext.jsx";
 import { CURRENCY_STORAGE_KEY } from "../lib/currency.js";
 
@@ -109,10 +111,22 @@ describe("CurrencyProvider", () => {
 });
 
 describe("useCurrency without a provider", () => {
-  it("is a working USD default rather than a crash", () => {
-    const { result } = renderHook(() => useCurrency());
+  // The header switch once looked like it worked while a missing provider made it a silent
+  // no-op. It must fail loudly instead, exactly like useAuth without an AuthProvider.
+  it("throws a clear error rather than quietly doing nothing", () => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    expect(result.current.currency).toBe("USD");
-    expect(() => result.current.setCurrency("LBP")).not.toThrow();
+    expect(() => renderHook(() => useCurrency())).toThrow("useCurrency must be used within a CurrencyProvider");
+
+    quiet.mockRestore();
+  });
+
+  it("makes a price or the header switch rendered without one fail loudly too", () => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(() => render(<Price amount={1} currency="USD" />)).toThrow(/CurrencyProvider/);
+    expect(() => render(<CurrencyToggle />)).toThrow(/CurrencyProvider/);
+
+    quiet.mockRestore();
   });
 });

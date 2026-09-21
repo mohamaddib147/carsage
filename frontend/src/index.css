@@ -1776,3 +1776,13 @@ select:focus {
   background-color: #ffffff;
   color: var(--color-primary);
 }
+
+.trip-pump-price {
+  margin: calc(var(--spacing-unit) * 1) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.trip-pump-price .price__primary {
+  color: var(--color-text);
+}

@@ -44,13 +44,13 @@ beforeEach(() => {
 function renderNav() {
   render(
     <MemoryRouter initialEntries={["/dashboard"]}>
-      <AuthProvider>
+      <AuthProvider><CurrencyProvider>
         <SiteNav />
         <Routes>
           <Route path="/login" element={<p>Login screen</p>} />
           <Route path="*" element={<p>Some other screen</p>} />
         </Routes>
-      </AuthProvider>
+      </CurrencyProvider></AuthProvider>
     </MemoryRouter>,
   );
 }
