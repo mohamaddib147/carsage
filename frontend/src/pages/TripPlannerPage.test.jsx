@@ -1249,9 +1249,9 @@ describe("TripPlannerPage — currency toggle (CAR-54)", () => {
 
 describe("TripPlannerPage — the switch visibly changes this screen (CAR-54 bug fix)", () => {
   // Reported: "toggling USD | LBP has no visible effect on the Trip Planner". The switch was wired
-  // to every price here, but until a trip was planned the screen showed NO price, so there was
-  // nothing to change. These tests render the real page with the real switch, before AND after
-  // planning a trip, and check that what is on screen actually changes.
+  // to every price here; these tests render the real page with the real switch, before AND after
+  // planning a trip, and check that what is on screen actually changes. The current pump price
+  // lives inside the collapsed "Advanced options" section, next to the Fuel Price field.
   const FUEL_PRICES = {
     prices: {
       "95_octane": { lbp_per_liter: 140500, usd_per_liter: 1.57 },
@@ -1291,7 +1291,7 @@ describe("TripPlannerPage — the switch visibly changes this screen (CAR-54 bug
   const pumpLine = () => document.querySelector(".trip-pump-price")?.textContent;
   const allPrices = () => [...document.querySelectorAll(".price")];
 
-  it("shows the current pump price as soon as the page opens, and the switch changes it — no trip needed", async () => {
+  it("shows the current pump price inside Advanced options (hidden while it is closed), and the switch changes it — no trip needed", async () => {
     const user = userEvent.setup();
     mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
     mockApiFetch({ fuelPrices: FUEL_PRICES });
@@ -1299,12 +1299,28 @@ describe("TripPlannerPage — the switch visibly changes this screen (CAR-54 bug
 
     await waitFor(() => expect(pumpLine()).toBe("Current pump price (95 octane): $1.57/L (140,500 LBP/L)"));
     expect(document.querySelector(".trip-result-card")).toBeNull(); // no trip has been planned
+    expect(document.querySelector(".trip-pump-price").closest("details")).not.toBeNull(); // it lives in Advanced options
+    expect(document.querySelector(".trip-pump-price")).not.toBeVisible(); // closed by default, so not on screen yet
+
+    await user.click(screen.getByText("Advanced options"));
+    expect(document.querySelector(".trip-pump-price")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "LBP" }));
     expect(pumpLine()).toBe("Current pump price (95 octane): 140,500 LBP/L ($1.57/L)");
 
     await user.click(screen.getByRole("button", { name: "USD" }));
     expect(pumpLine()).toBe("Current pump price (95 octane): $1.57/L (140,500 LBP/L)");
+  });
+
+  it("is no longer shown above the form: the top of the Trip Planner has no price", async () => {
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    mockApiFetch({ fuelPrices: FUEL_PRICES });
+    renderWithSwitch();
+    await waitFor(() => expect(pumpLine()).toBeDefined());
+
+    const card = document.querySelector(".route-params-card");
+    const outsideAdvanced = [...card.querySelectorAll(".price")].filter((node) => !node.closest("details"));
+    expect(outsideAdvanced).toEqual([]);
   });
 
   it("starts pounds-first when that is the saved choice", async () => {

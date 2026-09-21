@@ -276,9 +276,8 @@ function TripPlannerPage() {
   }
 
   // The current pump price for the selected car's fuel grade, from the same fuel-prices
-  // reply that prefills the Fuel Price box. Shown as a real price on load so the
-  // USD | LBP switch has something to change BEFORE a trip is planned (CAR-54 fix: until
-  // then this screen had no price on it at all, so the switch looked like it did nothing).
+  // reply that prefills the Fuel Price box. Shown inside Advanced options, next to the
+  // Fuel Price field it explains, as a real price that follows the USD | LBP switch.
   const pumpBucket = selectedCar ? priceBucketForFuelType(selectedCar.fuel_type) : null;
   const pumpPriceLbp = pumpBucket ? Number(fuelPrices?.prices?.[pumpBucket]?.lbp_per_liter) : 0;
 
@@ -303,12 +302,6 @@ function TripPlannerPage() {
     >
       <div className="route-params-card">
         <p className="form-section-label">Route Parameters</p>
-        {pumpPriceLbp > 0 && (
-          <p className="trip-pump-price">
-            Current pump price ({FUEL_GRADE_LABELS[pumpBucket]}):{" "}
-            <Price amount={pumpPriceLbp} currency="LBP" suffix="/L" />
-          </p>
-        )}
 
         <form onSubmit={handleSubmit} noValidate className="car-form">
           {cars.length > 1 && (
@@ -380,6 +373,13 @@ function TripPlannerPage() {
               Advanced options
               <span className="form-field__hint">Fuel price &amp; tank size</span>
             </summary>
+
+            {pumpPriceLbp > 0 && (
+              <p className="trip-pump-price">
+                Current pump price ({FUEL_GRADE_LABELS[pumpBucket]}):{" "}
+                <Price amount={pumpPriceLbp} currency="LBP" suffix="/L" />
+              </p>
+            )}
 
             <div className="form-grid advanced-options__fields">
               <div className="form-field">

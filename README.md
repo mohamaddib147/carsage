@@ -195,7 +195,7 @@ The `fuel_prices` table starts empty; the backend fills it the first time fuel p
    - Pick the car (a selector appears when you have more than one).
    - Enter the **Starting Location** and the **Destination**. Address suggestions appear as you type. Both are needed to plan a route.
    - Optional: open **Advanced options** to change the fuel price (Lebanese pounds per litre, filled in from the latest published price) or the tank size.
-   - Choose **Plan Trip**. You get the fuel cost for light traffic and for current traffic, the driving time with a Light / Moderate / Heavy traffic label, the distance, the cost of a full tank, and a map of the route. The current pump price for your car's fuel is shown as soon as the page opens, and every price shows both currencies; see **Choose your currency** below.
+   - Choose **Plan Trip**. You get the fuel cost for light traffic and for current traffic, the driving time with a Light / Moderate / Heavy traffic label, the distance, the cost of a full tank, and a map of the route. The current pump price for your car's fuel is shown under **Advanced options**, and every price shows both currencies; see **Choose your currency** below.
 5. **Ask the AI Advisor.**
    - Pick the car (if you have several).
    - Describe the problem, or tap an example such as "Squeaking brakes at low speed", and choose **Send**. Use real words: at least three letters and up to 1,000 characters.
