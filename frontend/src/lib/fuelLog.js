@@ -87,6 +87,21 @@ export function pricePerLiter(entry) {
   return cost / liters;
 }
 
+/** Fuel prices in Lebanon are posted per 20-liter canister, so that is the unit shown next to the per-liter figure. */
+export const CANISTER_LITERS = 20;
+
+/**
+ * What 20 liters cost at this fill-up's price per liter, in the currency the cost was entered in.
+ * Derived from the same figure as `pricePerLiter` (price per liter x 20), not from a rounded copy of
+ * it, so it never picks up a rounding error.
+ * @param {{ liters: number | string, cost_amount: number | string }} entry
+ * @returns {number | null} null when the price per liter can't be worked out.
+ */
+export function pricePer20Liters(entry) {
+  const perLiter = pricePerLiter(entry);
+  return perLiter == null ? null : perLiter * CANISTER_LITERS;
+}
+
 /**
  * Newest fill-up first: by the date filled, then by when it was logged (so two
  * fill-ups on the same day keep the later entry on top). Returns a new array.

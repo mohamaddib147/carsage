@@ -30,7 +30,7 @@ It was built as a capstone project (React + FastAPI + Supabase). Fuel prices are
 | **Car Profile** | See every saved spec for your car, edit any of them, or delete the car. |
 | **Trip Planner** | Enter where you start and where you are going. You get the distance, the driving time with live traffic, the fuel cost, and the cost of a full tank, plus a map of the route. It compares light traffic with current traffic. |
 | **AI Advisor** | Describe a car problem in plain words. You get a clear "DIY Fixable" or "See a Mechanic" verdict with short guidance, and a tutorial video for DIY fixes. Answers are checked against official US recall and complaint data first. Your conversation is saved. |
-| **Fuel Log** | Log each time you fill your tank (date, liters and cost). Each car has its own log, newest first, with the price you paid per liter for every fill-up. |
+| **Fuel Log** | Log each time you fill your tank (date, liters and cost). Each car has its own log, newest first, with the price you paid per liter and per 20 liters (the canister size Lebanese pump prices are quoted in) for every fill-up. |
 
 Supporting screens: Landing page, Sign Up / Log In, and a Dashboard that lists your cars and links to the tools.
 
@@ -205,7 +205,7 @@ The `fuel_prices` table starts empty; the backend fills it the first time fuel p
 7. **Log your fuel fill-ups** (Fuel Log). Open **Fuel Log** from the Dashboard or the header.
    - Pick the car (if you have several); every car keeps its own log.
    - Enter the **Date** (today by default), the **Liters** and the **Cost**, choose whether the cost is in USD or LBP (it starts on the currency you picked in the header), and choose **Add Fill-Up**. All three are required and must be greater than 0; the date can't be in the future.
-   - The list shows that car's fill-ups newest first, with the price per liter of each. A car with no fill-ups yet shows an **Add your first fill-up** prompt.
+   - The list shows that car's fill-ups newest first, with the price per liter and per 20 liters of each. A car with no fill-ups yet shows an **Add your first fill-up** prompt.
 8. **Log out** from the header when you are done.
 
 ## API reference

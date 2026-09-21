@@ -18,6 +18,7 @@ import { CurrencyProvider } from "../currency/CurrencyContext.jsx";
 import { CURRENCY_STORAGE_KEY } from "../lib/currency.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { todayLocal } from "../lib/fuelLog.js";
+import { unconvertedMoney } from "../test/priceText.js";
 
 const USER = { id: "user-123", email: "driver@example.com" };
 const CAR_1 = { id: "car-1", make: "Mercedes-Benz", model: "C230 Kompressor", year: 2005 };
@@ -145,10 +146,11 @@ describe("FuelLogPage — viewing", () => {
     expect(screen.getByRole("columnheader", { name: "Liters" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Cost" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Price per liter" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Price per 20 L" })).toBeInTheDocument();
     expect(tableRows()).toEqual([
-      ["21 Sep 2026", "19.6 L", "$30.00 (2,691,000 LBP)", "$1.53/L (137,296 LBP/L)"],
-      ["15 Sep 2026", "25 L", "$27.87 (2,500,000 LBP)", "$1.11/L (100,000 LBP/L)"],
-      ["1 Sep 2026", "30 L", "$45.00 (4,036,500 LBP)", "$1.50/L (134,550 LBP/L)"],
+      ["21 Sep 2026", "19.6 L", "$30.00 (2,691,000 LBP)", "$1.53/L (137,296 LBP/L)", "$30.61/20 L (2,745,918 LBP/20 L)"],
+      ["15 Sep 2026", "25 L", "$27.87 (2,500,000 LBP)", "$1.11/L (100,000 LBP/L)", "$22.30/20 L (2,000,000 LBP/20 L)"],
+      ["1 Sep 2026", "30 L", "$45.00 (4,036,500 LBP)", "$1.50/L (134,550 LBP/L)", "$30.00/20 L (2,691,000 LBP/20 L)"],
     ]);
   });
 
@@ -237,8 +239,8 @@ describe("FuelLogPage — adding a fill-up", () => {
     ]);
     expect(await screen.findByRole("status")).toHaveTextContent("Fill-up added.");
     expect(tableRows()).toEqual([
-      [expect.stringMatching(/^\d{1,2} [A-Z][a-z]{2} \d{4}$/), "19.6 L", "$30.00 (2,691,000 LBP)", "$1.53/L (137,296 LBP/L)"],
-      ["1 Sep 2026", "30 L", "$45.00 (4,036,500 LBP)", "$1.50/L (134,550 LBP/L)"],
+      [expect.stringMatching(/^\d{1,2} [A-Z][a-z]{2} \d{4}$/), "19.6 L", "$30.00 (2,691,000 LBP)", "$1.53/L (137,296 LBP/L)", "$30.61/20 L (2,745,918 LBP/20 L)"],
+      ["1 Sep 2026", "30 L", "$45.00 (4,036,500 LBP)", "$1.50/L (134,550 LBP/L)", "$30.00/20 L (2,691,000 LBP/20 L)"],
     ]);
     // the form is ready for the next one
     expect(screen.getByLabelText("Liters *")).toHaveValue(null);
@@ -270,7 +272,7 @@ describe("FuelLogPage — adding a fill-up", () => {
 
     expect(calls.inserts[0]).toMatchObject({ cost_amount: 2700000, cost_currency: "LBP", liters: 25 });
     expect(await screen.findByRole("table")).toBeInTheDocument();
-    expect(tableRows()[0].slice(1)).toEqual(["25 L", "$30.10 (2,700,000 LBP)", "$1.20/L (108,000 LBP/L)"]);
+    expect(tableRows()[0].slice(1)).toEqual(["25 L", "$30.10 (2,700,000 LBP)", "$1.20/L (108,000 LBP/L)", "$24.08/20 L (2,160,000 LBP/20 L)"]);
   });
 
   it("puts a fill-up dated earlier below the newer ones", async () => {
@@ -457,7 +459,7 @@ describe("FuelLogPage — several cars", () => {
     await screen.findByRole("table");
     await user.selectOptions(screen.getByLabelText("Car"), "car-2");
 
-    await waitFor(() => expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)"]]));
+    await waitFor(() => expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)", "$30.00/20 L (2,691,000 LBP/20 L)"]]));
     expect(screen.queryByText("21 Sep 2026")).not.toBeInTheDocument();
     expect(screen.queryByText("1 Sep 2026")).not.toBeInTheDocument();
     expect(calls.logQueries).toEqual([["car_id", "car-1"], ["car_id", "car-2"]]);
@@ -518,7 +520,7 @@ describe("FuelLogPage — several cars", () => {
     expect(screen.queryByText("No fill-ups logged yet")).not.toBeInTheDocument(); // not a false "empty" either
 
     await act(async () => answerCar2({ data: [ROW_OTHER_CAR], error: null }));
-    expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)"]]);
+    expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)", "$30.00/20 L (2,691,000 LBP/20 L)"]]);
   });
 
   it("ignores a slow answer for a car the user has already switched away from", async () => {
@@ -534,11 +536,11 @@ describe("FuelLogPage — several cars", () => {
 
     renderPage();
     await user.selectOptions(await screen.findByLabelText("Car"), "car-2");
-    await waitFor(() => expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)"]]));
+    await waitFor(() => expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)", "$30.00/20 L (2,691,000 LBP/20 L)"]]));
 
     await act(async () => answerCar1({ data: [ROW_A, ROW_B], error: null })); // car 1's reply lands now
 
-    expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)"]]);
+    expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)", "$30.00/20 L (2,691,000 LBP/20 L)"]]);
     expect(screen.queryByText("21 Sep 2026")).not.toBeInTheDocument();
   });
 
@@ -552,12 +554,12 @@ describe("FuelLogPage — several cars", () => {
     await fillForm(user, { liters: "12", cost: "18" });
     await user.click(screen.getByRole("button", { name: "Add Fill-Up" })); // saving for car 1 ...
     await user.selectOptions(screen.getByLabelText("Car"), "car-2"); // ... then switch to car 2
-    await waitFor(() => expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)"]]));
+    await waitFor(() => expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)", "$30.00/20 L (2,691,000 LBP/20 L)"]]));
 
     await act(async () => save.finish());
 
     expect(calls.inserts[0].car_id).toBe("car-1");
-    expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)"]]); // car 2's list is untouched
+    expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)", "$30.00/20 L (2,691,000 LBP/20 L)"]]); // car 2's list is untouched
   });
 });
 
@@ -589,8 +591,8 @@ describe("FuelLogPage — currency toggle (CAR-54)", () => {
     await screen.findByRole("table");
 
     expect(moneyCells()).toEqual([
-      ["$30.00 (2,691,000 LBP)", "$1.53/L (137,296 LBP/L)"],
-      ["$27.87 (2,500,000 LBP)", "$1.11/L (100,000 LBP/L)"],
+      ["$30.00 (2,691,000 LBP)", "$1.53/L (137,296 LBP/L)", "$30.61/20 L (2,745,918 LBP/20 L)"],
+      ["$27.87 (2,500,000 LBP)", "$1.11/L (100,000 LBP/L)", "$22.30/20 L (2,000,000 LBP/20 L)"],
     ]);
   });
 
@@ -600,8 +602,8 @@ describe("FuelLogPage — currency toggle (CAR-54)", () => {
     await screen.findByRole("table");
 
     expect(moneyCells()).toEqual([
-      ["2,691,000 LBP ($30.00)", "137,296 LBP/L ($1.53/L)"],
-      ["2,500,000 LBP ($27.87)", "100,000 LBP/L ($1.11/L)"],
+      ["2,691,000 LBP ($30.00)", "137,296 LBP/L ($1.53/L)", "2,745,918 LBP/20 L ($30.61/20 L)"],
+      ["2,500,000 LBP ($27.87)", "100,000 LBP/L ($1.11/L)", "2,000,000 LBP/20 L ($22.30/20 L)"],
     ]);
   });
 
@@ -612,10 +614,10 @@ describe("FuelLogPage — currency toggle (CAR-54)", () => {
     await screen.findByRole("table");
 
     await user.click(screen.getByRole("button", { name: "LBP" }));
-    expect(moneyCells()[0]).toEqual(["2,691,000 LBP ($30.00)", "137,296 LBP/L ($1.53/L)"]);
+    expect(moneyCells()[0]).toEqual(["2,691,000 LBP ($30.00)", "137,296 LBP/L ($1.53/L)", "2,745,918 LBP/20 L ($30.61/20 L)"]);
 
     await user.click(screen.getByRole("button", { name: "USD" }));
-    expect(moneyCells()[0]).toEqual(["$30.00 (2,691,000 LBP)", "$1.53/L (137,296 LBP/L)"]);
+    expect(moneyCells()[0]).toEqual(["$30.00 (2,691,000 LBP)", "$1.53/L (137,296 LBP/L)", "$30.61/20 L (2,745,918 LBP/20 L)"]);
   });
 
   it("starts the form's cost currency on the primary currency and follows the switch", async () => {
@@ -655,6 +657,118 @@ describe("FuelLogPage — currency toggle (CAR-54)", () => {
 
     await screen.findByRole("status");
     expect(calls.inserts[0]).toMatchObject({ cost_amount: 1800000, cost_currency: "LBP" });
-    expect(moneyCells()[0]).toEqual(["1,800,000 LBP ($20.07)", "90,000 LBP/L ($1.00/L)"]);
+    expect(moneyCells()[0]).toEqual(["1,800,000 LBP ($20.07)", "90,000 LBP/L ($1.00/L)", "1,800,000 LBP/20 L ($20.07/20 L)"]);
+  });
+});
+
+describe("FuelLogPage — price per 20 liters (CAR-53 addition)", () => {
+  // Lebanese fuel prices are posted per 20-liter canister, so each entry shows that beside the per-liter figure.
+  function renderWithCurrency({ stored } = {}) {
+    window.localStorage.clear();
+    if (stored) window.localStorage.setItem(CURRENCY_STORAGE_KEY, stored);
+    return render(
+      <MemoryRouter initialEntries={["/fuel-log"]}>
+        <AuthProvider>
+          <CurrencyProvider>
+            <CurrencyToggle />
+            <Routes>
+              <Route path="/fuel-log" element={<FuelLogPage />} />
+            </Routes>
+          </CurrencyProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it("has a 'Price per 20 L' column right after 'Price per liter'", async () => {
+    mockDatabase({ logsByCar: { "car-1": { data: [ROW_B], error: null } } });
+    renderWithCurrency();
+    await screen.findByRole("table");
+
+    const headers = screen.getAllByRole("columnheader").map((header) => header.textContent);
+    expect(headers).toEqual(["Date", "Liters", "Cost", "Price per liter", "Price per 20 L"]);
+  });
+
+  it("shows each entry's price per 20 liters next to its price per liter, in its own currency and converted", async () => {
+    mockDatabase({ logsByCar: { "car-1": { data: [ROW_A, ROW_B, ROW_LBP], error: null } } });
+    renderWithCurrency();
+    await screen.findByRole("table");
+
+    expect(tableRows().map((row) => row.slice(3))).toEqual([
+      ["$1.53/L (137,296 LBP/L)", "$30.61/20 L (2,745,918 LBP/20 L)"], // 19.6 L for $30
+      ["$1.11/L (100,000 LBP/L)", "$22.30/20 L (2,000,000 LBP/20 L)"], // 25 L for 2,500,000 LBP
+      ["$1.50/L (134,550 LBP/L)", "$30.00/20 L (2,691,000 LBP/20 L)"], // 30 L for $45
+    ]);
+  });
+
+  it("is exactly the price per liter times 20, computed from the entry (not from the rounded per-liter text)", async () => {
+    mockDatabase({ logsByCar: { "car-1": { data: [ROW_B], error: null } } });
+    renderWithCurrency();
+    await screen.findByRole("table");
+
+    // 19.6 L for $30: $1.53/L shown, but 20 L is $30.61 (30 / 19.6 x 20), not 1.53 x 20 = $30.60
+    const per20 = tableRows()[0][4];
+    expect(per20).toContain("$30.61/20 L");
+    expect(per20).not.toContain("$30.60");
+  });
+
+  it("follows the currency switch like every other price", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [ROW_B], error: null } } });
+    renderWithCurrency();
+    await screen.findByRole("table");
+
+    await user.click(screen.getByRole("button", { name: "LBP" }));
+    expect(tableRows()[0][4]).toBe("2,745,918 LBP/20 L ($30.61/20 L)");
+
+    await user.click(screen.getByRole("button", { name: "USD" }));
+    expect(tableRows()[0][4]).toBe("$30.61/20 L (2,745,918 LBP/20 L)");
+  });
+
+  it("shows the per-20-liters price of a fill-up the moment it is added", async () => {
+    const user = userEvent.setup();
+    mockDatabase();
+    renderWithCurrency();
+    await screen.findByText("No fill-ups logged yet");
+
+    await user.type(screen.getByLabelText("Liters *"), "19.6");
+    await user.type(screen.getByLabelText("Cost *"), "30");
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    await screen.findByRole("status");
+    expect(tableRows()[0].slice(3)).toEqual(["$1.53/L (137,296 LBP/L)", "$30.61/20 L (2,745,918 LBP/20 L)"]);
+  });
+
+  it("a fill-up of exactly 20 liters shows the same figure for the fill and per 20 liters", async () => {
+    mockDatabase({
+      logsByCar: { "car-1": { data: [{ ...ROW_A, id: "twenty", liters: "20", cost_amount: "30" }], error: null } },
+    });
+    renderWithCurrency();
+    await screen.findByRole("table");
+
+    expect(tableRows()[0].slice(2)).toEqual([
+      "$30.00 (2,691,000 LBP)",
+      "$1.50/L (134,550 LBP/L)",
+      "$30.00/20 L (2,691,000 LBP/20 L)",
+    ]);
+  });
+
+  it("shows a dash instead of a broken figure when the price can't be worked out", async () => {
+    mockDatabase({
+      logsByCar: { "car-1": { data: [{ ...ROW_A, id: "zero", liters: "0", cost_amount: "30" }], error: null } },
+    });
+    renderWithCurrency();
+    await screen.findByRole("table");
+
+    expect(tableRows()[0].slice(3)).toEqual(["—", "—"]);
+    expect(screen.getByRole("table")).not.toHaveTextContent(/NaN|Infinity/);
+  });
+
+  it("draws no money on the Fuel Log except through <Price> (so the switch reaches every figure)", async () => {
+    mockDatabase({ logsByCar: { "car-1": { data: [ROW_A, ROW_B, ROW_LBP], error: null } } });
+    renderWithCurrency();
+    await screen.findByRole("table");
+
+    expect(unconvertedMoney(document.body)).toEqual([]);
   });
 });

@@ -110,6 +110,7 @@ describe("the currency toggle across screens", () => {
       "19.6 L",
       "2,691,000 LBP ($30.00)",
       "137,296 LBP/L ($1.53/L)",
+      "2,745,918 LBP/20 L ($30.61/20 L)",
     ]);
 
     // switching back to USD on the Fuel Log flips it too
@@ -118,6 +119,7 @@ describe("the currency toggle across screens", () => {
     expect(within(table).getAllByRole("cell").map((cell) => cell.textContent).slice(2)).toEqual([
       "$30.00 (2,691,000 LBP)",
       "$1.53/L (137,296 LBP/L)",
+      "$30.61/20 L (2,745,918 LBP/20 L)",
     ]);
 
     // and the Trip Planner, opened again, follows the same choice
@@ -137,7 +139,7 @@ describe("the currency toggle across screens", () => {
     await screen.findByRole("table");
     expect(screen.getByRole("button", { name: "LBP" })).toHaveAttribute("aria-pressed", "true");
     expect(primaries()).toEqual(["LBP"]);
-    expect(prices()).toEqual(["2,691,000 LBP ($30.00)", "137,296 LBP/L ($1.53/L)"]);
+    expect(prices()).toEqual(["2,691,000 LBP ($30.00)", "137,296 LBP/L ($1.53/L)", "2,745,918 LBP/20 L ($30.61/20 L)"]);
     secondVisit.unmount();
 
     openApp("/trip-planner"); // a different screen after the reload

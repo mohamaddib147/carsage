@@ -1,9 +1,10 @@
 // Fuel Log screen (CAR-53): a per-car log of fuel fill-ups. The user adds an
 // entry (date, liters, cost) and sees that car's fill-ups newest first, each with
-// its computed price per liter. Entries are read and written straight to the
-// `fuel_logs` table through Supabase: row-level security scopes every row to its
-// owner, and the table's CHECK constraints are the server-side input validation
-// (this page validates first only for fast, friendly feedback).
+// its computed price per liter and per 20 liters (the canister size Lebanese fuel
+// prices are quoted in). Entries are read and written straight to the `fuel_logs`
+// table through Supabase: row-level security scopes every row to its owner, and the
+// table's CHECK constraints are the server-side input validation (this page
+// validates first only for fast, friendly feedback).
 //
 // With more than one car a selector switches the log. Loaded fill-ups are stored
 // together with the id of the car they belong to and are only shown while that id
@@ -28,6 +29,7 @@ import {
   formatFillDate,
   formatLiters,
   getFillUpErrors,
+  pricePer20Liters,
   pricePerLiter,
   sortFillUps,
   todayLocal,
@@ -211,7 +213,7 @@ function FuelLogPage() {
   return (
     <PageShell
       title="Fuel Log"
-      description="Log each time you fill your tank and see what you pay per liter."
+      description="Log each time you fill your tank and see what you pay per liter and per 20 liters."
     >
       <div className="route-params-card">
         <p className="form-section-label">Log a fill-up</p>
@@ -347,11 +349,13 @@ function FuelLogPage() {
                   <th scope="col">Liters</th>
                   <th scope="col">Cost</th>
                   <th scope="col">Price per liter</th>
+                  <th scope="col">Price per 20 L</th>
                 </tr>
               </thead>
               <tbody>
                 {entries.map((entry) => {
                   const perLiter = pricePerLiter(entry);
+                  const per20Liters = pricePer20Liters(entry);
                   return (
                     <tr key={entry.id}>
                       <td>{formatFillDate(entry.filled_at)}</td>
@@ -364,6 +368,13 @@ function FuelLogPage() {
                           "—"
                         ) : (
                           <Price amount={perLiter} currency={entry.cost_currency} suffix="/L" />
+                        )}
+                      </td>
+                      <td>
+                        {per20Liters == null ? (
+                          "—"
+                        ) : (
+                          <Price amount={per20Liters} currency={entry.cost_currency} suffix="/20 L" />
                         )}
                       </td>
                     </tr>

@@ -5,8 +5,10 @@
 import { describe, expect, it } from "vitest";
 import {
   formatFillDate,
+  CANISTER_LITERS,
   formatLiters,
   getFillUpErrors,
+  pricePer20Liters,
   pricePerLiter,
   sortFillUps,
   todayLocal,
@@ -121,6 +123,38 @@ describe("pricePerLiter", () => {
     "returns null instead of Infinity or NaN for %j",
     (entry) => {
       expect(pricePerLiter(entry)).toBeNull();
+    },
+  );
+});
+
+describe("pricePer20Liters", () => {
+  it("uses the 20-liter canister Lebanese fuel prices are quoted in", () => {
+    expect(CANISTER_LITERS).toBe(20);
+  });
+
+  it("is the price per liter times 20", () => {
+    expect(pricePer20Liters({ liters: 20, cost_amount: 30 })).toBe(30);
+    expect(pricePer20Liters({ liters: 40, cost_amount: 60 })).toBe(30);
+    expect(pricePer20Liters({ liters: 10, cost_amount: 12 })).toBeCloseTo(24, 10);
+  });
+
+  it("is exact: derived from the unrounded price per liter, not from a rounded copy (19.6 L for $30 -> 30.61, not 30.60)", () => {
+    const entry = { liters: 19.6, cost_amount: 30 };
+
+    expect(pricePer20Liters(entry)).toBeCloseTo((30 / 19.6) * 20, 10);
+    expect(pricePer20Liters(entry)).toBeCloseTo(30.612245, 5);
+    expect(pricePer20Liters(entry)).not.toBeCloseTo(1.53 * 20, 2);
+    expect(pricePer20Liters(entry)).toBeCloseTo(pricePerLiter(entry) * 20, 10);
+  });
+
+  it("accepts numbers that arrive as strings (Postgres numeric)", () => {
+    expect(pricePer20Liters({ liters: "19.6", cost_amount: "30" })).toBeCloseTo(30.612245, 5);
+  });
+
+  it.each([{ liters: 0, cost_amount: 10 }, { liters: -5, cost_amount: 10 }, { liters: "x", cost_amount: 10 }, { liters: 5, cost_amount: "x" }])(
+    "returns null (never Infinity or NaN) when the price per liter can't be worked out: %j",
+    (entry) => {
+      expect(pricePer20Liters(entry)).toBeNull();
     },
   );
 });
