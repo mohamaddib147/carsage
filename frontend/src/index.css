@@ -203,6 +203,7 @@ input[type="text"],
 input[type="email"],
 input[type="password"],
 input[type="number"],
+input[type="date"],
 select {
   font-family: inherit;
   font-size: 1rem;
@@ -1673,4 +1674,72 @@ select:focus {
 
 .landing-footer__links a:hover {
   color: var(--color-primary);
+}
+
+/* Fuel Log (CAR-53) */
+.fuel-log-car-name {
+  margin: 0;
+  font-weight: 700;
+  color: var(--color-primary);
+  overflow-wrap: break-word;
+}
+
+.fuel-log-cost-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: var(--spacing-unit);
+}
+
+.fuel-log-saved {
+  margin: 0;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.fuel-log-empty {
+  max-width: 480px;
+  margin-top: calc(var(--spacing-unit) * 2);
+  padding: calc(var(--spacing-unit) * 3);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+}
+
+.fuel-log-empty__title {
+  margin: 0 0 var(--spacing-unit);
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+
+.fuel-log-table-wrap {
+  margin-top: calc(var(--spacing-unit) * 2);
+  overflow-x: auto;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+}
+
+.fuel-log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.fuel-log-table th,
+.fuel-log-table td {
+  padding: calc(var(--spacing-unit) * 1.5) calc(var(--spacing-unit) * 2);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.fuel-log-table th {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.fuel-log-table tbody tr + tr td {
+  border-top: 1px solid var(--color-border);
 }

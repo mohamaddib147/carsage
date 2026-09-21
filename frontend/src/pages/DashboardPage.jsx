@@ -1,6 +1,6 @@
 // Dashboard / Home screen — the hub a user lands on after logging in:
 // a summary of their saved car(s) (or a prompt to add one), plus quick
-// links to the two core features. Layout matches
+// links to the two core features and the Fuel Log (CAR-53). Layout matches
 // docs/stitch_carsage_landing_page/carsage_dashboard_vehicle_hub for the
 // in-scope parts (card style, "Add Another Car" placement, module
 // cards); the reference's left sidebar nav, vehicle photo, and
@@ -49,7 +49,7 @@ function carSpecs(car) {
 /**
  * Dashboard / Home screen. Fetches the logged-in user's cars (RLS scopes
  * this to their own rows) and shows either a summary of each or an empty
- * state, plus module cards for Trip Planner and AI Advisor.
+ * state, plus module cards for Trip Planner, AI Advisor and Fuel Log.
  * @returns {JSX.Element}
  */
 function DashboardPage() {
@@ -167,6 +167,16 @@ function DashboardPage() {
             <p>Describe a car issue and get DIY-vs-mechanic guidance.</p>
             <span className="dashboard-module-card__cta">
               Ask advisor <span aria-hidden="true">→</span>
+            </span>
+          </Link>
+          <Link className="dashboard-module-card" to="/fuel-log">
+            <span className="dashboard-module-card__icon" aria-hidden="true">
+              ⛽
+            </span>
+            <h3>Fuel Log</h3>
+            <p>Log each fill-up and see what you pay per liter.</p>
+            <span className="dashboard-module-card__cta">
+              Log a fill-up <span aria-hidden="true">→</span>
             </span>
           </Link>
         </div>

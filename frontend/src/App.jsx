@@ -1,5 +1,6 @@
-// Root component — defines client-side routing for all 7 CarSage screens
-// plus the placeholder Terms / Privacy pages linked from the footer.
+// Root component — defines client-side routing for all CarSage screens (the 7
+// original ones plus the Fuel Log, CAR-53) and the placeholder Terms / Privacy
+// pages linked from the footer.
 
 import { Route, Routes } from "react-router-dom";
 import SiteNav from "./components/SiteNav.jsx";
@@ -11,6 +12,7 @@ import CarOnboardingPage from "./pages/CarOnboardingPage.jsx";
 import CarProfilePage from "./pages/CarProfilePage.jsx";
 import TripPlannerPage from "./pages/TripPlannerPage.jsx";
 import AIAdvisorPage from "./pages/AIAdvisorPage.jsx";
+import FuelLogPage from "./pages/FuelLogPage.jsx";
 import { PrivacyPage, TermsPage } from "./pages/LegalPages.jsx";
 import NotFoundPage from "./pages/NotFoundPage.jsx";
 
@@ -74,6 +76,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <AIAdvisorPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/fuel-log"
+            element={
+              <ProtectedRoute>
+                <FuelLogPage />
               </ProtectedRoute>
             }
           />

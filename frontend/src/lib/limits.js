@@ -20,6 +20,10 @@ export const LIMITS = {
   // trips
   PLACE: 300,
   MAX_FUEL_PRICE_LBP: 10_000_000,
+  // fuel_logs (CAR-53): one fill-up is at most the largest tank the app allows
+  MAX_FILL_LITERS: 200,
+  MAX_FILL_COST: 1_000_000_000_000,
+  MIN_FILL_DATE: "2000-01-01",
   // sign up (Supabase Auth enforces 6+; bcrypt only uses the first 72 bytes)
   EMAIL: 254,
   PASSWORD_MIN: 6,

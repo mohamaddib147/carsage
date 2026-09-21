@@ -108,7 +108,7 @@ describe("DashboardPage — vehicle summary", () => {
 });
 
 describe("DashboardPage — quick access", () => {
-  it("shows exactly two module cards, linking to Trip Planner and AI Advisor", async () => {
+  it("shows the three module cards, linking to Trip Planner, AI Advisor and the Fuel Log (CAR-53)", async () => {
     mockCarsList({ data: [], error: null });
 
     renderDashboard();
@@ -118,6 +118,7 @@ describe("DashboardPage — quick access", () => {
     const advisorLink = screen.getByRole("link", { name: /AI Advisor/ });
     expect(tripPlannerLink).toHaveAttribute("href", "/trip-planner");
     expect(advisorLink).toHaveAttribute("href", "/advisor");
+    expect(screen.getByRole("link", { name: /Fuel Log/ })).toHaveAttribute("href", "/fuel-log");
   });
 });
 

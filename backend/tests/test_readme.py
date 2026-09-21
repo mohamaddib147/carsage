@@ -39,8 +39,8 @@ def test_the_readme_has_every_section_the_task_requires():
         assert required in headings, f"README is missing a '{required}' section"
 
 
-def test_the_four_main_features_are_all_described():
-    for feature in ("Car Onboarding", "Car Profile", "Trip Planner", "AI Advisor"):
+def test_the_main_features_are_all_described():
+    for feature in ("Car Onboarding", "Car Profile", "Trip Planner", "AI Advisor", "Fuel Log"):
         assert README.count(feature) >= 2, f"{feature} should be introduced and explained"
 
 
@@ -87,7 +87,7 @@ class TestDatabaseSetup:
     migrations = sorted(p.name for p in (ROOT / "docs" / "db_migrations").glob("*.sql"))
 
     def test_it_found_the_migrations(self):
-        assert len(self.migrations) >= 13
+        assert len(self.migrations) >= 14
 
     def test_every_migration_is_listed_in_run_order(self):
         positions = []
@@ -98,7 +98,7 @@ class TestDatabaseSetup:
         assert positions == sorted(positions), "migrations must be listed in the order they must be run"
 
     def test_every_table_is_named(self):
-        for table in ("profiles", "cars", "trips", "advisor_conversations", "advisor_messages", "fuel_prices"):
+        for table in ("profiles", "cars", "trips", "advisor_conversations", "advisor_messages", "fuel_prices", "fuel_logs"):
             assert f"`{table}`" in README
 
     def test_the_exported_migrations_say_where_they_came_from(self):

@@ -128,7 +128,7 @@ describe("SiteNav auth control", () => {
 });
 
 describe("SiteNav center links", () => {
-  const APP_LINKS = ["Dashboard", "Car Onboarding", "Car Profile", "Trip Planner", "AI Advisor"];
+  const APP_LINKS = ["Dashboard", "Car Onboarding", "Car Profile", "Trip Planner", "AI Advisor", "Fuel Log"];
 
   it("logged out: shows only 'Features' and 'How it works' anchors, no app routes", async () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });

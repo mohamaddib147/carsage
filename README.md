@@ -30,6 +30,7 @@ It was built as a capstone project (React + FastAPI + Supabase). Fuel prices are
 | **Car Profile** | See every saved spec for your car, edit any of them, or delete the car. |
 | **Trip Planner** | Enter where you start and where you are going. You get the distance, the driving time with live traffic, the fuel cost, and the cost of a full tank, plus a map of the route. It compares light traffic with current traffic. |
 | **AI Advisor** | Describe a car problem in plain words. You get a clear "DIY Fixable" or "See a Mechanic" verdict with short guidance, and a tutorial video for DIY fixes. Answers are checked against official US recall and complaint data first. Your conversation is saved. |
+| **Fuel Log** | Log each time you fill your tank (date, liters and cost). Each car has its own log, newest first, with the price you paid per liter for every fill-up. |
 
 Supporting screens: Landing page, Sign Up / Log In, and a Dashboard that lists your cars and links to the tools.
 
@@ -167,10 +168,11 @@ CarSage uses a Supabase project (PostgreSQL + Auth). The database is described b
 | 11 | `2026-09-19_cars_fuel_tank_capacity_range_check.sql` | Limits tank capacity to 5 to 200 litres. |
 | 12 | `2026-09-20_car23_input_validation_constraints.sql` | Database-level input limits (lengths, ranges, allowed fuel types) and `fuel_type` required. |
 | 13 | `2026-09-20_car24_access_control_hardening.sql` | A trip or conversation may only point at the caller's own car; removes unneeded table privileges. |
+| 14 | `2026-09-21_car53_fuel_logs.sql` | `fuel_logs` table for the Fuel Log: owner-only read and add, a fill-up may only point at the caller's own car, and limits on liters, cost, currency and date. |
 
-   The file names sort in the order they must be run. Files 1 to 11 are verbatim copies of the migration history; files 12 and 13 were checked against what is applied to the project.
+   The file names sort in the order they must be run. Files 1 to 11 are verbatim copies of the migration history; files 12 to 14 were checked against what is applied to the project.
 4. **Copy your keys** (Project Settings → API): the project URL, the `anon` key (frontend) and the `service_role` key (backend only) into the two `.env` files.
-5. **Check it worked.** In the Table Editor you should see `profiles`, `cars`, `trips`, `advisor_conversations`, `advisor_messages` and `fuel_prices`, each with Row Level Security **enabled**. To be thorough, run the access-control check (it creates and deletes two throwaway users):
+5. **Check it worked.** In the Table Editor you should see `profiles`, `cars`, `trips`, `advisor_conversations`, `advisor_messages`, `fuel_prices` and `fuel_logs`, each with Row Level Security **enabled**. To be thorough, run the access-control check (it creates and deletes two throwaway users):
 
    ```bash
    cd backend
@@ -199,7 +201,11 @@ The `fuel_prices` table starts empty; the backend fills it the first time fuel p
    - Describe the problem, or tap an example such as "Squeaking brakes at low speed", and choose **Send**. Use real words: at least three letters and up to 1,000 characters.
    - You get a **DIY Fixable** badge with numbered steps (and a "Watch on YouTube" video when one is found) or a **See a Mechanic** badge with guidance. If the problem matches an open recall or a pattern of owner complaints for your car, the advisor points you to a mechanic. Your conversation is saved and reloads next time.
    - The advice is a starting point, not a professional diagnosis.
-6. **Log out** from the header when you are done.
+6. **Log your fuel fill-ups** (Fuel Log). Open **Fuel Log** from the Dashboard or the header.
+   - Pick the car (if you have several); every car keeps its own log.
+   - Enter the **Date** (today by default), the **Liters** and the **Cost**, choose whether the cost is in USD or LBP, and choose **Add Fill-Up**. All three are required and must be greater than 0; the date can't be in the future.
+   - The list shows that car's fill-ups newest first, with the price per liter of each. A car with no fill-ups yet shows an **Add your first fill-up** prompt.
+7. **Log out** from the header when you are done.
 
 ## API reference
 

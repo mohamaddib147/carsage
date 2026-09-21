@@ -17,6 +17,7 @@ const CENTER_LINKS = [
   { to: "/cars/mine", label: "Car Profile" },
   { to: "/trip-planner", label: "Trip Planner" },
   { to: "/advisor", label: "AI Advisor" },
+  { to: "/fuel-log", label: "Fuel Log" },
 ];
 
 // Signed-out nav: anchors on the Landing page (its sections carry these ids).

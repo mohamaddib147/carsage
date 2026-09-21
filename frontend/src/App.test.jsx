@@ -83,7 +83,7 @@ describe("App routing — public screens", () => {
     ]);
   });
 
-  it("logged in: the nav shows the full app menu (brand + 5 screens) and a Log Out button", async () => {
+  it("logged in: the nav shows the full app menu (brand + 6 screens) and a Log Out button", async () => {
     supabase.auth.getSession.mockResolvedValue({
       data: { session: { user: { id: "user-123", email: "driver@example.com" } } },
     });
@@ -98,6 +98,7 @@ describe("App routing — public screens", () => {
       "/cars/mine",
       "/trip-planner",
       "/advisor",
+      "/fuel-log",
     ]);
   });
 });
@@ -110,6 +111,7 @@ describe("App routing — protected screens redirect logged-out users", () => {
     ["/cars/abc-123"],
     ["/trip-planner"],
     ["/advisor"],
+    ["/fuel-log"],
   ])("redirects %s to the Log In screen", async (path) => {
     renderAtPath(path);
     expect(
@@ -148,9 +150,9 @@ describe("App routing — every route is either protected or deliberately public
 
   const protectedPaths = declaredRoutes.filter((route) => route.protectedRoute).map((route) => route.path);
 
-  it("protects the five app screens and the car profile routes", () => {
+  it("protects the app screens (incl. the CAR-53 Fuel Log) and the car profile routes", () => {
     expect([...protectedPaths].sort()).toEqual(
-      ["/advisor", "/cars/:carId", "/cars/mine", "/cars/new", "/dashboard", "/trip-planner"].sort(),
+      ["/advisor", "/cars/:carId", "/cars/mine", "/cars/new", "/dashboard", "/fuel-log", "/trip-planner"].sort(),
     );
   });
 
