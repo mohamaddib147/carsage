@@ -1491,12 +1491,15 @@ select:focus {
   gap: calc(var(--spacing-unit) * 1);
   margin-top: calc(var(--spacing-unit) * 1.5);
   padding-top: calc(var(--spacing-unit) * 1.5);
-  border-top: 1px solid var(--color-border);
+  /* The assistant bubble's background is dark (--color-primary) with white text
+     (.advisor-bubble--assistant) — this whole block needs light-on-dark colors,
+     not the page's normal muted-gray-on-light ones. */
+  border-top: 1px solid rgba(255, 255, 255, 0.3);
   font-size: 0.875rem;
 }
 
 .advisor-fix-feedback__prompt {
-  color: var(--color-text-muted);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .advisor-fix-feedback__btn {
@@ -1521,14 +1524,14 @@ select:focus {
 }
 
 .advisor-fix-feedback__answered {
-  color: var(--color-text-muted);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .advisor-fix-feedback__change {
   border: none;
   background: none;
   padding: 0;
-  color: var(--color-primary);
+  color: var(--color-accent);
   font-size: 0.8125rem;
   font-weight: 600;
   text-decoration: underline;
@@ -1538,6 +1541,9 @@ select:focus {
 .advisor-fix-feedback__error {
   flex-basis: 100%;
   margin: 0;
+  /* .auth-form__error's red is tuned for the page's light background; on this
+     dark bubble it needs to be much lighter to stay readable. */
+  color: #ffb4a9;
 }
 
 .advisor-input-row {
