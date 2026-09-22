@@ -117,22 +117,26 @@ export function sortFillUps(entries) {
 }
 
 /**
- * The price-per-liter trend for a chart: one point per fill-up that has a
- * usable price, oldest first (left to right, reading order for a trend line),
- * converted to a single currency so entries logged in USD and LBP plot on the
- * same axis. Uses the same figure as `pricePerLiter`, just reordered and
- * converted — never a separately-rounded copy of it.
+ * One point per fill-up for the "Fill-Up History" bar chart: liters filled
+ * (the bar's height) plus date and cost for the tooltip, oldest first (left
+ * to right, reading order for a history). Cost is converted to a single
+ * currency so entries logged in USD and LBP compare on the same tooltip
+ * scale; liters need no conversion.
  * @param {{ filled_at: string, created_at?: string, liters: number | string, cost_amount: number | string, cost_currency: "USD" | "LBP" }[]} entries
- * @param {"USD" | "LBP"} currency - the currency to plot every point in.
- * @returns {{ date: string, price: number }[]} `date` is the fill-up's date (YYYY-MM-DD).
+ * @param {"USD" | "LBP"} currency - the currency to show each point's cost in.
+ * @returns {{ date: string, liters: number, cost: number }[]} `date` is the fill-up's date (YYYY-MM-DD); an entry with an unusable liters figure is skipped.
  */
-export function priceTrendPoints(entries, currency) {
+export function fillUpChartPoints(entries, currency) {
   return sortFillUps(entries)
-    .reverse() // sortFillUps is newest-first; a trend line reads oldest-first.
+    .reverse() // sortFillUps is newest-first; a history chart reads oldest-first.
     .map((entry) => {
-      const perLiter = pricePerLiter(entry);
-      if (perLiter == null) return null;
-      return { date: entry.filled_at, price: convertAmount(perLiter, entry.cost_currency, currency) };
+      const liters = Number(entry.liters);
+      if (!Number.isFinite(liters)) return null;
+      return {
+        date: entry.filled_at,
+        liters,
+        cost: convertAmount(Number(entry.cost_amount), entry.cost_currency, currency),
+      };
     })
     .filter(Boolean);
 }

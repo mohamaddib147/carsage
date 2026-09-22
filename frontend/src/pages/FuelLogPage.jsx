@@ -19,9 +19,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -35,20 +35,36 @@ import { CURRENCIES, formatMoney } from "../lib/currency.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { describeActionError, describeSaveError, LIMITS } from "../lib/limits.js";
 import {
+  fillUpChartPoints,
   formatFillDate,
   formatLiters,
   getFillUpErrors,
   pricePer20Liters,
   pricePerLiter,
-  priceTrendPoints,
   sortFillUps,
   todayLocal,
 } from "../lib/fuelLog.js";
 
-/** A trend needs at least two points to show a direction. */
-const MIN_TREND_POINTS = 2;
-
 const ENTRY_COLUMNS = "id, filled_at, liters, cost_amount, cost_currency, created_at";
+
+/**
+ * The chart's hover/tap detail: date, liters and cost (in the currency the
+ * chart is drawn in) for one fill-up. Recharts calls this with `active` and
+ * `payload` itself; `currency` is passed through from the page.
+ * @param {{ active?: boolean, payload?: { payload: { date: string, liters: number, cost: number } }[], currency: "USD" | "LBP" }} props
+ * @returns {JSX.Element | null}
+ */
+function FillUpTooltip({ active, payload, currency }) {
+  if (!active || !payload?.length) return null;
+  const point = payload[0].payload;
+  return (
+    <div className="fuel-log-chart__tooltip">
+      <p className="fuel-log-chart__tooltip-date">{formatFillDate(point.date)}</p>
+      <p>{formatLiters(point.liters)} L</p>
+      <p>{formatMoney(point.cost, currency)}</p>
+    </div>
+  );
+}
 
 /** "2005 Mercedes-Benz C230 Kompressor" — the car as the user knows it. */
 function carLabel(car) {
@@ -90,7 +106,7 @@ function FuelLogPage() {
   const showingSelectedCar = loaded.carId === selectedCarId;
   const entries = showingSelectedCar ? loaded.entries : null;
   const loadError = showingSelectedCar ? loaded.error : "";
-  const trendPoints = entries ? priceTrendPoints(entries, primaryCurrency) : [];
+  const chartPoints = entries ? fillUpChartPoints(entries, primaryCurrency) : [];
 
   useEffect(() => {
     if (!user) return;
@@ -331,15 +347,15 @@ function FuelLogPage() {
         </form>
       </div>
 
-      {trendPoints.length >= MIN_TREND_POINTS && (
-        <section className="dashboard-section fuel-log-chart" aria-label="Price per liter trend">
-          <h2>Price per Liter Trend{label ? ` — ${label}` : ""}</h2>
+      {chartPoints.length > 0 && (
+        <section className="dashboard-section fuel-log-chart" aria-label="Fill-up history chart">
+          <h2>Fill-Up History{label ? ` — ${label}` : ""}</h2>
           <p className="fuel-log-chart__caption">
-            What you paid per liter at each fill-up, in {primaryCurrency}.
+            Liters filled at each fill-up. Hover or tap a bar for the date, liters and cost, in {primaryCurrency}.
           </p>
           <div className="fuel-log-chart__wrap">
             <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={trendPoints} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+              <BarChart data={chartPoints} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                 <XAxis
                   dataKey="date"
@@ -347,23 +363,16 @@ function FuelLogPage() {
                   tick={{ fontSize: 12, fill: "var(--color-text-muted)" }}
                 />
                 <YAxis
-                  tickFormatter={(value) => formatMoney(value, primaryCurrency)}
-                  width={primaryCurrency === "LBP" ? 90 : 60}
+                  tickFormatter={(value) => `${formatLiters(value)} L`}
+                  width={60}
                   tick={{ fontSize: 12, fill: "var(--color-text-muted)" }}
                 />
                 <Tooltip
-                  formatter={(value) => [formatMoney(value, primaryCurrency), "Price per liter"]}
-                  labelFormatter={formatFillDate}
+                  content={(tooltipProps) => <FillUpTooltip {...tooltipProps} currency={primaryCurrency} />}
+                  cursor={{ fill: "var(--color-border)", opacity: 0.4 }}
                 />
-                <Line
-                  type="monotone"
-                  dataKey="price"
-                  stroke="var(--color-primary)"
-                  strokeWidth={2}
-                  dot={{ r: 3 }}
-                  activeDot={{ r: 5 }}
-                />
-              </LineChart>
+                <Bar dataKey="liters" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </section>

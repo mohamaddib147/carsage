@@ -773,27 +773,27 @@ describe("FuelLogPage — price per 20 liters (CAR-53 addition)", () => {
   });
 });
 
-describe("FuelLogPage — price per liter trend chart (mentor feedback)", () => {
+describe("FuelLogPage — fill-up history bar chart (mentor feedback: replaces the price-per-liter line chart)", () => {
   beforeEach(() => window.localStorage.clear());
 
-  it("shows the chart, scoped to the selected car, with at least two priced fill-ups", async () => {
-    mockDatabase({ logsByCar: { "car-1": { data: [ROW_A, ROW_B], error: null } } });
-
-    renderPage();
-    await screen.findByRole("table");
-
-    expect(
-      screen.getByRole("heading", { name: "Price per Liter Trend — 2005 Mercedes-Benz C230 Kompressor" }),
-    ).toBeInTheDocument();
-  });
-
-  it("does not show a chart with only one fill-up — a single point isn't a trend", async () => {
+  it("shows the chart, scoped to the selected car, with a single fill-up — one bar is a history too", async () => {
     mockDatabase({ logsByCar: { "car-1": { data: [ROW_A], error: null } } });
 
     renderPage();
     await screen.findByRole("table");
 
-    expect(screen.queryByText(/Price per Liter Trend/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Fill-Up History — 2005 Mercedes-Benz C230 Kompressor" }),
+    ).toBeInTheDocument();
+  });
+
+  it("still shows the chart with several fill-ups", async () => {
+    mockDatabase({ logsByCar: { "car-1": { data: [ROW_A, ROW_B], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    expect(screen.getByText(/Fill-Up History/)).toBeInTheDocument();
   });
 
   it("does not show a chart, or crash, for a car with no fill-ups yet", async () => {
@@ -802,18 +802,18 @@ describe("FuelLogPage — price per liter trend chart (mentor feedback)", () => 
     renderPage();
 
     expect(await screen.findByText("No fill-ups logged yet")).toBeInTheDocument();
-    expect(screen.queryByText(/Price per Liter Trend/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Fill-Up History/)).not.toBeInTheDocument();
   });
 
-  it("does not count an unpriced entry (e.g. zero liters) toward the two points needed for a chart", async () => {
+  it("still plots a fill-up with an unusable price (e.g. zero liters) — liters is the value shown, not price", async () => {
     mockDatabase({
-      logsByCar: { "car-1": { data: [ROW_A, { ...ROW_B, id: "zero", liters: "0" }], error: null } },
+      logsByCar: { "car-1": { data: [{ ...ROW_A, id: "zero", liters: "0" }], error: null } },
     });
 
     renderPage();
     await screen.findByRole("table");
 
-    expect(screen.queryByText(/Price per Liter Trend/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Fill-Up History/)).toBeInTheDocument();
   });
 
   it("only charts the selected car's fill-ups, and switches when the car does", async () => {
@@ -822,17 +822,17 @@ describe("FuelLogPage — price per liter trend chart (mentor feedback)", () => 
       cars: [CAR_1, CAR_2],
       logsByCar: {
         "car-1": { data: [ROW_A, ROW_B], error: null },
-        "car-2": { data: [ROW_OTHER_CAR], error: null }, // only one entry — no chart for car 2
+        "car-2": { data: [], error: null }, // no fill-ups — no chart for car 2
       },
     });
 
     renderPage();
     await screen.findByRole("table");
-    expect(screen.getByText(/Price per Liter Trend/)).toBeInTheDocument();
+    expect(screen.getByText(/Fill-Up History/)).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Car"), "car-2");
-    await waitFor(() => expect(tableRows()).toHaveLength(1));
-    expect(screen.queryByText(/Price per Liter Trend/)).not.toBeInTheDocument();
+    await screen.findByText("No fill-ups logged yet");
+    expect(screen.queryByText(/Fill-Up History/)).not.toBeInTheDocument();
   });
 
   it("names what it's showing, in the primary currency", async () => {
@@ -841,6 +841,8 @@ describe("FuelLogPage — price per liter trend chart (mentor feedback)", () => 
     renderPage();
     await screen.findByRole("table");
 
-    expect(screen.getByText("What you paid per liter at each fill-up, in USD.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Liters filled at each fill-up. Hover or tap a bar for the date, liters and cost, in USD."),
+    ).toBeInTheDocument();
   });
 });

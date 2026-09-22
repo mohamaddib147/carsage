@@ -1863,6 +1863,24 @@ select:focus {
   padding: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 2) 0;
 }
 
+.fuel-log-chart__tooltip {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  padding: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 1.25);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.12);
+  font-size: 0.8125rem;
+}
+
+.fuel-log-chart__tooltip p {
+  margin: 0;
+}
+
+.fuel-log-chart__tooltip-date {
+  font-weight: 700;
+  margin-bottom: 2px !important;
+}
+
 .fuel-log-table {
   width: 100%;
   border-collapse: collapse;

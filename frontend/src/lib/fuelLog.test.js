@@ -4,13 +4,13 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  fillUpChartPoints,
   formatFillDate,
   CANISTER_LITERS,
   formatLiters,
   getFillUpErrors,
   pricePer20Liters,
   pricePerLiter,
-  priceTrendPoints,
   sortFillUps,
   todayLocal,
 } from "./fuelLog.js";
@@ -194,38 +194,52 @@ describe("sortFillUps", () => {
   });
 });
 
-describe("priceTrendPoints (Fuel Log chart)", () => {
+describe("fillUpChartPoints (Fuel Log bar chart)", () => {
   const A = { filled_at: "2026-09-01", liters: 30, cost_amount: 45, cost_currency: "USD", created_at: "2026-09-01T09:00:00Z" };
   const B = { filled_at: "2026-09-21", liters: 19.6, cost_amount: 30, cost_currency: "USD", created_at: "2026-09-21T09:00:00Z" };
   const LBP_ENTRY = { filled_at: "2026-09-15", liters: 25, cost_amount: 2_500_000, cost_currency: "LBP", created_at: "2026-09-15T09:00:00Z" };
 
   it("orders points oldest first, the opposite of the table's newest-first order", () => {
-    const points = priceTrendPoints([B, A], "USD");
+    const points = fillUpChartPoints([B, A], "USD");
 
     expect(points.map((point) => point.date)).toEqual(["2026-09-01", "2026-09-21"]);
   });
 
-  it("is each entry's price per liter, in the requested currency", () => {
-    const points = priceTrendPoints([A], "USD");
+  it("is each entry's liters, unconverted (liters need no currency)", () => {
+    const points = fillUpChartPoints([A, B], "USD");
 
-    expect(points[0].price).toBe(1.5); // $45 / 30 L
+    expect(points.map((point) => point.liters)).toEqual([30, 19.6]);
   });
 
-  it("converts every point to the same currency, so USD and LBP entries plot on one axis", () => {
-    const points = priceTrendPoints([A, LBP_ENTRY], "USD");
+  it("is each entry's cost, in the requested currency", () => {
+    const points = fillUpChartPoints([A], "USD");
 
-    expect(points[0].price).toBeCloseTo(1.5, 10); // $45 / 30 L, already USD
-    expect(points[1].price).toBeCloseTo(2_500_000 / 25 / LBP_PER_USD, 10); // LBP entry converted to USD
+    expect(points[0].cost).toBe(45); // already USD
   });
 
-  it("converts to LBP just as well", () => {
-    const points = priceTrendPoints([A], "LBP");
+  it("converts every point's cost to the same currency, so USD and LBP entries compare on one tooltip scale", () => {
+    const points = fillUpChartPoints([A, LBP_ENTRY], "USD");
 
-    expect(points[0].price).toBeCloseTo(1.5 * LBP_PER_USD, 6);
+    expect(points[0].cost).toBeCloseTo(45, 10); // already USD
+    expect(points[1].cost).toBeCloseTo(2_500_000 / LBP_PER_USD, 10); // LBP entry converted to USD
+    expect(points[1].liters).toBe(25); // liters themselves are untouched by the conversion
   });
 
-  it("skips an entry whose price per liter can't be worked out (e.g. zero liters), instead of a broken point", () => {
-    const points = priceTrendPoints([A, { ...B, liters: 0 }], "USD");
+  it("converts cost to LBP just as well", () => {
+    const points = fillUpChartPoints([A], "LBP");
+
+    expect(points[0].cost).toBeCloseTo(45 * LBP_PER_USD, 6);
+  });
+
+  it("still plots a fill-up with an unpriceable entry (e.g. zero liters) — liters is the primary value, not price", () => {
+    const points = fillUpChartPoints([A, { ...B, liters: 0 }], "USD");
+
+    expect(points).toHaveLength(2);
+    expect(points[1]).toMatchObject({ date: "2026-09-21", liters: 0 });
+  });
+
+  it("skips an entry whose liters figure isn't a usable number, instead of a broken bar", () => {
+    const points = fillUpChartPoints([A, { ...B, liters: "not a number" }], "USD");
 
     expect(points).toHaveLength(1);
     expect(points[0].date).toBe("2026-09-01");
@@ -234,13 +248,13 @@ describe("priceTrendPoints (Fuel Log chart)", () => {
   it("does not mutate the entries array it was given", () => {
     const entries = [B, A];
 
-    priceTrendPoints(entries, "USD");
+    fillUpChartPoints(entries, "USD");
 
     expect(entries).toEqual([B, A]);
   });
 
   it("returns an empty list for no entries", () => {
-    expect(priceTrendPoints([], "USD")).toEqual([]);
+    expect(fillUpChartPoints([], "USD")).toEqual([]);
   });
 });
 
