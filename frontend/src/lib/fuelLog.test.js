@@ -10,10 +10,12 @@ import {
   getFillUpErrors,
   pricePer20Liters,
   pricePerLiter,
+  priceTrendPoints,
   sortFillUps,
   todayLocal,
 } from "./fuelLog.js";
 import { LIMITS } from "./limits.js";
+import { LBP_PER_USD } from "./currency.js";
 
 const TODAY = "2026-09-21";
 const VALID = { date: "2026-09-20", liters: "19.6", cost: "30" };
@@ -189,6 +191,56 @@ describe("sortFillUps", () => {
 
     expect(original.map((entry) => entry.id)).toEqual(["a", "b"]);
     expect(sortFillUps([])).toEqual([]);
+  });
+});
+
+describe("priceTrendPoints (Fuel Log chart)", () => {
+  const A = { filled_at: "2026-09-01", liters: 30, cost_amount: 45, cost_currency: "USD", created_at: "2026-09-01T09:00:00Z" };
+  const B = { filled_at: "2026-09-21", liters: 19.6, cost_amount: 30, cost_currency: "USD", created_at: "2026-09-21T09:00:00Z" };
+  const LBP_ENTRY = { filled_at: "2026-09-15", liters: 25, cost_amount: 2_500_000, cost_currency: "LBP", created_at: "2026-09-15T09:00:00Z" };
+
+  it("orders points oldest first, the opposite of the table's newest-first order", () => {
+    const points = priceTrendPoints([B, A], "USD");
+
+    expect(points.map((point) => point.date)).toEqual(["2026-09-01", "2026-09-21"]);
+  });
+
+  it("is each entry's price per liter, in the requested currency", () => {
+    const points = priceTrendPoints([A], "USD");
+
+    expect(points[0].price).toBe(1.5); // $45 / 30 L
+  });
+
+  it("converts every point to the same currency, so USD and LBP entries plot on one axis", () => {
+    const points = priceTrendPoints([A, LBP_ENTRY], "USD");
+
+    expect(points[0].price).toBeCloseTo(1.5, 10); // $45 / 30 L, already USD
+    expect(points[1].price).toBeCloseTo(2_500_000 / 25 / LBP_PER_USD, 10); // LBP entry converted to USD
+  });
+
+  it("converts to LBP just as well", () => {
+    const points = priceTrendPoints([A], "LBP");
+
+    expect(points[0].price).toBeCloseTo(1.5 * LBP_PER_USD, 6);
+  });
+
+  it("skips an entry whose price per liter can't be worked out (e.g. zero liters), instead of a broken point", () => {
+    const points = priceTrendPoints([A, { ...B, liters: 0 }], "USD");
+
+    expect(points).toHaveLength(1);
+    expect(points[0].date).toBe("2026-09-01");
+  });
+
+  it("does not mutate the entries array it was given", () => {
+    const entries = [B, A];
+
+    priceTrendPoints(entries, "USD");
+
+    expect(entries).toEqual([B, A]);
+  });
+
+  it("returns an empty list for no entries", () => {
+    expect(priceTrendPoints([], "USD")).toEqual([]);
   });
 });
 

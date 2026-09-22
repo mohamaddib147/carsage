@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
+import { diyFixRate, latestFixedMessage, timeAgo } from "../lib/diySuccess.js";
 import { supabase } from "../lib/supabaseClient.js";
 
 /** Builds the "Engine Type • Fuel Type • Plate" meta line, skipping any fields the car doesn't have set. */
@@ -56,6 +57,9 @@ function DashboardPage() {
   const { user } = useAuth();
   const [cars, setCars] = useState([]);
   const [loading, setLoading] = useState(true);
+  // fixRate: null while loading OR once loaded, null means "no feedback given
+  // anywhere yet" (the empty state) rather than a real 0%.
+  const [diyStats, setDiyStats] = useState({ loading: true, fixRate: null, latestFix: null });
 
   useEffect(() => {
     if (!user) return;
@@ -76,6 +80,63 @@ function DashboardPage() {
     }
 
     loadCars();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  // DIY fix-rate stat (mentor feedback, no Jira task): every 'ai' DIY reply the
+  // user has given feedback on (RLS already scopes this to their own rows), plus
+  // — only when at least one is marked fixed — the issue description from that
+  // conversation's preceding user message, for the "Latest fix" highlight.
+  useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+
+    async function loadDiyStats() {
+      setDiyStats((previous) => ({ ...previous, loading: true }));
+      const { data, error } = await supabase
+        .from("advisor_messages")
+        .select("conversation_id, marked_fixed, created_at")
+        .eq("sender", "ai")
+        .eq("recommendation", "diy");
+
+      if (cancelled) return;
+      if (error || !data) {
+        setDiyStats({ loading: false, fixRate: null, latestFix: null });
+        return;
+      }
+
+      const fixRate = diyFixRate(data);
+      const latest = latestFixedMessage(data);
+      if (!latest) {
+        setDiyStats({ loading: false, fixRate, latestFix: null });
+        return;
+      }
+
+      const { data: issueRow } = await supabase
+        .from("advisor_messages")
+        .select("message_text")
+        .eq("conversation_id", latest.conversation_id)
+        .eq("sender", "user")
+        .lte("created_at", latest.created_at)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cancelled) return;
+      setDiyStats({
+        loading: false,
+        fixRate,
+        latestFix: {
+          issue: issueRow?.message_text || "A DIY suggestion",
+          timeAgo: timeAgo(latest.created_at),
+        },
+      });
+    }
+
+    loadDiyStats();
     return () => {
       cancelled = true;
     };
@@ -143,6 +204,35 @@ function DashboardPage() {
               );
             })}
           </ul>
+        )}
+      </section>
+
+      <section className="dashboard-section" aria-label="DIY suggestion success rate">
+        <h2>DIY Success</h2>
+        {diyStats.loading ? (
+          <p>Loading...</p>
+        ) : diyStats.fixRate === null ? (
+          <p className="dashboard-diy-empty">
+            No feedback yet — after trying a DIY suggestion in the{" "}
+            <Link to="/advisor">AI Advisor</Link>, say whether it fixed the issue
+            to start tracking your fix rate here.
+          </p>
+        ) : (
+          <div className="dashboard-diy-stats">
+            <div className="dashboard-stat-tile">
+              <p className="dashboard-stat-tile__value">{diyStats.fixRate}%</p>
+              <p className="dashboard-stat-tile__label">
+                of your DIY suggestions with feedback fixed the issue
+              </p>
+            </div>
+            {diyStats.latestFix && (
+              <div className="dashboard-latest-fix">
+                <p className="dashboard-latest-fix__label">Latest fix</p>
+                <p className="dashboard-latest-fix__issue">{diyStats.latestFix.issue}</p>
+                <p className="dashboard-latest-fix__time">{diyStats.latestFix.timeAgo}</p>
+              </div>
+            )}
+          </div>
         )}
       </section>
 

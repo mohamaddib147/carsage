@@ -24,7 +24,12 @@
 # client bypasses RLS, so this is checked explicitly here, same as the
 # Trip Planner estimate endpoint. Reading past conversation history is
 # done by the frontend directly against Supabase (RLS-protected, like
-# the Dashboard's car list), so there's no GET endpoint here.
+# the Dashboard's car list), so there's no GET endpoint here. The response
+# includes the AI reply's own message_id (mentor feedback, no Jira task) so
+# the frontend can let the user mark a 'diy' reply's marked_fixed column
+# afterwards, directly against Supabase — RLS and a column-level grant there
+# (docs/db_migrations/2026-09-22_diy_fix_tracking.sql) restrict that write to
+# just that one column on the caller's own diy replies.
 
 import logging
 
@@ -74,6 +79,10 @@ class ClassifyIssueRequest(BaseModel):
 
 class ClassifyIssueResponse(BaseModel):
     conversation_id: str
+    # The AI reply's own advisor_messages row id, so the frontend can let the
+    # user mark a 'diy' reply as fixed/not fixed (marked_fixed) without a
+    # second round trip to look the row up (DIY success tracking, no Jira task).
+    message_id: str
     recommendation: str
     guidance: str
     video_title: str | None = None
@@ -244,6 +253,7 @@ def post_classify_issue(
 
     return {
         "conversation_id": conversation_id,
+        "message_id": ai_message.data[0]["id"],
         "recommendation": result["recommendation"],
         "guidance": result["guidance"],
         "video_title": video["video_title"] if video else None,

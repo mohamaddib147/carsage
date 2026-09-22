@@ -10,6 +10,7 @@
 // live in limits.js next to the other mirrored limits — change them together.
 
 import { LIMITS } from "./limits.js";
+import { convertAmount } from "./currency.js";
 
 /**
  * Today's date as YYYY-MM-DD in the user's own time zone. (toISOString would
@@ -113,6 +114,27 @@ export function sortFillUps(entries) {
       b.filled_at.localeCompare(a.filled_at) ||
       String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")),
   );
+}
+
+/**
+ * The price-per-liter trend for a chart: one point per fill-up that has a
+ * usable price, oldest first (left to right, reading order for a trend line),
+ * converted to a single currency so entries logged in USD and LBP plot on the
+ * same axis. Uses the same figure as `pricePerLiter`, just reordered and
+ * converted — never a separately-rounded copy of it.
+ * @param {{ filled_at: string, created_at?: string, liters: number | string, cost_amount: number | string, cost_currency: "USD" | "LBP" }[]} entries
+ * @param {"USD" | "LBP"} currency - the currency to plot every point in.
+ * @returns {{ date: string, price: number }[]} `date` is the fill-up's date (YYYY-MM-DD).
+ */
+export function priceTrendPoints(entries, currency) {
+  return sortFillUps(entries)
+    .reverse() // sortFillUps is newest-first; a trend line reads oldest-first.
+    .map((entry) => {
+      const perLiter = pricePerLiter(entry);
+      if (perLiter == null) return null;
+      return { date: entry.filled_at, price: convertAmount(perLiter, entry.cost_currency, currency) };
+    })
+    .filter(Boolean);
 }
 
 /** Liters with up to two decimals and no trailing zeros: 19.6 -> "19.6", 30 -> "30". */

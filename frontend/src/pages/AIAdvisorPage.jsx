@@ -148,7 +148,7 @@ function AIAdvisorPage() {
 
       const { data: rows } = await supabase
         .from("advisor_messages")
-        .select("sender, message_text, recommendation, video_title, video_url")
+        .select("id, sender, message_text, recommendation, video_title, video_url, marked_fixed")
         .eq("conversation_id", conversation.id)
         .order("created_at", { ascending: true });
 
@@ -160,11 +160,13 @@ function AIAdvisorPage() {
             ? { id: nextMessageId.current++, role: "user", text: row.message_text }
             : {
                 id: nextMessageId.current++,
+                dbId: row.id,
                 role: "assistant",
                 recommendation: row.recommendation,
                 guidance: row.message_text,
                 videoTitle: row.video_title,
                 videoUrl: row.video_url,
+                markedFixed: row.marked_fixed,
               },
         ),
       );
@@ -209,11 +211,13 @@ function AIAdvisorPage() {
         ...previous,
         {
           id: nextMessageId.current++,
+          dbId: result.message_id,
           role: "assistant",
           recommendation: result.recommendation,
           guidance: result.guidance,
           videoTitle: result.video_title,
           videoUrl: result.video_url,
+          markedFixed: null,
         },
       ]);
     } catch (submitError) {
@@ -227,6 +231,53 @@ function AIAdvisorPage() {
   function handleSubmit(event) {
     event.preventDefault();
     sendMessage(description);
+  }
+
+  /**
+   * Records whether a DIY suggestion actually fixed the issue (optional —
+   * the user isn't required to answer before continuing the conversation).
+   * Updates only the `marked_fixed` column (the database grants nothing
+   * broader to a signed-in user), scoped by RLS to the caller's own message.
+   * @param {number} messageId - the message's local (not database) id.
+   * @param {string} dbId - the message's advisor_messages row id.
+   * @param {boolean} fixed
+   */
+  async function handleMarkFixed(messageId, dbId, fixed) {
+    setMessages((previous) =>
+      previous.map((message) =>
+        message.id === messageId
+          ? { ...message, markingFixed: true, markFixedError: "" }
+          : message,
+      ),
+    );
+
+    const { error: updateError } = await supabase
+      .from("advisor_messages")
+      .update({ marked_fixed: fixed })
+      .eq("id", dbId);
+
+    setMessages((previous) =>
+      previous.map((message) =>
+        message.id === messageId
+          ? {
+              ...message,
+              markingFixed: false,
+              editingFixed: false,
+              markedFixed: updateError ? message.markedFixed : fixed,
+              markFixedError: updateError ? "Couldn't save that — try again." : "",
+            }
+          : message,
+      ),
+    );
+  }
+
+  /** Reopens the Yes/No buttons on an already-answered "Did this fix it?" so the user can change their answer. */
+  function handleEditMarkFixed(messageId) {
+    setMessages((previous) =>
+      previous.map((message) =>
+        message.id === messageId ? { ...message, editingFixed: true } : message,
+      ),
+    );
   }
 
   if (loadingCars || loadingHistory) {
@@ -351,6 +402,51 @@ function AIAdvisorPage() {
                     </span>
                   </span>
                 </a>
+              )}
+              {message.recommendation === "diy" && message.dbId && (
+                <div className="advisor-fix-feedback">
+                  {message.markedFixed == null || message.editingFixed ? (
+                    <>
+                      <span className="advisor-fix-feedback__prompt">
+                        Did this fix it?
+                      </span>
+                      <button
+                        type="button"
+                        className="advisor-fix-feedback__btn"
+                        disabled={message.markingFixed}
+                        onClick={() => handleMarkFixed(message.id, message.dbId, true)}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        className="advisor-fix-feedback__btn"
+                        disabled={message.markingFixed}
+                        onClick={() => handleMarkFixed(message.id, message.dbId, false)}
+                      >
+                        No
+                      </button>
+                    </>
+                  ) : (
+                    <span className="advisor-fix-feedback__answered">
+                      {message.markedFixed
+                        ? "✓ You said this fixed it"
+                        : "You said this didn't fix it"}{" "}
+                      <button
+                        type="button"
+                        className="advisor-fix-feedback__change"
+                        onClick={() => handleEditMarkFixed(message.id)}
+                      >
+                        Change
+                      </button>
+                    </span>
+                  )}
+                  {message.markFixedError && (
+                    <p role="alert" className="auth-form__error advisor-fix-feedback__error">
+                      {message.markFixedError}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           ),

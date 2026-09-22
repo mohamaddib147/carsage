@@ -772,3 +772,75 @@ describe("FuelLogPage — price per 20 liters (CAR-53 addition)", () => {
     expect(unconvertedMoney(document.body)).toEqual([]);
   });
 });
+
+describe("FuelLogPage — price per liter trend chart (mentor feedback)", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("shows the chart, scoped to the selected car, with at least two priced fill-ups", async () => {
+    mockDatabase({ logsByCar: { "car-1": { data: [ROW_A, ROW_B], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    expect(
+      screen.getByRole("heading", { name: "Price per Liter Trend — 2005 Mercedes-Benz C230 Kompressor" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show a chart with only one fill-up — a single point isn't a trend", async () => {
+    mockDatabase({ logsByCar: { "car-1": { data: [ROW_A], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    expect(screen.queryByText(/Price per Liter Trend/)).not.toBeInTheDocument();
+  });
+
+  it("does not show a chart, or crash, for a car with no fill-ups yet", async () => {
+    mockDatabase();
+
+    renderPage();
+
+    expect(await screen.findByText("No fill-ups logged yet")).toBeInTheDocument();
+    expect(screen.queryByText(/Price per Liter Trend/)).not.toBeInTheDocument();
+  });
+
+  it("does not count an unpriced entry (e.g. zero liters) toward the two points needed for a chart", async () => {
+    mockDatabase({
+      logsByCar: { "car-1": { data: [ROW_A, { ...ROW_B, id: "zero", liters: "0" }], error: null } },
+    });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    expect(screen.queryByText(/Price per Liter Trend/)).not.toBeInTheDocument();
+  });
+
+  it("only charts the selected car's fill-ups, and switches when the car does", async () => {
+    const user = userEvent.setup();
+    mockDatabase({
+      cars: [CAR_1, CAR_2],
+      logsByCar: {
+        "car-1": { data: [ROW_A, ROW_B], error: null },
+        "car-2": { data: [ROW_OTHER_CAR], error: null }, // only one entry — no chart for car 2
+      },
+    });
+
+    renderPage();
+    await screen.findByRole("table");
+    expect(screen.getByText(/Price per Liter Trend/)).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Car"), "car-2");
+    await waitFor(() => expect(tableRows()).toHaveLength(1));
+    expect(screen.queryByText(/Price per Liter Trend/)).not.toBeInTheDocument();
+  });
+
+  it("names what it's showing, in the primary currency", async () => {
+    mockDatabase({ logsByCar: { "car-1": { data: [ROW_A, ROW_B], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    expect(screen.getByText("What you paid per liter at each fill-up, in USD.")).toBeInTheDocument();
+  });
+});

@@ -138,6 +138,7 @@ class TestPostClassify:
         assert response.status_code == 200
         assert response.json() == {
             "conversation_id": "00000000-0000-4000-8000-000000000c01",
+            "message_id": "msg-2",
             "recommendation": "diy",
             "guidance": "Top up the washer fluid.",
             "video_title": None,
@@ -644,6 +645,7 @@ class TestNHTSASafetyWiring:
         assert response.status_code == 200
         assert response.json() == {
             "conversation_id": "00000000-0000-4000-8000-000000000c01",
+            "message_id": "msg-2",
             "recommendation": "mechanic",
             "guidance": "See a mechanic.",
             "video_title": None,
