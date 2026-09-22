@@ -49,7 +49,7 @@ function SiteNav() {
   return (
     <nav className="site-nav">
       <NavLink to="/" end className="site-nav__brand">
-        <Logo onDark size={28} />
+        <Logo size={44} />
       </NavLink>
 
       <ul className="site-nav__links">

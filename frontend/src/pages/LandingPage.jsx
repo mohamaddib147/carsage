@@ -12,6 +12,7 @@
 
 import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
+import backgroundTexture from "../assets/background-texture.png";
 import Logo from "../components/Logo.jsx";
 import { useAuthStatus } from "../auth/AuthContext.jsx";
 
@@ -120,7 +121,15 @@ function LandingPage() {
 
       <section className="landing-hero">
         <div className="landing-hero__glow" aria-hidden="true" />
-        <Logo size={40} className="landing-hero__logo" />
+        {/* CAR-51: background-texture.png, decorative only — cropped into a
+            corner, low opacity, never a second brand mark. */}
+        <img
+          src={backgroundTexture}
+          alt=""
+          aria-hidden="true"
+          className="landing-hero__texture"
+        />
+        <Logo size={64} className="landing-hero__logo" />
         <div className="landing-eyebrow">
           <span aria-hidden="true">✦</span>
           <span>The Mindful Driver&apos;s Co-Pilot</span>
@@ -226,7 +235,7 @@ function LandingPage() {
       </section>
 
       <footer className="landing-footer">
-        <Logo size={24} />
+        <Logo size={36} />
         <p className="landing-footer__tagline">
           Your everyday car companion — trip planning and AI-powered advice,
           all in one place.

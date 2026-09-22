@@ -286,3 +286,14 @@ describe("SiteNav currency toggle (CAR-54)", () => {
     expect(await screen.findByRole("button", { name: "LBP" })).toHaveAttribute("aria-pressed", "true");
   });
 });
+
+describe("SiteNav brand logo (CAR-51)", () => {
+  it("shows the CarSage logo, linking to the Landing page", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderNav();
+
+    const brandLink = await screen.findByRole("link", { name: "CarSage" });
+    expect(brandLink).toHaveAttribute("href", "/");
+    expect(brandLink.querySelector("img")).toBeInTheDocument();
+  });
+});
