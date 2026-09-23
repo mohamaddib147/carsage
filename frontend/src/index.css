@@ -177,6 +177,24 @@ button {
   }
 }
 
+/* CAR-51 follow-up + fix: the decorative background emblem, applied
+   site-wide (was Landing-page-only) using background-texture-icon.svg — a
+   crop of the source file down to just the gear/tire/wrench circle, no
+   baked-in text. Fixed to fill the viewport (inset: 0 + 100vw/100vh) so it
+   covers the whole screen on every route; object-fit: cover fills without
+   stretching. Kept at a low opacity since it's now behind every screen's
+   content, not just a slice of empty background. */
+.app-background-texture {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  opacity: 0.035;
+  pointer-events: none;
+  z-index: -1;
+}
+
 .app-main {
   max-width: 960px;
   margin: 0 auto;
@@ -288,10 +306,6 @@ select:focus {
 
 .logo {
   display: inline-block;
-  /* CAR-51: the asset has no alpha channel (a checkerboard baked into
-     opaque pixels stands in for transparency) — multiply blends that light
-     checkerboard into whatever's behind it instead of showing a visible box. */
-  mix-blend-mode: multiply;
 }
 
 .btn-secondary {
@@ -979,21 +993,6 @@ select:focus {
   z-index: -1;
 }
 
-/* CAR-51: background-texture.png is decorative only — never a second brand
-   mark — so it's cropped into a corner, low opacity and behind everything.
-   It also has no alpha channel (see .logo above); multiply plus the low
-   opacity keeps its checkerboard and baked-in text from being noticeable. */
-.landing-hero__texture {
-  position: absolute;
-  bottom: -200px;
-  right: -200px;
-  width: 480px;
-  height: 480px;
-  opacity: 0.08;
-  mix-blend-mode: multiply;
-  pointer-events: none;
-  z-index: -1;
-}
 
 .landing-hero__logo {
   margin-bottom: calc(var(--spacing-unit) * 3);

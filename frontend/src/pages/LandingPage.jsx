@@ -12,7 +12,6 @@
 
 import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import backgroundTexture from "../assets/background-texture.png";
 import Logo from "../components/Logo.jsx";
 import { useAuthStatus } from "../auth/AuthContext.jsx";
 
@@ -121,14 +120,6 @@ function LandingPage() {
 
       <section className="landing-hero">
         <div className="landing-hero__glow" aria-hidden="true" />
-        {/* CAR-51: background-texture.png, decorative only — cropped into a
-            corner, low opacity, never a second brand mark. */}
-        <img
-          src={backgroundTexture}
-          alt=""
-          aria-hidden="true"
-          className="landing-hero__texture"
-        />
         <Logo size={64} className="landing-hero__logo" />
         <div className="landing-eyebrow">
           <span aria-hidden="true">✦</span>

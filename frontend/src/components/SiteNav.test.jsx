@@ -296,4 +296,12 @@ describe("SiteNav brand logo (CAR-51)", () => {
     expect(brandLink).toHaveAttribute("href", "/");
     expect(brandLink.querySelector("img")).toBeInTheDocument();
   });
+
+  it("uses the on-dark (white) logo variant — the header background is dark green", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderNav();
+
+    const brandLink = await screen.findByRole("link", { name: "CarSage" });
+    expect(brandLink.querySelector("img").src).toMatch(/on-dark/);
+  });
 });

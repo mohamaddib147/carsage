@@ -175,3 +175,32 @@ describe("App routing — every route is either protected or deliberately public
     }
   });
 });
+
+describe("App — decorative background texture (CAR-51 follow-up)", () => {
+  // Rendered once here (not per page) so it shows on every screen without
+  // each page having to place it itself.
+  it.each([["/"], ["/login"], ["/signup"]])(
+    "shows the background texture at %s",
+    (path) => {
+      renderAtPath(path);
+
+      expect(document.querySelector(".app-background-texture")).toBeInTheDocument();
+    },
+  );
+
+  it("is purely decorative — invisible to assistive tech, never mistaken for a real image", () => {
+    renderAtPath("/");
+
+    const texture = document.querySelector(".app-background-texture");
+    expect(texture).toHaveAttribute("aria-hidden", "true");
+    expect(texture).toHaveAttribute("alt", "");
+    // Doesn't show up as an accessible image alongside the real logo.
+    expect(screen.queryAllByRole("img")).not.toContainEqual(texture);
+  });
+
+  it("renders exactly once, not duplicated per route change", () => {
+    renderAtPath("/dashboard"); // redirects to Log In, but the texture is outside the route table
+
+    expect(document.querySelectorAll(".app-background-texture")).toHaveLength(1);
+  });
+});

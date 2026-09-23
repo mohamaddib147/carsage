@@ -175,7 +175,7 @@ describe("LandingPage sections and anchors", () => {
   });
 });
 
-describe("LandingPage — logo and background texture (CAR-51)", () => {
+describe("LandingPage — logo (CAR-51)", () => {
   it("shows the CarSage logo in both the hero and the footer", async () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
     renderPage();
@@ -185,18 +185,7 @@ describe("LandingPage — logo and background texture (CAR-51)", () => {
     expect(logos).toHaveLength(2); // hero + footer
     expect(logos[0]).toHaveClass("landing-hero__logo");
   });
-
-  it("shows the background texture as purely decorative, never announced or mistaken for a second logo", async () => {
-    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
-    renderPage();
-    await screen.findByText("Everything about your car, in one place");
-
-    // aria-hidden + empty alt: invisible to assistive tech, so
-    // getByRole("img") above finds only the two real logo images, not this.
-    const texture = document.querySelector(".landing-hero__texture");
-    expect(texture).toBeInTheDocument();
-    expect(texture).toHaveAttribute("aria-hidden", "true");
-    expect(texture).toHaveAttribute("alt", "");
-    expect(screen.getAllByRole("img", { name: "CarSage" })).toHaveLength(2);
-  });
 });
+
+// The decorative background texture is rendered once, site-wide, in App.jsx
+// rather than per page — see App.test.jsx for its tests.

@@ -1,29 +1,30 @@
-// CarSage brand mark (CAR-51): the finalized logo, a single flattened image
+// CarSage brand mark (CAR-51): the finalized logo — a real, transparent SVG
 // (circular car+brain icon, "CarSage" wordmark and "The Mindful Driver's
-// Co-Pilot" tagline, all baked into one picture by design) rather than the
-// earlier hand-coded placeholder SVG. Used everywhere the brand mark
+// Co-Pilot" tagline), replacing both the earlier hand-coded placeholder SVG
+// and the interim raster (JPEG) version. Used everywhere the brand mark
 // appears: the site header (every screen, via SiteNav) and the Landing
 // page's hero and footer.
 //
-// The asset as delivered (frontend/src/assets/logo-primary.jpeg) is a JPEG
-// with no alpha channel — its "transparent" background is actually a
-// checkerboard pattern baked into opaque pixels. `mix-blend-mode: multiply`
-// (see .logo in index.css) blends that light checkerboard into whatever is
-// behind it, so it reads as roughly transparent on both the dark green
-// header and the page's light background, without touching the file itself.
+// Two color variants, since the artwork's outline and wordmark are dark
+// green (#114E38): on the site header's own dark green background
+// (--color-primary) that's nearly invisible, so `onDark` swaps in
+// logo-on-dark.svg — the same artwork with the outline/text in white
+// instead (generated from logo.svg; see that file's own comment). The gold
+// brain accent is unchanged in both, since gold already reads on both.
 
-import logoPrimary from "../assets/logo-primary.jpeg";
+import logo from "../assets/logo.svg";
+import logoOnDark from "../assets/logo-on-dark.svg";
 
 /**
  * The full CarSage brand lockup. `size` is the rendered height in px; width
  * follows the image's own aspect ratio, so it never looks stretched.
- * @param {{ size?: number, className?: string }} props
+ * @param {{ size?: number, onDark?: boolean, className?: string }} props
  * @returns {JSX.Element}
  */
-function Logo({ size = 32, className = "" }) {
+function Logo({ size = 32, onDark = false, className = "" }) {
   return (
     <img
-      src={logoPrimary}
+      src={onDark ? logoOnDark : logo}
       alt="CarSage"
       className={`logo ${className}`}
       style={{ height: size, width: "auto" }}

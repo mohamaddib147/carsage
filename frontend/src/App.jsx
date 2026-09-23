@@ -3,6 +3,7 @@
 // pages linked from the footer.
 
 import { Route, Routes } from "react-router-dom";
+import backgroundTexture from "./assets/background-texture-icon.svg";
 import SiteNav from "./components/SiteNav.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import LandingPage from "./pages/LandingPage.jsx";
@@ -23,6 +24,19 @@ import NotFoundPage from "./pages/NotFoundPage.jsx";
 function App() {
   return (
     <>
+      {/* Decorative only, never a second brand mark (CAR-51 follow-up):
+          fixed to fill the viewport so it shows on every screen without
+          each page having to place it. background-texture-icon.svg is a
+          crop of background-texture-svg.svg down to just the gear/tire/
+          wrench circle — no baked-in text, unlike the source file. aria-
+          hidden + empty alt keep it invisible to assistive tech; low
+          opacity and z-index: -1 keep it behind all real content. */}
+      <img
+        src={backgroundTexture}
+        alt=""
+        aria-hidden="true"
+        className="app-background-texture"
+      />
       <SiteNav />
       <main className="app-main">
         <Routes>

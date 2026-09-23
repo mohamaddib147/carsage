@@ -36,7 +36,7 @@ describe("Logo", () => {
     expect(img.className).toContain("landing-hero__logo");
   });
 
-  it("renders the same image everywhere it's used, no size-specific asset swap", () => {
+  it("renders the same image everywhere it's used at a given color, no size-specific asset swap", () => {
     const { unmount } = render(<Logo size={28} />);
     const smallSrc = screen.getByRole("img", { name: "CarSage" }).src;
     unmount();
@@ -45,5 +45,17 @@ describe("Logo", () => {
     const largeSrc = screen.getByRole("img", { name: "CarSage" }).src;
 
     expect(smallSrc).toBe(largeSrc);
+  });
+
+  it("swaps in the white on-dark variant when onDark is set, for the dark green header", () => {
+    const { unmount } = render(<Logo />);
+    const lightSrc = screen.getByRole("img", { name: "CarSage" }).src;
+    unmount();
+
+    render(<Logo onDark />);
+    const darkSrc = screen.getByRole("img", { name: "CarSage" }).src;
+
+    expect(darkSrc).not.toBe(lightSrc);
+    expect(darkSrc).toMatch(/on-dark/);
   });
 });
