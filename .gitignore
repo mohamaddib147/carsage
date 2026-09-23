@@ -1,7 +1,13 @@
-# Environment variables — never commit real secrets
+# Environment variables — never commit real secrets. Every .env.<anything>
+# (.env.production, .env.staging, ... — Vite loads one per mode) is ignored;
+# only the placeholder templates are kept.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# Private keys / certificates
+*.pem
+*.key
 
 # Dependencies
 node_modules/
@@ -34,5 +40,3 @@ npm-debug.log*
 .claude.json
 CLAUDE.local.md
 .mcp.json
-C:\Users\user\Desktop\carsage\carsage\docs\FILE_INDEX.md
-FILE_INDEX.md
