@@ -264,7 +264,7 @@ function AIAdvisorPage() {
               markingFixed: false,
               editingFixed: false,
               markedFixed: updateError ? message.markedFixed : fixed,
-              markFixedError: updateError ? "Couldn't save that — try again." : "",
+              markFixedError: updateError ? "Couldn't save that, try again." : "",
             }
           : message,
       ),
@@ -288,7 +288,7 @@ function AIAdvisorPage() {
     return (
       <PageShell
         title="AI Advisor"
-        description="Add a car before describing an issue — guidance is tailored to your vehicle."
+        description="Add a car before describing an issue. Guidance is tailored to your vehicle."
       >
         <Link className="btn-primary" to="/cars/new">
           Add Your Car
@@ -327,8 +327,8 @@ function AIAdvisorPage() {
       {messages.length === 0 && (
         <div className="advisor-welcome">
           <p>
-            Describe any noise, warning light, or issue in plain language —
-            we&apos;ll tell you whether it&apos;s safe to check yourself or
+            Describe any noise, warning light, or issue in plain language.
+            We&apos;ll tell you whether it&apos;s safe to check yourself or
             worth a mechanic&apos;s visit.
           </p>
           <div className="advisor-examples">
@@ -489,7 +489,7 @@ function AIAdvisorPage() {
         </button>
       </form>
       <p className="advisor-disclaimer">
-        AI-generated guidance — not a substitute for a professional
+        AI-generated guidance, not a substitute for a professional
         inspection.
       </p>
     </div>

@@ -229,7 +229,7 @@ function FuelLogPage() {
     return (
       <PageShell
         title="Fuel Log"
-        description="Add a car before logging fill-ups — each fill-up belongs to one car."
+        description="Add a car before logging fill-ups. Each fill-up belongs to one car."
       >
         <Link className="btn-primary" to="/cars/new">
           Add Your Car
@@ -349,7 +349,7 @@ function FuelLogPage() {
 
       {chartPoints.length > 0 && (
         <section className="dashboard-section fuel-log-chart" aria-label="Fill-up history chart">
-          <h2>Fill-Up History{label ? ` — ${label}` : ""}</h2>
+          <h2>Fill-Up History{label ? ` for ${label}` : ""}</h2>
           <p className="fuel-log-chart__caption">
             Liters filled at each fill-up. Hover or tap a bar for the date, liters and cost, in {primaryCurrency}.
           </p>
@@ -379,7 +379,7 @@ function FuelLogPage() {
       )}
 
       <section className="dashboard-section" aria-label="Fill-up history">
-        <h2>Fill-ups{label ? ` — ${label}` : ""}</h2>
+        <h2>Fill-ups{label ? ` for ${label}` : ""}</h2>
 
         {entries === null ? (
           <p>Loading fill-ups...</p>
@@ -426,14 +426,14 @@ function FuelLogPage() {
                       </td>
                       <td>
                         {perLiter == null ? (
-                          "—"
+                          "-"
                         ) : (
                           <Price amount={perLiter} currency={entry.cost_currency} suffix="/L" />
                         )}
                       </td>
                       <td>
                         {per20Liters == null ? (
-                          "—"
+                          "-"
                         ) : (
                           <Price amount={per20Liters} currency={entry.cost_currency} suffix="/20 L" />
                         )}

@@ -213,7 +213,7 @@ function DashboardPage() {
           <p>Loading...</p>
         ) : diyStats.fixRate === null ? (
           <p className="dashboard-diy-empty">
-            No feedback yet — after trying a DIY suggestion in the{" "}
+            No feedback yet. After trying a DIY suggestion in the{" "}
             <Link to="/advisor">AI Advisor</Link>, say whether it fixed the issue
             to start tracking your fix rate here.
           </p>

@@ -4,6 +4,7 @@
 
 import { Route, Routes } from "react-router-dom";
 import backgroundTexture from "./assets/background-texture-icon.svg";
+import SiteFooter from "./components/SiteFooter.jsx";
 import SiteNav from "./components/SiteNav.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import LandingPage from "./pages/LandingPage.jsx";
@@ -103,6 +104,9 @@ function App() {
           />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        {/* CAR-52: rendered once here (not per page) so Terms of Service /
+            Privacy Policy are linked from every screen's footer. */}
+        <SiteFooter />
       </main>
     </>
   );

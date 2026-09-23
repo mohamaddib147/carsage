@@ -67,6 +67,14 @@ beforeEach(() => {
 });
 
 describe("CarOnboardingPage", () => {
+  it("has the heading 'Meet Your Car' (CAR-52) and a helpful subheading, not the old 'Add Your Car'", async () => {
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Meet Your Car" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Add Your Car" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Add your vehicle details to get started/)).toBeInTheDocument();
+  });
+
   it("inserts a new car with the logged-in user's id and navigates to its profile (normal case)", async () => {
     const user = userEvent.setup();
     const single = vi.fn().mockResolvedValue({

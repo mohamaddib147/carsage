@@ -649,7 +649,7 @@ describe("AIAdvisorPage — DIY fix feedback (mentor feedback, no Jira task)", (
     await user.click(screen.getByRole("button", { name: "Send" }));
     await user.click(await screen.findByRole("button", { name: "Yes" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save that — try again.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save that, try again.");
     expect(screen.getByText("Did this fix it?")).toBeInTheDocument(); // still unanswered, can retry
   });
 });

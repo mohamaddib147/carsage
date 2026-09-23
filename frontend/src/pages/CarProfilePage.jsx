@@ -528,7 +528,7 @@ function CarProfilePage() {
               <div>
                 <dt>{label}</dt>
                 <dd>
-                  {car[field] == null || car[field] === "" ? "—" : car[field]}
+                  {car[field] == null || car[field] === "" ? "-" : car[field]}
                 </dd>
               </div>
             </div>

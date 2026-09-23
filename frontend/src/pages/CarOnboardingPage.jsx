@@ -53,9 +53,9 @@ const FUEL_TYPE_OPTIONS = [
 // from. (A value from API Ninjas needs no note.)
 const TANK_SOURCE_NOTES = {
   auto_data:
-    "Looked up on auto-data.net for this model — it can vary by trim and market, so check it against your car.",
+    "Looked up on auto-data.net for this model. It can vary by trim and market, so check it against your car.",
   ai_estimate:
-    "Estimated by AI for this model — please check it against your car.",
+    "Estimated by AI for this model. Please check it against your car.",
 };
 
 const EMPTY_FORM = {
@@ -121,7 +121,7 @@ function validate(form) {
  */
 function AutoFilledTag() {
   return (
-    <span className="autofill-tag" title="Filled in automatically — feel free to edit it">
+    <span className="autofill-tag" title="Filled in automatically, feel free to edit it">
       <span aria-hidden="true">✓</span> Auto-filled
     </span>
   );
@@ -276,7 +276,7 @@ function CarOnboardingPage() {
           suggestions.transmission ||
           suggestions.fuel_tank_capacity_liters != null
         ) {
-          setSpecNotice("Some specs were auto-filled below — feel free to edit them.");
+          setSpecNotice("Some specs were auto-filled below, feel free to edit them.");
         }
       } catch {
         // Best-effort autofill only — a failed lookup just leaves manual
@@ -349,8 +349,8 @@ function CarOnboardingPage() {
 
   return (
     <PageShell
-      title="Add Your Car"
-      description="Enter your car's details manually, or scan your registration card (coming soon)."
+      title="Meet Your Car"
+      description="Add your vehicle details to get started. Enter them manually, or scan your registration card (coming soon)."
     >
       <div className="scan-card">
         <span className="scan-card__icon" aria-hidden="true">
@@ -483,7 +483,7 @@ function CarOnboardingPage() {
                 name="fuelEfficiency"
                 type="number" max={LIMITS.MAX_FUEL_EFFICIENCY}
                 step="0.1"
-                placeholder="e.g. 11.5 — auto-filled if available"
+                placeholder="e.g. 11.5 (auto-filled if available)"
                 aria-invalid={invalid("fuelEfficiency")}
                 value={form.fuelEfficiency}
                 onChange={handleChange("fuelEfficiency")}
@@ -499,7 +499,7 @@ function CarOnboardingPage() {
                 id="cylinders"
                 name="cylinders"
                 type="number" min={LIMITS.MIN_CYLINDERS} max={LIMITS.MAX_CYLINDERS}
-                placeholder="e.g. 4 — auto-filled if available"
+                placeholder="e.g. 4 (auto-filled if available)"
                 aria-invalid={invalid("cylinders")}
                 value={form.cylinders}
                 onChange={handleChange("cylinders")}
@@ -531,7 +531,7 @@ function CarOnboardingPage() {
                 id="transmission"
                 name="transmission"
                 type="text" maxLength={LIMITS.TRANSMISSION}
-                placeholder="e.g. Automatic — auto-filled if available"
+                placeholder="e.g. Automatic (auto-filled if available)"
                 aria-invalid={invalid("transmission")}
                 value={form.transmission}
                 onChange={handleChange("transmission")}
@@ -550,7 +550,7 @@ function CarOnboardingPage() {
                 min="5"
                 max="200"
                 step="0.1"
-                placeholder="e.g. 50 — auto-filled if available"
+                placeholder="e.g. 50 (auto-filled if available)"
                 aria-invalid={invalid("fuelTankCapacity")}
                 aria-describedby="fuelTankCapacity-caption"
                 value={form.fuelTankCapacity}
@@ -602,7 +602,7 @@ function CarOnboardingPage() {
                 onChange={handleChange("vin")}
               />
               <p id="vin-caption" className="form-field__note">
-                Optional — the identification number on your registration card
+                Optional: the identification number on your registration card
               </p>
               {fieldError("vin")}
             </div>

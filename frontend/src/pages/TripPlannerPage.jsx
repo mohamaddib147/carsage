@@ -266,7 +266,7 @@ function TripPlannerPage() {
     return (
       <PageShell
         title="Trip Planner"
-        description="Add a car before planning a trip — fuel cost is calculated from its fuel efficiency."
+        description="Add a car before planning a trip. Fuel cost is calculated from its fuel efficiency."
       >
         <Link className="btn-primary" to="/cars/new">
           Add Your Car
@@ -388,7 +388,7 @@ function TripPlannerPage() {
                 </label>
                 <FormattedNumberInput
                   id="fuelPricePerLiter"
-                  placeholder="e.g. 140,500 — current price used if blank"
+                  placeholder="e.g. 140,500 (current price used if blank)"
                   value={fuelPriceInput}
                   onChange={(raw) => {
                     fuelPriceEditedRef.current = true;
@@ -411,7 +411,7 @@ function TripPlannerPage() {
                   key={selectedCarId}
                   id="tankSize"
                   allowDecimal
-                  placeholder="e.g. 60 — not set for this car"
+                  placeholder="e.g. 60 (not set for this car)"
                   value={tankSizeInput}
                   aria-invalid={tankSizeError ? "true" : undefined}
                   onChange={setTankSizeInput}
@@ -549,7 +549,7 @@ function TripPlannerPage() {
             <p className="trip-result__explainer">
               Light traffic assumes free-flowing driving close to your
               car&apos;s rated fuel efficiency. Heavy traffic means more
-              stop-and-go driving, idling, and lower average speeds — all of
+              stop-and-go driving, idling, and lower average speeds, all of
               which burn noticeably more fuel per km, so the current-traffic
               estimate is usually higher.
             </p>

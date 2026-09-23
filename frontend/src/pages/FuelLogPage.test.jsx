@@ -760,7 +760,7 @@ describe("FuelLogPage — price per 20 liters (CAR-53 addition)", () => {
     renderWithCurrency();
     await screen.findByRole("table");
 
-    expect(tableRows()[0].slice(3)).toEqual(["—", "—"]);
+    expect(tableRows()[0].slice(3)).toEqual(["-", "-"]);
     expect(screen.getByRole("table")).not.toHaveTextContent(/NaN|Infinity/);
   });
 
@@ -783,7 +783,7 @@ describe("FuelLogPage — fill-up history bar chart (mentor feedback: replaces t
     await screen.findByRole("table");
 
     expect(
-      screen.getByRole("heading", { name: "Fill-Up History — 2005 Mercedes-Benz C230 Kompressor" }),
+      screen.getByRole("heading", { name: "Fill-Up History for 2005 Mercedes-Benz C230 Kompressor" }),
     ).toBeInTheDocument();
   });
 

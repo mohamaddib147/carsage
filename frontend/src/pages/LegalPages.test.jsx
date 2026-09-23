@@ -11,6 +11,21 @@ import App from "../App.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 
+// A minimal, endlessly-chainable stub for supabase.from(...) — every method
+// call returns itself, and it resolves to an empty result whenever awaited,
+// so a protected page's own data fetch (cars, advisor_messages, ...) never
+// throws here; this file only cares whether the footer renders.
+function chainableEmptyResult() {
+  const target = () => {};
+  const handler = {
+    get(_t, prop) {
+      if (prop === "then") return (resolve) => resolve({ data: [], error: null });
+      return () => new Proxy(target, handler);
+    },
+  };
+  return new Proxy(target, handler);
+}
+
 vi.mock("../lib/supabaseClient.js", () => ({
   supabase: {
     auth: {
@@ -19,6 +34,7 @@ vi.mock("../lib/supabaseClient.js", () => ({
         data: { subscription: { unsubscribe: vi.fn() } },
       })),
     },
+    from: vi.fn(() => chainableEmptyResult()),
   },
 }));
 
@@ -38,7 +54,7 @@ function renderAt(path) {
 }
 
 describe("footer legal links", () => {
-  it("shows Terms of Service and Privacy Policy links in the Landing footer", async () => {
+  it("shows Terms of Service and Privacy Policy links in the footer", async () => {
     renderAt("/");
 
     const footer = (await screen.findByText(/Built for a calmer commute/)).closest("footer");
@@ -47,6 +63,30 @@ describe("footer legal links", () => {
 
     expect(terms).toHaveTextContent("Terms of Service");
     expect(privacy).toHaveTextContent("Privacy Policy");
+  });
+
+  // CAR-52: the footer is rendered once in App.jsx (not per page), so it
+  // shows up on every screen, not just the Landing page.
+  it.each([["/login"], ["/signup"], ["/terms"], ["/privacy"]])(
+    "also shows the footer links at %s",
+    async (path) => {
+      renderAt(path);
+
+      const footer = (await screen.findByText(/Built for a calmer commute/)).closest("footer");
+      expect(footer.querySelector('a[href="/terms"]')).toHaveTextContent("Terms of Service");
+      expect(footer.querySelector('a[href="/privacy"]')).toHaveTextContent("Privacy Policy");
+    },
+  );
+
+  it("shows the footer links on a protected screen too, once signed in", async () => {
+    supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: "user-123", email: "driver@example.com" } } },
+    });
+    renderAt("/dashboard");
+
+    const footer = (await screen.findByText(/Built for a calmer commute/)).closest("footer");
+    expect(footer.querySelector('a[href="/terms"]')).toHaveTextContent("Terms of Service");
+    expect(footer.querySelector('a[href="/privacy"]')).toHaveTextContent("Privacy Policy");
   });
 
   it("navigates from the footer links to the matching pages", async () => {

@@ -21,7 +21,7 @@ const FEATURES = [
     eyebrow: "Digital Garage",
     title: "Car Profile",
     description:
-      "Add your car once — make, model, fuel type, and specs — and CarSage remembers it for every trip you plan.",
+      "Add your car once (make, model, fuel type, and specs), and CarSage remembers it for every trip you plan.",
     previewLabel: "2020 Toyota Corolla",
     previewMeta: "Gasoline · 12.4 km/L",
   },
@@ -49,7 +49,7 @@ const STEPS = [
   {
     title: "Add your car",
     description:
-      "Enter its make, model, year and fuel type — CarSage fills in specs like fuel efficiency and tank size where it can.",
+      "Enter its make, model, year and fuel type, and CarSage fills in specs like fuel efficiency and tank size where it can.",
   },
   {
     title: "Plan a trip",
@@ -68,7 +68,7 @@ const PILLARS = [
     icon: "🧾",
     title: "Transparent Estimates",
     description:
-      "Every fuel cost estimate uses live Google Maps routing and Lebanon's official weekly fuel prices — no guesswork, no hidden markup.",
+      "Every fuel cost estimate uses live Google Maps routing and Lebanon's official weekly fuel prices. No guesswork, no hidden markup.",
   },
   {
     icon: "💬",
@@ -80,7 +80,7 @@ const PILLARS = [
     icon: "🔒",
     title: "Privacy First",
     description:
-      "Your cars and trips are yours alone — every record is protected by row-level security scoped to your account.",
+      "Your cars and trips are yours alone. Every record is protected by row-level security scoped to your account.",
   },
 ];
 
@@ -153,7 +153,7 @@ function LandingPage() {
         <div className="landing-section-header">
           <p className="landing-section-header__eyebrow">Designed for clarity</p>
           <h2>Thoughtful tools for smarter ownership</h2>
-          <p>No technical clutter — just clear answers when you need them.</p>
+          <p>No technical clutter, just clear answers when you need them.</p>
         </div>
         <div className="landing-feature-grid">
           {FEATURES.map((feature) => (
@@ -215,8 +215,8 @@ function LandingPage() {
         <span className="landing-closing-cta__badge">Start your journey today</span>
         <h2>Ready for a calmer driving experience?</h2>
         <p>
-          Join drivers who plan trips and manage car issues with total ease
-          — completely free.
+          Join drivers who plan trips and manage car issues with total ease,
+          completely free.
         </p>
         {primaryCta && (
           <Link className="btn-accent" to={primaryCta.to}>
@@ -224,21 +224,6 @@ function LandingPage() {
           </Link>
         )}
       </section>
-
-      <footer className="landing-footer">
-        <Logo size={36} />
-        <p className="landing-footer__tagline">
-          Your everyday car companion — trip planning and AI-powered advice,
-          all in one place.
-        </p>
-        <div className="landing-footer__links">
-          <Link to="/terms">Terms of Service</Link>
-          <Link to="/privacy">Privacy Policy</Link>
-        </div>
-        <p className="landing-footer__copyright">
-          © {new Date().getFullYear()} CarSage. Built for a calmer commute.
-        </p>
-      </footer>
     </div>
   );
 }

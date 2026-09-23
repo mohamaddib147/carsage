@@ -120,7 +120,7 @@ describe("CarProfilePage — viewing", () => {
     renderAt("/cars/mine");
 
     expect(await screen.findByText("Toyota")).toBeInTheDocument();
-    const dashes = screen.getAllByText("—");
+    const dashes = screen.getAllByText("-");
     expect(dashes.length).toBeGreaterThanOrEqual(4);
   });
 
