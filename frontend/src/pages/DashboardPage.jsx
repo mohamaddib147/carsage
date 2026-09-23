@@ -1,17 +1,21 @@
 // Dashboard / Home screen — the hub a user lands on after logging in:
 // a summary of their saved car(s) (or a prompt to add one), plus quick
-// links to the two core features. Layout matches
+// links to the two core features and the Fuel Log (CAR-53). Layout matches
 // docs/stitch_carsage_landing_page/carsage_dashboard_vehicle_hub for the
 // in-scope parts (card style, "Add Another Car" placement, module
 // cards); the reference's left sidebar nav, vehicle photo, and
 // telemetry/maintenance widgets (odometer, system health, service
 // booking) are all out of scope and intentionally omitted — this app
 // uses a single top nav everywhere, and doesn't track live vehicle data.
+// Each car card also summarises the specs saved on the car (efficiency,
+// cylinders, drivetrain, transmission, tank size) from the row the page
+// already fetches, so the cards aren't just a name and a meta line.
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
+import { diyFixRate, latestFixedMessage, timeAgo } from "../lib/diySuccess.js";
 import { supabase } from "../lib/supabaseClient.js";
 
 /** Builds the "Engine Type • Fuel Type • Plate" meta line, skipping any fields the car doesn't have set. */
@@ -22,15 +26,40 @@ function carMetaLine(car) {
 }
 
 /**
+ * The specs saved on a car, as label/value pairs for its summary grid. Only
+ * fields that are actually set are returned, so a card never shows blanks.
+ * @param {object} car - a `cars` row.
+ * @returns {{ label: string, value: string }[]}
+ */
+function carSpecs(car) {
+  const specs = [];
+  if (car.fuel_efficiency != null) {
+    specs.push({ label: "Efficiency", value: `${Number(car.fuel_efficiency)} km/L` });
+  }
+  if (car.cylinders != null) {
+    specs.push({ label: "Cylinders", value: String(car.cylinders) });
+  }
+  if (car.drivetrain) specs.push({ label: "Drivetrain", value: car.drivetrain });
+  if (car.transmission) specs.push({ label: "Transmission", value: car.transmission });
+  if (car.fuel_tank_capacity_liters != null) {
+    specs.push({ label: "Fuel tank", value: `${Number(car.fuel_tank_capacity_liters)} L` });
+  }
+  return specs;
+}
+
+/**
  * Dashboard / Home screen. Fetches the logged-in user's cars (RLS scopes
  * this to their own rows) and shows either a summary of each or an empty
- * state, plus module cards for Trip Planner and AI Advisor.
+ * state, plus module cards for Trip Planner, AI Advisor and Fuel Log.
  * @returns {JSX.Element}
  */
 function DashboardPage() {
   const { user } = useAuth();
   const [cars, setCars] = useState([]);
   const [loading, setLoading] = useState(true);
+  // fixRate: null while loading OR once loaded, null means "no feedback given
+  // anywhere yet" (the empty state) rather than a real 0%.
+  const [diyStats, setDiyStats] = useState({ loading: true, fixRate: null, latestFix: null });
 
   useEffect(() => {
     if (!user) return;
@@ -51,6 +80,63 @@ function DashboardPage() {
     }
 
     loadCars();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  // DIY fix-rate stat (mentor feedback, no Jira task): every 'ai' DIY reply the
+  // user has given feedback on (RLS already scopes this to their own rows), plus
+  // — only when at least one is marked fixed — the issue description from that
+  // conversation's preceding user message, for the "Latest fix" highlight.
+  useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+
+    async function loadDiyStats() {
+      setDiyStats((previous) => ({ ...previous, loading: true }));
+      const { data, error } = await supabase
+        .from("advisor_messages")
+        .select("conversation_id, marked_fixed, created_at")
+        .eq("sender", "ai")
+        .eq("recommendation", "diy");
+
+      if (cancelled) return;
+      if (error || !data) {
+        setDiyStats({ loading: false, fixRate: null, latestFix: null });
+        return;
+      }
+
+      const fixRate = diyFixRate(data);
+      const latest = latestFixedMessage(data);
+      if (!latest) {
+        setDiyStats({ loading: false, fixRate, latestFix: null });
+        return;
+      }
+
+      const { data: issueRow } = await supabase
+        .from("advisor_messages")
+        .select("message_text")
+        .eq("conversation_id", latest.conversation_id)
+        .eq("sender", "user")
+        .lte("created_at", latest.created_at)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cancelled) return;
+      setDiyStats({
+        loading: false,
+        fixRate,
+        latestFix: {
+          issue: issueRow?.message_text || "A DIY suggestion",
+          timeAgo: timeAgo(latest.created_at),
+        },
+      });
+    }
+
+    loadDiyStats();
     return () => {
       cancelled = true;
     };
@@ -84,6 +170,7 @@ function DashboardPage() {
           <ul className="dashboard-car-list">
             {cars.map((car) => {
               const meta = carMetaLine(car);
+              const specs = carSpecs(car);
               return (
                 <li key={car.id} className="dashboard-car-card">
                   <Link
@@ -95,10 +182,57 @@ function DashboardPage() {
                   {meta && (
                     <p className="dashboard-car-card__meta">{meta}</p>
                   )}
+                  {specs.length > 0 ? (
+                    <dl
+                      className="dashboard-car-card__specs"
+                      aria-label={`${car.make} ${car.model} specifications`}
+                    >
+                      {specs.map((spec) => (
+                        <div key={spec.label} className="dashboard-car-card__spec">
+                          <dt>{spec.label}</dt>
+                          <dd>{spec.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : (
+                    <p className="dashboard-car-card__hint">
+                      Add efficiency, cylinders and more on the{" "}
+                      <Link to={`/cars/${car.id}`}>car profile</Link> to see them here.
+                    </p>
+                  )}
                 </li>
               );
             })}
           </ul>
+        )}
+      </section>
+
+      <section className="dashboard-section" aria-label="DIY suggestion success rate">
+        <h2>DIY Success</h2>
+        {diyStats.loading ? (
+          <p>Loading...</p>
+        ) : diyStats.fixRate === null ? (
+          <p className="dashboard-diy-empty">
+            No feedback yet. After trying a DIY suggestion in the{" "}
+            <Link to="/advisor">AI Advisor</Link>, say whether it fixed the issue
+            to start tracking your fix rate here.
+          </p>
+        ) : (
+          <div className="dashboard-diy-stats">
+            <div className="dashboard-stat-tile">
+              <p className="dashboard-stat-tile__value">{diyStats.fixRate}%</p>
+              <p className="dashboard-stat-tile__label">
+                of your DIY suggestions with feedback fixed the issue
+              </p>
+            </div>
+            {diyStats.latestFix && (
+              <div className="dashboard-latest-fix">
+                <p className="dashboard-latest-fix__label">Latest fix</p>
+                <p className="dashboard-latest-fix__issue">{diyStats.latestFix.issue}</p>
+                <p className="dashboard-latest-fix__time">{diyStats.latestFix.timeAgo}</p>
+              </div>
+            )}
+          </div>
         )}
       </section>
 
@@ -123,6 +257,16 @@ function DashboardPage() {
             <p>Describe a car issue and get DIY-vs-mechanic guidance.</p>
             <span className="dashboard-module-card__cta">
               Ask advisor <span aria-hidden="true">→</span>
+            </span>
+          </Link>
+          <Link className="dashboard-module-card" to="/fuel-log">
+            <span className="dashboard-module-card__icon" aria-hidden="true">
+              ⛽
+            </span>
+            <h3>Fuel Log</h3>
+            <p>Log each fill-up and see what you pay per liter.</p>
+            <span className="dashboard-module-card__cta">
+              Log a fill-up <span aria-hidden="true">→</span>
             </span>
           </Link>
         </div>

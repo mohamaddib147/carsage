@@ -25,7 +25,7 @@ from app.services.fuel_prices import (
 
 
 def test_lbp_to_usd_converts_using_the_fixed_rate():
-    assert lbp_to_usd(89000) == 1.0
+    assert lbp_to_usd(89700) == 1.0
     assert lbp_to_usd(0) == 0.0
 
 

@@ -7,9 +7,11 @@
 // signed out, "Log Out" when signed in, never both (and neither while the
 // session is still being restored, so nothing flashes the wrong state).
 
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStatus } from "../auth/AuthContext.jsx";
 import Logo from "./Logo.jsx";
+import CurrencyToggle from "./CurrencyToggle.jsx";
+import { PRICE_PAGES } from "../lib/currency.js";
 
 const CENTER_LINKS = [
   { to: "/dashboard", label: "Dashboard" },
@@ -17,6 +19,7 @@ const CENTER_LINKS = [
   { to: "/cars/mine", label: "Car Profile" },
   { to: "/trip-planner", label: "Trip Planner" },
   { to: "/advisor", label: "AI Advisor" },
+  { to: "/fuel-log", label: "Fuel Log" },
 ];
 
 // Signed-out nav: anchors on the Landing page (its sections carry these ids).
@@ -34,6 +37,9 @@ const MARKETING_LINKS = [
 function SiteNav() {
   const { status, signOut } = useAuthStatus();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // The USD | LBP switch only appears on screens that show prices (Trip Planner, Fuel Log).
+  const showCurrencyToggle = PRICE_PAGES.includes(pathname.replace(/\/+$/, ""));
 
   async function handleLogOut() {
     await signOut();
@@ -43,7 +49,7 @@ function SiteNav() {
   return (
     <nav className="site-nav">
       <NavLink to="/" end className="site-nav__brand">
-        <Logo onDark size={28} />
+        <Logo onDark size={48} />
       </NavLink>
 
       <ul className="site-nav__links">
@@ -70,13 +76,16 @@ function SiteNav() {
           </NavLink>
         )}
         {status === "signedIn" && (
-          <button
-            type="button"
-            className="site-nav__logout"
-            onClick={handleLogOut}
-          >
-            Log Out
-          </button>
+          <>
+            {showCurrencyToggle && <CurrencyToggle />}
+            <button
+              type="button"
+              className="site-nav__logout"
+              onClick={handleLogOut}
+            >
+              Log Out
+            </button>
+          </>
         )}
       </div>
     </nav>

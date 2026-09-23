@@ -166,3 +166,94 @@ describe("AuthPage — Sign Up", () => {
     expect(supabase.auth.signUp).not.toHaveBeenCalled();
   });
 });
+
+describe("AuthPage — input limits (CAR-23)", () => {
+  it("caps the email at 254 and the password at 72 characters", () => {
+    renderAuthPage("/signup");
+
+    expect(screen.getByLabelText("Email")).toHaveAttribute("maxlength", "254");
+    expect(screen.getByLabelText("Password")).toHaveAttribute("maxlength", "72");
+  });
+
+  it("rejects a password under 6 characters on Sign Up without calling Supabase", async () => {
+    const user = userEvent.setup();
+
+    renderAuthPage("/signup");
+    await user.type(screen.getByLabelText("Email"), "new@example.com");
+    await user.type(screen.getByLabelText("Password"), "abc12");
+    await user.click(screen.getByRole("button", { name: "Sign Up" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Password must be at least 6 characters.",
+    );
+    expect(supabase.auth.signUp).not.toHaveBeenCalled();
+  });
+
+  it("accepts a 6-character password on Sign Up (the boundary)", async () => {
+    const user = userEvent.setup();
+    supabase.auth.signUp.mockResolvedValue({ data: { session: null }, error: null });
+
+    renderAuthPage("/signup");
+    await user.type(screen.getByLabelText("Email"), "new@example.com");
+    await user.type(screen.getByLabelText("Password"), "abc123");
+    await user.click(screen.getByRole("button", { name: "Sign Up" }));
+
+    await waitFor(() => expect(supabase.auth.signUp).toHaveBeenCalledWith({ email: "new@example.com", password: "abc123" }));
+  });
+
+  it("does NOT block a short password on Log In (an existing account must be able to try its own)", async () => {
+    const user = userEvent.setup();
+    supabase.auth.signInWithPassword.mockResolvedValue({
+      data: { session: null },
+      error: { message: "Invalid login credentials" },
+    });
+
+    renderAuthPage("/login");
+    await user.type(screen.getByLabelText("Email"), "driver@example.com");
+    await user.type(screen.getByLabelText("Password"), "abc");
+    await user.click(screen.getByRole("button", { name: "Log In" }));
+
+    await waitFor(() =>
+      expect(supabase.auth.signInWithPassword).toHaveBeenCalledWith({
+        email: "driver@example.com",
+        password: "abc",
+      }),
+    );
+  });
+});
+
+describe("AuthPage — error wording (CAR-25)", () => {
+  it("never shows server-side wording from Supabase Auth, only a generic sentence", async () => {
+    const user = userEvent.setup();
+    supabase.auth.signInWithPassword.mockResolvedValue({
+      data: { session: null },
+      error: { message: "Database error saving new user at /var/app/gotrue/api.go:214" },
+    });
+
+    renderAuthPage("/login");
+    await user.type(screen.getByLabelText("Email"), "driver@example.com");
+    await user.type(screen.getByLabelText("Password"), "some-password");
+    await user.click(screen.getByRole("button", { name: "Log In" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Something went wrong. Please try again.");
+    expect(alert).not.toHaveTextContent(/database|gotrue|\.go/i);
+  });
+
+  it("says so in plain words when the server can't be reached", async () => {
+    const user = userEvent.setup();
+    supabase.auth.signInWithPassword.mockResolvedValue({
+      data: { session: null },
+      error: { name: "AuthRetryableFetchError", message: "Failed to fetch" },
+    });
+
+    renderAuthPage("/login");
+    await user.type(screen.getByLabelText("Email"), "driver@example.com");
+    await user.type(screen.getByLabelText("Password"), "some-password");
+    await user.click(screen.getByRole("button", { name: "Log In" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not reach the server. Check your connection and try again.",
+    );
+  });
+});

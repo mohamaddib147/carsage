@@ -10,6 +10,12 @@
 // it up on auto-data.net, and only if that finds nothing falls back to an
 // AI estimate. Either way a note under the field says where the value
 // came from and to check it (it disappears as soon as the user edits it).
+// Polish pass: the disabled Scan button looks disabled; while the lookup runs a
+// "Looking up specs" status shows, and each field it fills gets an "Auto-filled" tag
+// (until the user edits it); a "* Required" legend sits above "Core Specifications",
+// which is split into Basic Info / Performance / Identification; a required field left
+// empty is outlined in red (and cleared as soon as it is edited); tank capacity and VIN
+// have a one-line caption; and a Cancel link goes back to the Dashboard.
 // Layout matches docs/stitch_carsage_landing_page/carsage_add_your_car
 // for the in-scope parts (scan card row, section divider, 2-column field
 // grid); its "Designate as Primary Vehicle" telemetry checkbox and
@@ -17,11 +23,16 @@
 // multi-car "primary" concept) and are omitted.
 
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
 import { supabase } from "../lib/supabaseClient.js";
+import {
+  LIMITS,
+  describeSaveError,
+  getCarFieldErrors,
+} from "../lib/limits.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 
 // How long to wait after the user stops typing Make/Model/Year before
@@ -42,9 +53,9 @@ const FUEL_TYPE_OPTIONS = [
 // from. (A value from API Ninjas needs no note.)
 const TANK_SOURCE_NOTES = {
   auto_data:
-    "Looked up on auto-data.net for this model — it can vary by trim and market, so check it against your car.",
+    "Looked up on auto-data.net for this model. It can vary by trim and market, so check it against your car.",
   ai_estimate:
-    "Estimated by AI for this model — please check it against your car.",
+    "Estimated by AI for this model. Please check it against your car.",
 };
 
 const EMPTY_FORM = {
@@ -94,7 +105,41 @@ function validate(form) {
     if (capacityError) errors.fuelTankCapacity = capacityError;
   }
 
+  // Length / range limits shared with the server (lib/limits.js); the
+  // required-field messages above win when both apply.
+  for (const [field, message] of Object.entries(getCarFieldErrors(form))) {
+    if (!errors[field]) errors[field] = message;
+  }
+
   return errors;
+}
+
+/**
+ * Small "✓ Auto-filled" tag shown next to a field's label while its value is the one the
+ * spec lookup filled in (it goes away when the user edits the field).
+ * @returns {JSX.Element}
+ */
+function AutoFilledTag() {
+  return (
+    <span className="autofill-tag" title="Filled in automatically, feel free to edit it">
+      <span aria-hidden="true">✓</span> Auto-filled
+    </span>
+  );
+}
+
+/**
+ * A field's label plus, when it applies, the auto-filled tag. The tag sits BESIDE the
+ * <label>, not inside it, so the field's accessible name stays exactly its label text.
+ * @param {{ htmlFor: string, autoFilled?: boolean, children: import('react').ReactNode }} props
+ * @returns {JSX.Element}
+ */
+function LabelRow({ htmlFor, autoFilled, children }) {
+  return (
+    <div className="form-field__label-row">
+      <label htmlFor={htmlFor}>{children}</label>
+      {autoFilled && <AutoFilledTag />}
+    </div>
+  );
 }
 
 /**
@@ -105,14 +150,23 @@ function validate(form) {
  * @returns {JSX.Element}
  */
 function CarOnboardingPage() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const navigate = useNavigate();
+  // The spec lookup endpoint requires a logged-in caller (CAR-24), so the
+  // session token is sent; a ref keeps the debounced callback current.
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [specNotice, setSpecNotice] = useState("");
+  // True while the spec lookup request is in flight (drives the "Looking up specs" status).
+  const [specLoading, setSpecLoading] = useState(false);
+  // Which fields currently hold a value the lookup filled in, by field name. A field is
+  // removed as soon as the user edits it (handleChange).
+  const [autoFilled, setAutoFilled] = useState({});
   // Where the untouched autofilled Fuel Tank Capacity in the field came
   // from ("auto_data" | "ai_estimate"), or null if it was typed by the user,
   // came from a fully trusted source, or is empty. Drives the note below.
@@ -127,6 +181,18 @@ function CarOnboardingPage() {
   function handleChange(field) {
     return (event) => {
       setForm((previous) => ({ ...previous, [field]: event.target.value }));
+      // Editing a field means the user has taken it over: its red error outline (from a
+      // failed submit) is done with, and its value is no longer "auto-filled".
+      setFieldErrors((previous) => {
+        if (!previous[field]) return previous;
+        const { [field]: _fixed, ...rest } = previous;
+        return rest;
+      });
+      setAutoFilled((previous) => {
+        if (!previous[field]) return previous;
+        const { [field]: _edited, ...rest } = previous;
+        return rest;
+      });
     };
   }
 
@@ -153,9 +219,11 @@ function CarOnboardingPage() {
 
     const timer = setTimeout(async () => {
       specLookupRanFor.current = lookupKey;
+      setSpecLoading(true);
       try {
         const suggestions = await apiFetch(
           `/cars/spec-suggestions?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&year=${yearNumber}`,
+          { accessToken: sessionRef.current?.access_token },
         );
 
         // Only label the tank value if the autofill is what actually fills
@@ -167,6 +235,18 @@ function CarOnboardingPage() {
         ) {
           setTankSource(suggestions.fuel_tank_capacity_source);
         }
+
+        // Tag exactly the fields this lookup is about to fill: the ones that are empty now and
+        // for which it has a value. (Fields the user typed into are left alone and untagged.)
+        const current = formRef.current;
+        const filled = {};
+        if (!current.engineType && suggestions.engine_type) filled.engineType = true;
+        if (!current.fuelEfficiency && suggestions.fuel_efficiency != null) filled.fuelEfficiency = true;
+        if (!current.cylinders && suggestions.cylinders != null) filled.cylinders = true;
+        if (!current.drivetrain && suggestions.drivetrain) filled.drivetrain = true;
+        if (!current.transmission && suggestions.transmission) filled.transmission = true;
+        if (!current.fuelTankCapacity && suggestions.fuel_tank_capacity_liters != null) filled.fuelTankCapacity = true;
+        setAutoFilled((previous) => ({ ...previous, ...filled }));
 
         setForm((previous) => ({
           ...previous,
@@ -196,11 +276,13 @@ function CarOnboardingPage() {
           suggestions.transmission ||
           suggestions.fuel_tank_capacity_liters != null
         ) {
-          setSpecNotice("Some specs were auto-filled below — feel free to edit them.");
+          setSpecNotice("Some specs were auto-filled below, feel free to edit them.");
         }
       } catch {
         // Best-effort autofill only — a failed lookup just leaves manual
         // entry as the only option, silently.
+      } finally {
+        setSpecLoading(false);
       }
     }, SPEC_LOOKUP_DEBOUNCE_MS);
 
@@ -245,7 +327,7 @@ function CarOnboardingPage() {
         .single();
 
       if (error) {
-        setSubmitError(error.message);
+        setSubmitError(describeSaveError(error));
         return;
       }
 
@@ -255,10 +337,20 @@ function CarOnboardingPage() {
     }
   }
 
+  /** The red error message under a field, if it has one. */
+  const fieldError = (field) =>
+    fieldErrors[field] ? (
+      <p role="alert" className="auth-form__error">
+        {fieldErrors[field]}
+      </p>
+    ) : null;
+  /** aria-invalid for a field with an error — also what the red outline is styled from. */
+  const invalid = (field) => (fieldErrors[field] ? "true" : undefined);
+
   return (
     <PageShell
-      title="Add Your Car"
-      description="Enter your car's details manually, or scan your registration card (coming soon)."
+      title="Meet Your Car"
+      description="Add your vehicle details to get started. Enter them manually, or scan your registration card (coming soon)."
     >
       <div className="scan-card">
         <span className="scan-card__icon" aria-hidden="true">
@@ -283,194 +375,239 @@ function CarOnboardingPage() {
       </div>
 
       <form onSubmit={handleSubmit} noValidate className="car-form">
+        <p className="form-legend">* Required</p>
         <p className="form-section-label">Core Specifications</p>
         {specNotice && <p className="form-hint">{specNotice}</p>}
 
-        <div className="form-grid">
-          <div className="form-field">
-            <label htmlFor="make">Make *</label>
-            <input
-              id="make"
-              name="make"
-              type="text"
-              placeholder="e.g. Toyota"
-              value={form.make}
-              onChange={handleChange("make")}
-            />
-            {fieldErrors.make && (
-              <p role="alert" className="auth-form__error">
-                {fieldErrors.make}
+        <section className="form-subsection" aria-labelledby="basic-info-title">
+          <h3 id="basic-info-title" className="form-subsection__title">
+            Basic Info
+          </h3>
+          <div className="form-grid">
+            <div className="form-field">
+              <label htmlFor="make">Make *</label>
+              <input
+                id="make"
+                name="make"
+                type="text" maxLength={LIMITS.MAKE_MODEL}
+                placeholder="e.g. Toyota"
+                aria-invalid={invalid("make")}
+                value={form.make}
+                onChange={handleChange("make")}
+              />
+              {fieldError("make")}
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="model">Model *</label>
+              <input
+                id="model"
+                name="model"
+                type="text" maxLength={LIMITS.MAKE_MODEL}
+                placeholder="e.g. Corolla"
+                aria-invalid={invalid("model")}
+                value={form.model}
+                onChange={handleChange("model")}
+              />
+              {fieldError("model")}
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="year">Year *</label>
+              <input
+                id="year"
+                name="year"
+                type="number"
+                placeholder="e.g. 2020"
+                aria-invalid={invalid("year")}
+                value={form.year}
+                onChange={handleChange("year")}
+              />
+              {fieldError("year")}
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="fuelType">Fuel Type *</label>
+              <select
+                id="fuelType"
+                name="fuelType"
+                aria-invalid={invalid("fuelType")}
+                value={form.fuelType}
+                onChange={handleChange("fuelType")}
+              >
+                <option value="">Select a fuel type</option>
+                {FUEL_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              {fieldError("fuelType")}
+            </div>
+          </div>
+        </section>
+
+        <section className="form-subsection" aria-labelledby="performance-title">
+          <h3 id="performance-title" className="form-subsection__title">
+            Performance
+          </h3>
+          {specLoading && (
+            <p role="status" className="spec-loading">
+              <span className="spec-loading__spinner" aria-hidden="true" />
+              Looking up specs for your car…
+            </p>
+          )}
+          <div className="form-grid">
+            <div className="form-field">
+              <LabelRow htmlFor="engineType" autoFilled={autoFilled.engineType}>
+                Engine Type
+              </LabelRow>
+              <input
+                id="engineType"
+                name="engineType"
+                type="text" maxLength={LIMITS.ENGINE_TYPE}
+                placeholder="e.g. 2.5L Inline-4"
+                aria-invalid={invalid("engineType")}
+                value={form.engineType}
+                onChange={handleChange("engineType")}
+              />
+              {fieldError("engineType")}
+            </div>
+
+            <div className="form-field">
+              <LabelRow htmlFor="fuelEfficiency" autoFilled={autoFilled.fuelEfficiency}>
+                Fuel Efficiency (km/L)
+              </LabelRow>
+              <input
+                id="fuelEfficiency"
+                name="fuelEfficiency"
+                type="number" max={LIMITS.MAX_FUEL_EFFICIENCY}
+                step="0.1"
+                placeholder="e.g. 11.5 (auto-filled if available)"
+                aria-invalid={invalid("fuelEfficiency")}
+                value={form.fuelEfficiency}
+                onChange={handleChange("fuelEfficiency")}
+              />
+              {fieldError("fuelEfficiency")}
+            </div>
+
+            <div className="form-field">
+              <LabelRow htmlFor="cylinders" autoFilled={autoFilled.cylinders}>
+                Cylinders
+              </LabelRow>
+              <input
+                id="cylinders"
+                name="cylinders"
+                type="number" min={LIMITS.MIN_CYLINDERS} max={LIMITS.MAX_CYLINDERS}
+                placeholder="e.g. 4 (auto-filled if available)"
+                aria-invalid={invalid("cylinders")}
+                value={form.cylinders}
+                onChange={handleChange("cylinders")}
+              />
+              {fieldError("cylinders")}
+            </div>
+
+            <div className="form-field">
+              <LabelRow htmlFor="drivetrain" autoFilled={autoFilled.drivetrain}>
+                Drivetrain
+              </LabelRow>
+              <input
+                id="drivetrain"
+                name="drivetrain"
+                type="text" maxLength={LIMITS.DRIVETRAIN}
+                placeholder="e.g. fwd, rwd, awd"
+                aria-invalid={invalid("drivetrain")}
+                value={form.drivetrain}
+                onChange={handleChange("drivetrain")}
+              />
+              {fieldError("drivetrain")}
+            </div>
+
+            <div className="form-field">
+              <LabelRow htmlFor="transmission" autoFilled={autoFilled.transmission}>
+                Transmission
+              </LabelRow>
+              <input
+                id="transmission"
+                name="transmission"
+                type="text" maxLength={LIMITS.TRANSMISSION}
+                placeholder="e.g. Automatic (auto-filled if available)"
+                aria-invalid={invalid("transmission")}
+                value={form.transmission}
+                onChange={handleChange("transmission")}
+              />
+              {fieldError("transmission")}
+            </div>
+
+            <div className="form-field">
+              <LabelRow htmlFor="fuelTankCapacity" autoFilled={autoFilled.fuelTankCapacity}>
+                Fuel Tank Capacity (L)
+              </LabelRow>
+              <input
+                id="fuelTankCapacity"
+                name="fuelTankCapacity"
+                type="number"
+                min="5"
+                max="200"
+                step="0.1"
+                placeholder="e.g. 50 (auto-filled if available)"
+                aria-invalid={invalid("fuelTankCapacity")}
+                aria-describedby="fuelTankCapacity-caption"
+                value={form.fuelTankCapacity}
+                onChange={(event) => {
+                  setTankSource(null);
+                  handleChange("fuelTankCapacity")(event);
+                }}
+              />
+              <p id="fuelTankCapacity-caption" className="form-field__note">
+                Used to estimate Full Tank Cost in Trip Planner
               </p>
-            )}
+              {tankSource && form.fuelTankCapacity && (
+                <p className="form-field__note">{TANK_SOURCE_NOTES[tankSource]}</p>
+              )}
+              {fieldError("fuelTankCapacity")}
+            </div>
           </div>
+        </section>
 
-          <div className="form-field">
-            <label htmlFor="model">Model *</label>
-            <input
-              id="model"
-              name="model"
-              type="text"
-              placeholder="e.g. Corolla"
-              value={form.model}
-              onChange={handleChange("model")}
-            />
-            {fieldErrors.model && (
-              <p role="alert" className="auth-form__error">
-                {fieldErrors.model}
+        <section className="form-subsection" aria-labelledby="identification-title">
+          <h3 id="identification-title" className="form-subsection__title">
+            Identification
+          </h3>
+          <div className="form-grid">
+            <div className="form-field">
+              <label htmlFor="licensePlate">License Plate</label>
+              <input
+                id="licensePlate"
+                name="licensePlate"
+                type="text" maxLength={LIMITS.LICENSE_PLATE}
+                placeholder="e.g. 7XYZ890"
+                aria-invalid={invalid("licensePlate")}
+                value={form.licensePlate}
+                onChange={handleChange("licensePlate")}
+              />
+              {fieldError("licensePlate")}
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="vin">VIN</label>
+              <input
+                id="vin"
+                name="vin"
+                type="text" maxLength={LIMITS.VIN}
+                placeholder="e.g. 4S4BSANC8M3801249"
+                aria-invalid={invalid("vin")}
+                aria-describedby="vin-caption"
+                value={form.vin}
+                onChange={handleChange("vin")}
+              />
+              <p id="vin-caption" className="form-field__note">
+                Optional: the identification number on your registration card
               </p>
-            )}
+              {fieldError("vin")}
+            </div>
           </div>
-
-          <div className="form-field">
-            <label htmlFor="year">Year *</label>
-            <input
-              id="year"
-              name="year"
-              type="number"
-              placeholder="e.g. 2020"
-              value={form.year}
-              onChange={handleChange("year")}
-            />
-            {fieldErrors.year && (
-              <p role="alert" className="auth-form__error">
-                {fieldErrors.year}
-              </p>
-            )}
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="engineType">Engine Type</label>
-            <input
-              id="engineType"
-              name="engineType"
-              type="text"
-              placeholder="e.g. 2.5L Inline-4"
-              value={form.engineType}
-              onChange={handleChange("engineType")}
-            />
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="fuelType">Fuel Type *</label>
-            <select
-              id="fuelType"
-              name="fuelType"
-              value={form.fuelType}
-              onChange={handleChange("fuelType")}
-            >
-              <option value="">Select a fuel type</option>
-              {FUEL_TYPE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-            {fieldErrors.fuelType && (
-              <p role="alert" className="auth-form__error">
-                {fieldErrors.fuelType}
-              </p>
-            )}
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="licensePlate">License Plate</label>
-            <input
-              id="licensePlate"
-              name="licensePlate"
-              type="text"
-              placeholder="e.g. 7XYZ890"
-              value={form.licensePlate}
-              onChange={handleChange("licensePlate")}
-            />
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="fuelEfficiency">Fuel Efficiency (km/L)</label>
-            <input
-              id="fuelEfficiency"
-              name="fuelEfficiency"
-              type="number"
-              step="0.1"
-              placeholder="Auto-filled if available"
-              value={form.fuelEfficiency}
-              onChange={handleChange("fuelEfficiency")}
-            />
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="cylinders">Cylinders</label>
-            <input
-              id="cylinders"
-              name="cylinders"
-              type="number"
-              placeholder="Auto-filled if available"
-              value={form.cylinders}
-              onChange={handleChange("cylinders")}
-            />
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="drivetrain">Drivetrain</label>
-            <input
-              id="drivetrain"
-              name="drivetrain"
-              type="text"
-              placeholder="e.g. fwd, rwd, awd"
-              value={form.drivetrain}
-              onChange={handleChange("drivetrain")}
-            />
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="fuelTankCapacity">Fuel Tank Capacity (L)</label>
-            <input
-              id="fuelTankCapacity"
-              name="fuelTankCapacity"
-              type="number"
-              min="5"
-              max="200"
-              step="0.1"
-              placeholder="e.g. 50 — auto-filled if available"
-              value={form.fuelTankCapacity}
-              onChange={(event) => {
-                setTankSource(null);
-                handleChange("fuelTankCapacity")(event);
-              }}
-            />
-            {tankSource && form.fuelTankCapacity && (
-              <p className="form-field__note">{TANK_SOURCE_NOTES[tankSource]}</p>
-            )}
-            {fieldErrors.fuelTankCapacity && (
-              <p role="alert" className="auth-form__error">
-                {fieldErrors.fuelTankCapacity}
-              </p>
-            )}
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="transmission">Transmission</label>
-            <input
-              id="transmission"
-              name="transmission"
-              type="text"
-              placeholder="Auto-filled if available"
-              value={form.transmission}
-              onChange={handleChange("transmission")}
-            />
-          </div>
-        </div>
-
-        <div className="form-field">
-          <label htmlFor="vin">VIN</label>
-          <input
-            id="vin"
-            name="vin"
-            type="text"
-            placeholder="e.g. 4S4BSANC8M3801249"
-            value={form.vin}
-            onChange={handleChange("vin")}
-          />
-        </div>
+        </section>
 
         {submitError && (
           <p role="alert" className="auth-form__error">
@@ -478,14 +615,19 @@ function CarOnboardingPage() {
           </p>
         )}
 
-        <button
-          className="btn-primary btn-block"
-          type="submit"
-          disabled={submitting}
-        >
-          Add Car
-          <span aria-hidden="true">→</span>
-        </button>
+        <div className="form-actions">
+          <Link className="btn-secondary" to="/dashboard">
+            Cancel
+          </Link>
+          <button
+            className="btn-primary btn-block"
+            type="submit"
+            disabled={submitting}
+          >
+            Add Car
+            <span aria-hidden="true">→</span>
+          </button>
+        </div>
       </form>
     </PageShell>
   );

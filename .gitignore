@@ -1,7 +1,13 @@
-# Environment variables — never commit real secrets
+# Environment variables — never commit real secrets. Every .env.<anything>
+# (.env.production, .env.staging, ... — Vite loads one per mode) is ignored;
+# only the placeholder templates are kept.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# Private keys / certificates
+*.pem
+*.key
 
 # Dependencies
 node_modules/

@@ -315,3 +315,98 @@ def test_a_single_shared_symptom_word_takes_twice_the_complaints_to_count_as_a_p
     result = _check([], [complaint] * 6, "My brakes squeal")
     assert result["status"] == "complaint_pattern"
     assert result["count"] == 6
+
+
+# --- A vehicle NHTSA files under its own model name ---------------------------
+# Reported in testing: a saved Mercedes-Benz "C230 Kompressor" (2005) got the
+# "NHTSA safety data isn't available for this vehicle" note, but NHTSA does know
+# it — as "C-Class", with 140 owner complaints. The lookup by the typed name
+# came back empty, so the check must ask vPIC for NHTSA's name and look again.
+
+
+def _models_asked(get_mock):
+    return [call.kwargs["params"]["model"] for call in get_mock.call_args_list]
+
+
+def test_looks_again_under_the_official_model_name_and_finds_the_complaint_pattern():
+    matching = {"components": "BRAKES", "summary": "Brakes grind loudly and vibrate."}
+    responses = [
+        _recalls([]),  # typed name: nothing
+        _complaints([]),
+        _recalls([]),  # official name: recalls empty ...
+        _complaints([matching] * 4),  # ... but the complaints are there
+    ]
+
+    with patch("app.services.nhtsa_safety.httpx.get", side_effect=responses) as get, patch(
+        "app.services.nhtsa_safety.lookup_nhtsa",
+        return_value={"vehicle_confirmed": True, "engine_type": None, "model_name": "C-Class"},
+    ):
+        result = check_safety_data(
+            "Mercedes-Benz", "C230 Kompressor", 2005, "Brakes are grinding and vibrating"
+        )
+
+    assert result["status"] == "complaint_pattern"
+    assert _models_asked(get) == ["C230 Kompressor", "C230 Kompressor", "C-Class", "C-Class"]
+
+
+def test_a_vehicle_nhtsa_knows_under_another_name_is_never_reported_as_not_found():
+    responses = [_recalls([]), _complaints([]), _recalls([]), _complaints([])]
+
+    with patch("app.services.nhtsa_safety.httpx.get", side_effect=responses), patch(
+        "app.services.nhtsa_safety.lookup_nhtsa",
+        return_value={"vehicle_confirmed": True, "engine_type": None, "model_name": "C-Class"},
+    ):
+        result = check_safety_data("Mercedes-Benz", "C230 Kompressor", 2005, "AC is blowing warm air")
+
+    assert result == {"status": "no_match"}
+
+
+def test_does_not_search_twice_when_the_typed_name_is_already_the_official_one():
+    with patch(
+        "app.services.nhtsa_safety.httpx.get", side_effect=[_recalls([]), _complaints([])]
+    ) as get, patch(
+        "app.services.nhtsa_safety.lookup_nhtsa",
+        return_value={"vehicle_confirmed": True, "engine_type": None, "model_name": "civic"},
+    ):
+        result = check_safety_data("Honda", "Civic", 2015, "AC is blowing warm air")
+
+    assert result == {"status": "no_match"}
+    assert get.call_count == 2
+
+
+def test_the_second_search_is_skipped_when_the_first_one_found_data():
+    # Cars that already worked cost no extra requests and never touch vPIC.
+    with patch(
+        "app.services.nhtsa_safety.httpx.get",
+        side_effect=[_recalls([{"Component": "AIRBAGS", "Summary": "x"}]), _complaints([])],
+    ) as get, patch("app.services.nhtsa_safety.lookup_nhtsa") as vpic:
+        check_safety_data("Honda", "Civic", 2015, "AC is blowing warm air")
+
+    assert get.call_count == 2
+    vpic.assert_not_called()
+
+
+def test_is_unavailable_when_the_second_search_fails():
+    # Both retry requests are made before either is checked, so the failure is
+    # followed by one more (successful) response.
+    responses = [_recalls([]), _complaints([]), httpx.ConnectError("boom"), _complaints([])]
+
+    with patch("app.services.nhtsa_safety.httpx.get", side_effect=responses), patch(
+        "app.services.nhtsa_safety.lookup_nhtsa",
+        return_value={"vehicle_confirmed": True, "engine_type": None, "model_name": "C-Class"},
+    ):
+        result = check_safety_data("Mercedes-Benz", "C230 Kompressor", 2005, "AC is blowing warm air")
+
+    assert result == {"status": "unavailable"}
+
+
+def test_a_vehicle_vpic_really_does_not_know_is_still_not_found():
+    with patch(
+        "app.services.nhtsa_safety.httpx.get", side_effect=[_recalls([]), _complaints([])]
+    ), patch(
+        "app.services.nhtsa_safety.lookup_nhtsa",
+        return_value={"vehicle_confirmed": False, "engine_type": None, "model_name": None},
+    ):
+        result = check_safety_data("Tata", "Nano Twist", 2014, "Squeaking brakes when cold")
+
+    assert result == {"status": "not_found"}

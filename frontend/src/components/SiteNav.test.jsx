@@ -13,6 +13,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SiteNav from "./SiteNav.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
+import { CurrencyProvider } from "../currency/CurrencyContext.jsx";
+import { CURRENCY_STORAGE_KEY } from "../lib/currency.js";
 import { supabase } from "../lib/supabaseClient.js";
 
 const LOGGED_IN_USER = { id: "user-123", email: "driver@example.com" };
@@ -42,13 +44,13 @@ beforeEach(() => {
 function renderNav() {
   render(
     <MemoryRouter initialEntries={["/dashboard"]}>
-      <AuthProvider>
+      <AuthProvider><CurrencyProvider>
         <SiteNav />
         <Routes>
           <Route path="/login" element={<p>Login screen</p>} />
           <Route path="*" element={<p>Some other screen</p>} />
         </Routes>
-      </AuthProvider>
+      </CurrencyProvider></AuthProvider>
     </MemoryRouter>,
   );
 }
@@ -128,7 +130,7 @@ describe("SiteNav auth control", () => {
 });
 
 describe("SiteNav center links", () => {
-  const APP_LINKS = ["Dashboard", "Car Onboarding", "Car Profile", "Trip Planner", "AI Advisor"];
+  const APP_LINKS = ["Dashboard", "Car Onboarding", "Car Profile", "Trip Planner", "AI Advisor", "Fuel Log"];
 
   it("logged out: shows only 'Features' and 'How it works' anchors, no app routes", async () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
@@ -178,5 +180,128 @@ describe("SiteNav center links", () => {
 
     expect(await screen.findByRole("link", { name: "Features" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
+  });
+});
+
+describe("SiteNav currency toggle (CAR-54)", () => {
+  // The switch is only shown on screens that show prices, so these tests open the Trip Planner
+  // unless they are checking another screen.
+  function renderNavWithCurrency(path = "/trip-planner") {
+    window.localStorage.clear();
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <AuthProvider>
+          <CurrencyProvider>
+            <SiteNav />
+          </CurrencyProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  const toggle = () => screen.queryByRole("group", { name: "Show prices in" });
+
+  it("logged in: shows the USD | LBP switch next to Log Out, with USD pressed by default", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+    renderNavWithCurrency();
+
+    expect(await screen.findByRole("group", { name: "Show prices in" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "USD" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "LBP" })).toHaveAttribute("aria-pressed", "false");
+    expect(logOut()).toBeInTheDocument();
+  });
+
+  it("logged out: no switch (there are no prices to show)", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderNavWithCurrency();
+
+    await screen.findByRole("link", { name: "Sign Up / Log In" });
+    expect(toggle()).not.toBeInTheDocument();
+  });
+
+  it("no switch while the session is still loading", () => {
+    supabase.auth.getSession.mockReturnValue(new Promise(() => {}));
+    renderNavWithCurrency();
+
+    expect(toggle()).not.toBeInTheDocument();
+  });
+
+  it("choosing LBP presses it and saves the choice", async () => {
+    const user = userEvent.setup();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+    renderNavWithCurrency();
+
+    await user.click(await screen.findByRole("button", { name: "LBP" }));
+
+    expect(screen.getByRole("button", { name: "LBP" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "USD" })).toHaveAttribute("aria-pressed", "false");
+    expect(window.localStorage.getItem(CURRENCY_STORAGE_KEY)).toBe("LBP");
+  });
+
+  // Item 7 of the Car Onboarding polish: only screens that display prices get the switch.
+  it.each(["/trip-planner", "/fuel-log", "/fuel-log/", "/trip-planner/"])(
+    "logged in on %s (a screen that shows prices): the switch is shown",
+    async (path) => {
+      supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+      renderNavWithCurrency(path);
+
+      expect(await screen.findByRole("group", { name: "Show prices in" })).toBeInTheDocument();
+    },
+  );
+
+  it.each(["/dashboard", "/cars/new", "/cars/mine", "/cars/car-1", "/advisor", "/"])(
+    "logged in on %s (no prices here): the switch is hidden but Log Out is still there",
+    async (path) => {
+      supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+      renderNavWithCurrency(path);
+
+      expect(await screen.findByRole("button", { name: "Log Out" })).toBeInTheDocument();
+      expect(toggle()).not.toBeInTheDocument();
+    },
+  );
+
+  it("appears when the user navigates to a price screen and goes away again when they leave it", async () => {
+    const user = userEvent.setup();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+    renderNavWithCurrency("/dashboard");
+    await screen.findByRole("button", { name: "Log Out" });
+    expect(toggle()).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Fuel Log" }));
+    expect(await screen.findByRole("group", { name: "Show prices in" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Dashboard" }));
+    expect(toggle()).not.toBeInTheDocument();
+  });
+
+  it("keeps the saved choice while the switch is hidden on other screens", async () => {
+    const user = userEvent.setup();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+    renderNavWithCurrency("/fuel-log");
+    await user.click(await screen.findByRole("button", { name: "LBP" }));
+
+    await user.click(screen.getByRole("link", { name: "Dashboard" })); // hidden here
+    await user.click(screen.getByRole("link", { name: "Trip Planner" })); // and back
+
+    expect(await screen.findByRole("button", { name: "LBP" })).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+describe("SiteNav brand logo (CAR-51)", () => {
+  it("shows the CarSage logo, linking to the Landing page", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderNav();
+
+    const brandLink = await screen.findByRole("link", { name: "CarSage" });
+    expect(brandLink).toHaveAttribute("href", "/");
+    expect(brandLink.querySelector("img")).toBeInTheDocument();
+  });
+
+  it("uses the on-dark (white) logo variant — the header background is dark green", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderNav();
+
+    const brandLink = await screen.findByRole("link", { name: "CarSage" });
+    expect(brandLink.querySelector("img").src).toMatch(/on-dark/);
   });
 });

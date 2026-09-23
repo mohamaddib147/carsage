@@ -1,65 +1,35 @@
-// CarSage brand mark (icon + wordmark), matching
-// docs/stitch_carsage_landing_page/carsage_logo. The icon's colors are
-// fixed (brand SVG); the wordmark inherits CSS color so it reads
-// correctly on both light and dark backgrounds via the `onDark` prop.
+// CarSage brand mark (CAR-51): the finalized logo — a real, transparent SVG
+// (circular car+brain icon, "CarSage" wordmark and "The Mindful Driver's
+// Co-Pilot" tagline), replacing both the earlier hand-coded placeholder SVG
+// and the interim raster (JPEG) version. Used everywhere the brand mark
+// appears: the site header (every screen, via SiteNav) and the Landing
+// page's hero and footer.
+//
+// Two color variants, since the artwork's outline and wordmark are dark
+// green (#114E38): on the site header's own dark green background
+// (--color-primary) that's nearly invisible, so `onDark` swaps in
+// logo-on-dark.svg — the same artwork with the outline/text in white
+// instead (generated from logo.svg; see that file's own comment). The gold
+// brain accent is unchanged in both, since gold already reads on both.
+
+import logo from "../assets/logo.svg";
+import logoOnDark from "../assets/logo-on-dark.svg";
 
 /**
- * The icon-only mark: a mountain-and-sun glyph in a rounded green badge.
- * On a background that's the same green (e.g. the site header), the
- * badge gets a faint light ring so its edge stays visible — otherwise
- * it disappears into the background.
- * @param {{ size?: number, onDark?: boolean }} props
- * @returns {JSX.Element}
- */
-function LogoMark({ size = 32, onDark = false }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 32 32"
-      fill="none"
-      aria-hidden="true"
-      className="logo__mark"
-    >
-      <rect
-        width="32"
-        height="32"
-        rx="10"
-        fill="#00594C"
-        stroke={onDark ? "rgba(255,255,255,0.35)" : "none"}
-        strokeWidth={onDark ? 1 : 0}
-      />
-      <path
-        d="M9 22L16 12L23 22H9Z"
-        fill="#C9A24B"
-        stroke="#C9A24B"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-      <circle cx="16" cy="18" r="3" fill="#FFFFFF" />
-      <path
-        d="M10 24C12 21 20 21 22 24"
-        stroke="#FFFFFF"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-/**
- * The full brand lockup: icon + "CarSage" wordmark.
+ * The full CarSage brand lockup. `size` is the rendered height in px; width
+ * follows the image's own aspect ratio, so it never looks stretched.
  * @param {{ size?: number, onDark?: boolean, className?: string }} props
  * @returns {JSX.Element}
  */
 function Logo({ size = 32, onDark = false, className = "" }) {
   return (
-    <span className={`logo ${onDark ? "logo--on-dark" : ""} ${className}`}>
-      <LogoMark size={size} onDark={onDark} />
-      <span className="logo__wordmark">CarSage</span>
-    </span>
+    <img
+      src={onDark ? logoOnDark : logo}
+      alt="CarSage"
+      className={`logo ${className}`}
+      style={{ height: size, width: "auto" }}
+    />
   );
 }
 
 export default Logo;
-export { LogoMark };

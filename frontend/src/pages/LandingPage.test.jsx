@@ -174,3 +174,20 @@ describe("LandingPage sections and anchors", () => {
     expect(button).toHaveAttribute("href", "/#how-it-works");
   });
 });
+
+describe("LandingPage — logo (CAR-51)", () => {
+  it("shows the CarSage logo in the hero", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderPage();
+    await screen.findByText("Everything about your car, in one place");
+
+    // The footer (with its own logo) moved to App.jsx (CAR-52), rendered
+    // once for every screen — see LegalPages.test.jsx for its coverage.
+    const logos = screen.getAllByRole("img", { name: "CarSage" });
+    expect(logos).toHaveLength(1);
+    expect(logos[0]).toHaveClass("landing-hero__logo");
+  });
+});
+
+// The decorative background texture is rendered once, site-wide, in App.jsx
+// rather than per page — see App.test.jsx for its tests.

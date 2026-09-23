@@ -40,9 +40,11 @@ vi.mock("../lib/apiClient.js", () => ({
  * Wires supabase.from(...) for all three tables AIAdvisorPage reads on
  * mount: "cars" (same shape Trip Planner's CAR-37 uses), and CAR-21's
  * history reload — "advisor_conversations" (most recent conversation,
- * or none) and "advisor_messages" (that conversation's rows, if any).
+ * or none) and "advisor_messages" (that conversation's rows, if any) —
+ * plus the DIY fix-feedback update ("Did this fix it?", mentor feedback,
+ * no Jira task). Returns `updateCalls`, one {id, marked_fixed} per update.
  */
-function mockSupabaseTables({ cars, conversation = null, messages = [] }) {
+function mockSupabaseTables({ cars, conversation = null, messages = [], updateError = null }) {
   const carsOrder = vi.fn().mockResolvedValue({ data: cars, error: null });
   const carsEq = vi.fn(() => ({ order: carsOrder }));
   const carsSelect = vi.fn(() => ({ eq: carsEq }));
@@ -59,12 +61,22 @@ function mockSupabaseTables({ cars, conversation = null, messages = [] }) {
   const messagesEq = vi.fn(() => ({ order: messagesOrder }));
   const messagesSelect = vi.fn(() => ({ eq: messagesEq }));
 
+  const updateCalls = [];
+  const messagesUpdate = vi.fn((row) => ({
+    eq: vi.fn((_column, id) => {
+      updateCalls.push({ id, ...row });
+      return Promise.resolve({ data: updateError ? null : [{ id, ...row }], error: updateError });
+    }),
+  }));
+
   supabase.from.mockImplementation((table) => {
     if (table === "cars") return { select: carsSelect };
     if (table === "advisor_conversations") return { select: conversationSelect };
-    if (table === "advisor_messages") return { select: messagesSelect };
+    if (table === "advisor_messages") return { select: messagesSelect, update: messagesUpdate };
     throw new Error(`mockSupabaseTables: unexpected table "${table}"`);
   });
+
+  return { updateCalls };
 }
 
 function renderPage() {
@@ -108,7 +120,7 @@ describe("AIAdvisorPage — chatting", () => {
     });
 
     renderPage();
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "Washer fluid light is on");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -137,7 +149,7 @@ describe("AIAdvisorPage — chatting", () => {
     });
 
     renderPage();
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "Brakes are grinding");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -176,7 +188,7 @@ describe("AIAdvisorPage — chatting", () => {
     );
 
     renderPage();
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "Engine noise");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -199,7 +211,7 @@ describe("AIAdvisorPage — chatting", () => {
     mockSupabaseTables({ cars: [{ id: "car-1" }] });
     renderPage();
 
-    await user.type(await screen.findByPlaceholderText("Describe your car issue..."), "     ");
+    await user.type(await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"), "     ");
 
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     expect(apiFetch).not.toHaveBeenCalled();
@@ -209,7 +221,7 @@ describe("AIAdvisorPage — chatting", () => {
     mockSupabaseTables({ cars: [{ id: "car-1" }] });
     renderPage();
 
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
 
     expect(input).toHaveAttribute("maxlength", "1000");
   });
@@ -220,7 +232,7 @@ describe("AIAdvisorPage — chatting", () => {
     apiFetch.mockRejectedValue(new Error("Please describe the problem in a few words."));
 
     renderPage();
-    await user.type(await screen.findByPlaceholderText("Describe your car issue..."), "!!!???");
+    await user.type(await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"), "!!!???");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -235,7 +247,7 @@ describe("AIAdvisorPage — car selector", () => {
     mockSupabaseTables({ cars: [{ id: "car-1", make: "Toyota", model: "Corolla", year: 2020 }] });
     renderPage();
 
-    await screen.findByPlaceholderText("Describe your car issue...");
+    await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     expect(screen.queryByLabelText("Car")).not.toBeInTheDocument();
   });
 
@@ -254,7 +266,7 @@ describe("AIAdvisorPage — car selector", () => {
     expect(carSelect).toHaveValue("car-1");
 
     await user.selectOptions(carSelect, "car-2");
-    const input = screen.getByPlaceholderText("Describe your car issue...");
+    const input = screen.getByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "Engine noise");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -320,7 +332,7 @@ describe("AIAdvisorPage — conversation history (CAR-21)", () => {
     });
 
     renderPage();
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "First issue");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("DIY Fixable");
@@ -351,7 +363,7 @@ describe("AIAdvisorPage — DIY video suggestion (CAR-40)", () => {
     });
 
     renderPage();
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "Washer fluid light is on");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -369,13 +381,63 @@ describe("AIAdvisorPage — DIY video suggestion (CAR-40)", () => {
     );
   });
 
+  it.each([
+    ["javascript: URL", "javascript:alert(document.cookie)"],
+    ["data: URL", "data:text/html,<script>alert(1)</script>"],
+    ["plain http", "http://www.youtube.com/watch?v=abc123XYZ"],
+    ["another host", "https://evil.example.com/watch?v=abc123XYZ"],
+    ["lookalike host", "https://www.youtube.com.evil.example/watch?v=abc123XYZ"],
+    ["not a watch page", "https://www.youtube.com/redirect?v=abc123XYZ"],
+    ["path-tricking video id", "https://www.youtube.com/watch?v=../../evil"],
+    ["not a URL at all", "not a url"],
+  ])("never turns an unsafe saved video URL into a link (%s)", async (_label, badUrl) => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      recommendation: "diy",
+      guidance: "Top it up.",
+      video_title: "Sneaky video",
+      video_url: badUrl,
+    });
+
+    renderPage();
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
+    await user.type(input, "Washer fluid light is on");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    // The answer itself still shows; only the video card is dropped.
+    expect(await screen.findByText("Top it up.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Sneaky video/ })).not.toBeInTheDocument();
+    expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
+  });
+
+  it("rebuilds the link from the video id instead of using the stored URL verbatim", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      recommendation: "diy",
+      guidance: "Top it up.",
+      video_title: "A video",
+      video_url: "https://youtube.com/watch?v=abc123XYZ&list=evil&t=99#frag",
+    });
+
+    renderPage();
+    await user.type(await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"), "Washer fluid");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByRole("link", { name: /A video/ })).toHaveAttribute(
+      "href",
+      "https://www.youtube.com/watch?v=abc123XYZ",
+    );
+  });
+
   it("shows no video card when the response has no video (edge case)", async () => {
     const user = userEvent.setup();
     mockSupabaseTables({ cars: [{ id: "car-1" }] });
     apiFetch.mockResolvedValue({ recommendation: "diy", guidance: "Top it up." });
 
     renderPage();
-    const input = await screen.findByPlaceholderText("Describe your car issue...");
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
     await user.type(input, "Washer fluid light is on");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -408,5 +470,186 @@ describe("AIAdvisorPage — DIY video suggestion (CAR-40)", () => {
       "href",
       "https://www.youtube.com/watch?v=abc123",
     );
+  });
+});
+
+describe("AIAdvisorPage — DIY fix feedback (mentor feedback, no Jira task)", () => {
+  it("shows 'Did this fix it?' on a fresh DIY reply, and saves marked_fixed = true on Yes", async () => {
+    const user = userEvent.setup();
+    const { updateCalls } = mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      conversation_id: "conv-1",
+      message_id: "msg-99",
+      recommendation: "diy",
+      guidance: "Top it up.",
+    });
+
+    renderPage();
+    await user.type(await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"), "Washer fluid light is on");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Did this fix it?");
+
+    await user.click(screen.getByRole("button", { name: "Yes" }));
+
+    expect(await screen.findByText("✓ You said this fixed it")).toBeInTheDocument();
+    expect(screen.queryByText("Did this fix it?")).not.toBeInTheDocument();
+    expect(updateCalls).toEqual([{ id: "msg-99", marked_fixed: true }]);
+  });
+
+  it("saves marked_fixed = false on No, worded differently from Yes", async () => {
+    const user = userEvent.setup();
+    const { updateCalls } = mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      conversation_id: "conv-1",
+      message_id: "msg-99",
+      recommendation: "diy",
+      guidance: "Top it up.",
+    });
+
+    renderPage();
+    await user.type(await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"), "Washer fluid light is on");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.click(await screen.findByRole("button", { name: "No" }));
+
+    expect(await screen.findByText("You said this didn't fix it")).toBeInTheDocument();
+    expect(updateCalls).toEqual([{ id: "msg-99", marked_fixed: false }]);
+  });
+
+  it("lets the user change their answer after picking one", async () => {
+    const user = userEvent.setup();
+    const { updateCalls } = mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      conversation_id: "conv-1",
+      message_id: "msg-99",
+      recommendation: "diy",
+      guidance: "Top it up.",
+    });
+
+    renderPage();
+    await user.type(await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"), "Washer fluid light is on");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.click(await screen.findByRole("button", { name: "No" }));
+    await screen.findByText("You said this didn't fix it");
+
+    await user.click(screen.getByRole("button", { name: "Change" }));
+    expect(screen.getByText("Did this fix it?")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Yes" }));
+
+    expect(await screen.findByText("✓ You said this fixed it")).toBeInTheDocument();
+    expect(updateCalls).toEqual([
+      { id: "msg-99", marked_fixed: false },
+      { id: "msg-99", marked_fixed: true },
+    ]);
+  });
+
+  it("does not show the control on a mechanic reply", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      conversation_id: "conv-1",
+      message_id: "msg-99",
+      recommendation: "mechanic",
+      guidance: "See a mechanic.",
+    });
+
+    renderPage();
+    await user.type(await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"), "Brakes are grinding");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await screen.findByText("See a Mechanic");
+    expect(screen.queryByText("Did this fix it?")).not.toBeInTheDocument();
+  });
+
+  it("is optional — sending another message works without answering it first", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValueOnce({
+      conversation_id: "conv-1",
+      message_id: "msg-99",
+      recommendation: "diy",
+      guidance: "Top it up.",
+    });
+    apiFetch.mockResolvedValueOnce({
+      conversation_id: "conv-1",
+      message_id: "msg-100",
+      recommendation: "mechanic",
+      guidance: "See a mechanic.",
+    });
+
+    renderPage();
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
+    await user.type(input, "First issue");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Did this fix it?"); // left unanswered on purpose
+
+    await user.type(input, "Second issue");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("See a Mechanic")).toBeInTheDocument();
+  });
+
+  it("restores the saved answer instead of asking again, on a reply reloaded from history", async () => {
+    mockSupabaseTables({
+      cars: [{ id: "car-1" }],
+      conversation: { id: "conv-1" },
+      messages: [
+        { id: "msg-1", sender: "user", message_text: "Washer fluid light is on", recommendation: null },
+        {
+          id: "msg-2",
+          sender: "ai",
+          message_text: "Top it up.",
+          recommendation: "diy",
+          marked_fixed: true,
+        },
+      ],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("✓ You said this fixed it")).toBeInTheDocument();
+    expect(screen.queryByText("Did this fix it?")).not.toBeInTheDocument();
+  });
+
+  it("still asks for feedback on a reloaded reply that has none yet", async () => {
+    mockSupabaseTables({
+      cars: [{ id: "car-1" }],
+      conversation: { id: "conv-1" },
+      messages: [
+        { id: "msg-1", sender: "user", message_text: "Washer fluid light is on", recommendation: null },
+        {
+          id: "msg-2",
+          sender: "ai",
+          message_text: "Top it up.",
+          recommendation: "diy",
+          marked_fixed: null,
+        },
+      ],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Did this fix it?")).toBeInTheDocument();
+  });
+
+  it("shows a plain error and keeps the buttons if saving the answer fails", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({
+      cars: [{ id: "car-1" }],
+      updateError: { code: "42501", message: "new row violates row-level security policy" },
+    });
+    apiFetch.mockResolvedValue({
+      conversation_id: "conv-1",
+      message_id: "msg-99",
+      recommendation: "diy",
+      guidance: "Top it up.",
+    });
+
+    renderPage();
+    await user.type(await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"), "Washer fluid light is on");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.click(await screen.findByRole("button", { name: "Yes" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save that, try again.");
+    expect(screen.getByText("Did this fix it?")).toBeInTheDocument(); // still unanswered, can retry
   });
 });

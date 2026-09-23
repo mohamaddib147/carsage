@@ -188,6 +188,21 @@ def check_safety_data(make: str, model: str, year: int, description: str) -> dic
     if recalls is None or complaints is None:
         return {"status": "unavailable"}
 
+    if not recalls and not complaints:
+        # Nothing under the model as the user typed it. Two very different reasons:
+        # NHTSA doesn't know the vehicle at all (-> "not_found"), or it files it
+        # under its own name — a Mercedes "C230 Kompressor" is "C-Class" (140
+        # complaints for the 2005) — so ask vPIC for that name and look again.
+        vpic = lookup_nhtsa(make, model, year)
+        if not vpic["vehicle_confirmed"]:
+            return {"status": "not_found"}
+        official_name = vpic.get("model_name")
+        if official_name and official_name.strip().lower() != model.strip().lower():
+            recalls = _fetch_results(RECALLS_URL, make, official_name, year)
+            complaints = _fetch_results(COMPLAINTS_URL, make, official_name, year)
+            if recalls is None or complaints is None:
+                return {"status": "unavailable"}
+
     systems = _systems_in(description)
     symptoms = _symptom_words(description, systems)
 
@@ -219,10 +234,5 @@ def check_safety_data(make: str, model: str, year: int, description: str) -> dic
                 "count": len(matching_complaints),
                 "summary": matching_complaints[0].get("summary", ""),
             }
-
-    if not recalls and not complaints:
-        vpic = lookup_nhtsa(make, model, year)
-        if not vpic["vehicle_confirmed"]:
-            return {"status": "not_found"}
 
     return {"status": "no_match"}

@@ -4,9 +4,11 @@
 
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import appSource from "./App.jsx?raw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App.jsx";
 import { AuthProvider } from "./auth/AuthContext.jsx";
+import { CurrencyProvider } from "./currency/CurrencyContext.jsx";
 import { supabase } from "./lib/supabaseClient.js";
 
 vi.mock("./lib/supabaseClient.js", () => ({
@@ -34,9 +36,9 @@ beforeEach(() => {
 function renderAtPath(path) {
   render(
     <MemoryRouter initialEntries={[path]}>
-      <AuthProvider>
+      <AuthProvider><CurrencyProvider>
         <App />
-      </AuthProvider>
+      </CurrencyProvider></AuthProvider>
     </MemoryRouter>,
   );
 }
@@ -82,7 +84,7 @@ describe("App routing — public screens", () => {
     ]);
   });
 
-  it("logged in: the nav shows the full app menu (brand + 5 screens) and a Log Out button", async () => {
+  it("logged in: the nav shows the full app menu (brand + 6 screens) and a Log Out button", async () => {
     supabase.auth.getSession.mockResolvedValue({
       data: { session: { user: { id: "user-123", email: "driver@example.com" } } },
     });
@@ -97,6 +99,7 @@ describe("App routing — public screens", () => {
       "/cars/mine",
       "/trip-planner",
       "/advisor",
+      "/fuel-log",
     ]);
   });
 });
@@ -109,10 +112,95 @@ describe("App routing — protected screens redirect logged-out users", () => {
     ["/cars/abc-123"],
     ["/trip-planner"],
     ["/advisor"],
+    ["/fuel-log"],
   ])("redirects %s to the Log In screen", async (path) => {
     renderAtPath(path);
     expect(
       await screen.findByRole("heading", { name: "Log In" }),
     ).toBeInTheDocument();
+  });
+});
+
+// --- CAR-24: the route table itself is checked, not a hand-kept list ----------
+// The routes are read from App.jsx's own source, so a route added later that is
+// neither wrapped in <ProtectedRoute> nor deliberately listed as public makes
+// this fail instead of silently shipping an unprotected screen.
+
+const PUBLIC_PATHS = ["*", "/", "/login", "/privacy", "/signup", "/terms"];
+
+const declaredRoutes = appSource
+  .split("<Route")
+  .slice(1)
+  .map((chunk) => ({
+    path: /path="([^"]+)"/.exec(chunk)?.[1],
+    protectedRoute: chunk.includes("<ProtectedRoute>"),
+  }))
+  .filter((route) => route.path);
+
+describe("App routing — every route is either protected or deliberately public (CAR-24)", () => {
+  it("found the real route table", () => {
+    expect(declaredRoutes.length).toBeGreaterThanOrEqual(11);
+    expect(declaredRoutes.some((route) => route.path === "/trip-planner")).toBe(true);
+  });
+
+  it("the unprotected routes are exactly the public allow-list (Landing, Log In, Sign Up, Terms, Privacy, 404)", () => {
+    const unprotected = declaredRoutes.filter((route) => !route.protectedRoute).map((route) => route.path);
+
+    expect([...unprotected].sort()).toEqual(PUBLIC_PATHS);
+  });
+
+  const protectedPaths = declaredRoutes.filter((route) => route.protectedRoute).map((route) => route.path);
+
+  it("protects the app screens (incl. the CAR-53 Fuel Log) and the car profile routes", () => {
+    expect([...protectedPaths].sort()).toEqual(
+      ["/advisor", "/cars/:carId", "/cars/mine", "/cars/new", "/dashboard", "/fuel-log", "/trip-planner"].sort(),
+    );
+  });
+
+  it.each(protectedPaths)("a logged-out visitor to %s is sent to Log In and never sees the screen", async (path) => {
+    renderAtPath(path.replace(":carId", "abc-123"));
+
+    expect(await screen.findByRole("heading", { name: "Log In" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Dashboard" })).not.toBeInTheDocument();
+  });
+
+  it("the Log In screen a visitor lands on offers a way to Sign Up", async () => {
+    renderAtPath("/dashboard");
+
+    await screen.findByRole("heading", { name: "Log In" });
+    const signUpLinks = screen.getAllByRole("link", { name: "Sign Up" });
+    expect(signUpLinks.length).toBeGreaterThanOrEqual(1);
+    for (const link of signUpLinks) {
+      expect(link).toHaveAttribute("href", "/signup");
+    }
+  });
+});
+
+describe("App — decorative background texture (CAR-51 follow-up)", () => {
+  // Rendered once here (not per page) so it shows on every screen without
+  // each page having to place it itself.
+  it.each([["/"], ["/login"], ["/signup"]])(
+    "shows the background texture at %s",
+    (path) => {
+      renderAtPath(path);
+
+      expect(document.querySelector(".app-background-texture")).toBeInTheDocument();
+    },
+  );
+
+  it("is purely decorative — invisible to assistive tech, never mistaken for a real image", () => {
+    renderAtPath("/");
+
+    const texture = document.querySelector(".app-background-texture");
+    expect(texture).toHaveAttribute("aria-hidden", "true");
+    expect(texture).toHaveAttribute("alt", "");
+    // Doesn't show up as an accessible image alongside the real logo.
+    expect(screen.queryAllByRole("img")).not.toContainEqual(texture);
+  });
+
+  it("renders exactly once, not duplicated per route change", () => {
+    renderAtPath("/dashboard"); // redirects to Log In, but the texture is outside the route table
+
+    expect(document.querySelectorAll(".app-background-texture")).toHaveLength(1);
   });
 });

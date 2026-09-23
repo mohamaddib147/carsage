@@ -4,7 +4,7 @@
 // exist) renders the same safe "not found" state rather than leaking
 // anything about it or crashing.
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -120,7 +120,7 @@ describe("CarProfilePage — viewing", () => {
     renderAt("/cars/mine");
 
     expect(await screen.findByText("Toyota")).toBeInTheDocument();
-    const dashes = screen.getAllByText("—");
+    const dashes = screen.getAllByText("-");
     expect(dashes.length).toBeGreaterThanOrEqual(4);
   });
 
@@ -221,7 +221,10 @@ describe("CarProfilePage — editing", () => {
       selectResult: { data: SAMPLE_CAR, error: null },
       updateResult: {
         data: null,
-        error: { message: "new row violates row-level security policy" },
+        error: {
+          code: "42501",
+          message: 'new row violates row-level security policy for table "cars"',
+        },
       },
     });
 
@@ -229,9 +232,10 @@ describe("CarProfilePage — editing", () => {
     await user.click(await screen.findByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "new row violates row-level security policy",
-    );
+    // CAR-25: plain language, never the database's own wording.
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("You don't have permission to do that.");
+    expect(alert).not.toHaveTextContent(/row-level|violates|table/i);
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
@@ -364,18 +368,125 @@ describe("CarProfilePage — deleting (CAR-38)", () => {
     expect(screen.getByText("Corolla")).toBeInTheDocument();
   });
 
-  it("shows a clear error and stays on the page when the delete fails", async () => {
+  it.each([
+    [
+      "an unclassified database error",
+      { code: "XX000", message: 'update or delete on table "cars" violates foreign key constraint "trips_car_id_fkey"' },
+      "Could not delete this car. Please try again.",
+    ],
+    [
+      "a permission rejection",
+      { code: "42501", message: 'new row violates row-level security policy for table "cars"' },
+      "You don't have permission to do that.",
+    ],
+    [
+      "an ended session",
+      { code: "PGRST301", message: "JWT expired" },
+      "Your session has expired. Please log in again.",
+    ],
+  ])("shows a plain-language error (never the database text) and stays on the page when the delete fails: %s", async (_label, dbError, expected) => {
     const user = userEvent.setup();
     mockCarsTable({
       selectResult: { data: SAMPLE_CAR, error: null },
-      deleteResult: { error: { message: "new row violates row-level security policy" } },
+      deleteResult: { error: dbError },
     });
 
     renderAt("/cars/mine");
     await user.click(await screen.findByRole("button", { name: "Delete Car" }));
     await user.click(screen.getByRole("button", { name: "Yes, Delete" }));
 
-    expect(await screen.findByText("new row violates row-level security policy")).toBeInTheDocument();
+    expect(await screen.findByText(expected)).toBeInTheDocument();
+    expect(screen.queryByText(/row-level|foreign key|trips_car_id_fkey|JWT/i)).not.toBeInTheDocument();
     expect(screen.getByText("Corolla")).toBeInTheDocument();
+  });
+});
+
+describe("CarProfilePage — input limits (CAR-23)", () => {
+  async function openEdit(user) {
+    const table = mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    return table;
+  }
+
+  it.each([
+    ["Make *", 60],
+    ["Model *", 60],
+    ["Engine Type", 60],
+    ["License Plate", 20],
+    ["Drivetrain", 60],
+    ["Transmission", 60],
+    ["VIN", 32],
+  ])("caps the %s field at %i characters", async (label, max) => {
+    const user = userEvent.setup();
+    await openEdit(user);
+
+    expect(screen.getByLabelText(label)).toHaveAttribute("maxlength", String(max));
+  });
+
+  it.each([
+    ["Model *", 61, "Model must be 60 characters or fewer."],
+    ["Engine Type", 61, "Engine type must be 60 characters or fewer."],
+    ["License Plate", 21, "License plate must be 20 characters or fewer."],
+    ["VIN", 33, "VIN must be 32 characters or fewer."],
+  ])("still refuses an oversized %s if the input cap is bypassed, without saving", async (label, length, message) => {
+    const user = userEvent.setup();
+    const { update } = await openEdit(user);
+
+    fireEvent.change(screen.getByLabelText(label), { target: { value: "x".repeat(length) } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Fuel Efficiency (km/L)", "500", "Fuel efficiency must be between 0 and 100 km/L."],
+    ["Cylinders", "99", "Cylinders must be a whole number between 1 and 16."],
+  ])("rejects %s = %s and does not save", async (label, value, message) => {
+    const user = userEvent.setup();
+    const { update } = await openEdit(user);
+
+    const input = screen.getByLabelText(label);
+    await user.clear(input);
+    await user.type(input, value);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("describes a database rule violation in plain words, never the constraint name", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      updateResult: {
+        data: null,
+        error: { code: "23514", message: 'violates check constraint "cars_cylinders_range_check"' },
+      },
+    });
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("outside the allowed range or length");
+    expect(alert).not.toHaveTextContent("cars_cylinders_range_check");
+  });
+});
+
+describe("CarProfilePage — example placeholders", () => {
+  it("every text and number field in the edit form shows a realistic example", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+
+    const fields = [...screen.getAllByRole("textbox"), ...screen.getAllByRole("spinbutton")];
+    expect(fields.length).toBeGreaterThanOrEqual(10);
+    for (const field of fields) {
+      expect(field, `field #${field.id}`).toHaveAttribute("placeholder", expect.stringMatching(/^e\.g\. /));
+    }
   });
 });

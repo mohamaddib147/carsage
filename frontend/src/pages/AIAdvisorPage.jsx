@@ -50,12 +50,24 @@ function guidanceSteps(guidance) {
     .filter(Boolean);
 }
 
-/** Derives a YouTube thumbnail URL from a watch URL's video id, or null
- * if it isn't a recognizable YouTube watch URL. */
-function youtubeThumbnailUrl(videoUrl) {
+const YOUTUBE_HOSTS = new Set(["www.youtube.com", "youtube.com", "m.youtube.com"]);
+
+/**
+ * The video id of a saved YouTube watch URL, or null if it isn't one. Only
+ * https youtube.com/watch?v=<id> with a well-formed id qualifies (CAR-23):
+ * the stored value is rendered as a link, so anything else — a `javascript:`
+ * URL, another host, a path-tricking id — is never turned into a link. (The
+ * database also only allows youtube.com/watch links; this doesn't rely on it.)
+ * @param {string | null | undefined} videoUrl
+ * @returns {string | null}
+ */
+function youtubeVideoId(videoUrl) {
   try {
-    const videoId = new URL(videoUrl).searchParams.get("v");
-    return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
+    const url = new URL(videoUrl);
+    if (url.protocol !== "https:" || !YOUTUBE_HOSTS.has(url.hostname)) return null;
+    if (url.pathname !== "/watch") return null;
+    const id = url.searchParams.get("v");
+    return id && /^[A-Za-z0-9_-]{6,20}$/.test(id) ? id : null;
   } catch {
     return null;
   }
@@ -136,7 +148,7 @@ function AIAdvisorPage() {
 
       const { data: rows } = await supabase
         .from("advisor_messages")
-        .select("sender, message_text, recommendation, video_title, video_url")
+        .select("id, sender, message_text, recommendation, video_title, video_url, marked_fixed")
         .eq("conversation_id", conversation.id)
         .order("created_at", { ascending: true });
 
@@ -148,11 +160,13 @@ function AIAdvisorPage() {
             ? { id: nextMessageId.current++, role: "user", text: row.message_text }
             : {
                 id: nextMessageId.current++,
+                dbId: row.id,
                 role: "assistant",
                 recommendation: row.recommendation,
                 guidance: row.message_text,
                 videoTitle: row.video_title,
                 videoUrl: row.video_url,
+                markedFixed: row.marked_fixed,
               },
         ),
       );
@@ -197,11 +211,13 @@ function AIAdvisorPage() {
         ...previous,
         {
           id: nextMessageId.current++,
+          dbId: result.message_id,
           role: "assistant",
           recommendation: result.recommendation,
           guidance: result.guidance,
           videoTitle: result.video_title,
           videoUrl: result.video_url,
+          markedFixed: null,
         },
       ]);
     } catch (submitError) {
@@ -217,6 +233,53 @@ function AIAdvisorPage() {
     sendMessage(description);
   }
 
+  /**
+   * Records whether a DIY suggestion actually fixed the issue (optional —
+   * the user isn't required to answer before continuing the conversation).
+   * Updates only the `marked_fixed` column (the database grants nothing
+   * broader to a signed-in user), scoped by RLS to the caller's own message.
+   * @param {number} messageId - the message's local (not database) id.
+   * @param {string} dbId - the message's advisor_messages row id.
+   * @param {boolean} fixed
+   */
+  async function handleMarkFixed(messageId, dbId, fixed) {
+    setMessages((previous) =>
+      previous.map((message) =>
+        message.id === messageId
+          ? { ...message, markingFixed: true, markFixedError: "" }
+          : message,
+      ),
+    );
+
+    const { error: updateError } = await supabase
+      .from("advisor_messages")
+      .update({ marked_fixed: fixed })
+      .eq("id", dbId);
+
+    setMessages((previous) =>
+      previous.map((message) =>
+        message.id === messageId
+          ? {
+              ...message,
+              markingFixed: false,
+              editingFixed: false,
+              markedFixed: updateError ? message.markedFixed : fixed,
+              markFixedError: updateError ? "Couldn't save that, try again." : "",
+            }
+          : message,
+      ),
+    );
+  }
+
+  /** Reopens the Yes/No buttons on an already-answered "Did this fix it?" so the user can change their answer. */
+  function handleEditMarkFixed(messageId) {
+    setMessages((previous) =>
+      previous.map((message) =>
+        message.id === messageId ? { ...message, editingFixed: true } : message,
+      ),
+    );
+  }
+
   if (loadingCars || loadingHistory) {
     return <PageShell title="AI Advisor" description="Loading your car..." />;
   }
@@ -225,7 +288,7 @@ function AIAdvisorPage() {
     return (
       <PageShell
         title="AI Advisor"
-        description="Add a car before describing an issue — guidance is tailored to your vehicle."
+        description="Add a car before describing an issue. Guidance is tailored to your vehicle."
       >
         <Link className="btn-primary" to="/cars/new">
           Add Your Car
@@ -264,8 +327,8 @@ function AIAdvisorPage() {
       {messages.length === 0 && (
         <div className="advisor-welcome">
           <p>
-            Describe any noise, warning light, or issue in plain language —
-            we&apos;ll tell you whether it&apos;s safe to check yourself or
+            Describe any noise, warning light, or issue in plain language.
+            We&apos;ll tell you whether it&apos;s safe to check yourself or
             worth a mechanic&apos;s visit.
           </p>
           <div className="advisor-examples">
@@ -313,25 +376,23 @@ function AIAdvisorPage() {
               ) : (
                 <p className="advisor-guidance-text">{message.guidance}</p>
               )}
-              {message.videoUrl && (
+              {youtubeVideoId(message.videoUrl) && (
                 <a
                   className="advisor-video-card"
-                  href={message.videoUrl}
+                  href={`https://www.youtube.com/watch?v=${youtubeVideoId(message.videoUrl)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {youtubeThumbnailUrl(message.videoUrl) && (
-                    <span className="advisor-video-card__thumbnail-wrap">
-                      <img
-                        className="advisor-video-card__thumbnail"
-                        src={youtubeThumbnailUrl(message.videoUrl)}
-                        alt=""
-                      />
-                      <span className="advisor-video-card__play" aria-hidden="true">
-                        ▶
-                      </span>
+                  <span className="advisor-video-card__thumbnail-wrap">
+                    <img
+                      className="advisor-video-card__thumbnail"
+                      src={`https://img.youtube.com/vi/${youtubeVideoId(message.videoUrl)}/hqdefault.jpg`}
+                      alt=""
+                    />
+                    <span className="advisor-video-card__play" aria-hidden="true">
+                      ▶
                     </span>
-                  )}
+                  </span>
                   <span className="advisor-video-card__body">
                     <span className="advisor-video-card__title">
                       {message.videoTitle}
@@ -341,6 +402,51 @@ function AIAdvisorPage() {
                     </span>
                   </span>
                 </a>
+              )}
+              {message.recommendation === "diy" && message.dbId && (
+                <div className="advisor-fix-feedback">
+                  {message.markedFixed == null || message.editingFixed ? (
+                    <>
+                      <span className="advisor-fix-feedback__prompt">
+                        Did this fix it?
+                      </span>
+                      <button
+                        type="button"
+                        className="advisor-fix-feedback__btn"
+                        disabled={message.markingFixed}
+                        onClick={() => handleMarkFixed(message.id, message.dbId, true)}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        className="advisor-fix-feedback__btn"
+                        disabled={message.markingFixed}
+                        onClick={() => handleMarkFixed(message.id, message.dbId, false)}
+                      >
+                        No
+                      </button>
+                    </>
+                  ) : (
+                    <span className="advisor-fix-feedback__answered">
+                      {message.markedFixed
+                        ? "✓ You said this fixed it"
+                        : "You said this didn't fix it"}{" "}
+                      <button
+                        type="button"
+                        className="advisor-fix-feedback__change"
+                        onClick={() => handleEditMarkFixed(message.id)}
+                      >
+                        Change
+                      </button>
+                    </span>
+                  )}
+                  {message.markFixedError && (
+                    <p role="alert" className="auth-form__error advisor-fix-feedback__error">
+                      {message.markFixedError}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           ),
@@ -367,7 +473,7 @@ function AIAdvisorPage() {
       <form onSubmit={handleSubmit} className="advisor-input-row">
         <input
           type="text"
-          placeholder="Describe your car issue..."
+          placeholder="Describe your issue, e.g. grinding noise when braking"
           // Same cap as the backend (MAX_DESCRIPTION_CHARS in ai_advisor.py).
           maxLength={1000}
           value={description}
@@ -383,7 +489,7 @@ function AIAdvisorPage() {
         </button>
       </form>
       <p className="advisor-disclaimer">
-        AI-generated guidance — not a substitute for a professional
+        AI-generated guidance, not a substitute for a professional
         inspection.
       </p>
     </div>

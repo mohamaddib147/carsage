@@ -57,7 +57,7 @@ def get_route_summary(origin: str, destination: str) -> dict:
             timeout=10.0,
         )
         response.raise_for_status()
-    except httpx.HTTPError as error:
+    except (httpx.HTTPError, httpx.InvalidURL) as error:
         raise GoogleMapsError(
             "Could not reach the maps service. Please try again."
         ) from error

@@ -18,6 +18,7 @@ from app.services.vehicle_lookup import (
     lookup_api_ninjas,
     lookup_fuel_economy,
     lookup_nhtsa,
+    match_nhtsa_model,
 )
 
 
@@ -52,7 +53,11 @@ def test_lookup_nhtsa_confirms_a_known_model_and_returns_a_vehicle_type():
     ):
         result = lookup_nhtsa("Honda", "Civic", 2020)
 
-    assert result == {"vehicle_confirmed": True, "engine_type": "Passenger Car"}
+    assert result == {
+        "vehicle_confirmed": True,
+        "engine_type": "Passenger Car",
+        "model_name": "Civic",
+    }
 
 
 def test_lookup_nhtsa_reports_unconfirmed_for_an_unrecognized_model():
@@ -61,7 +66,7 @@ def test_lookup_nhtsa_reports_unconfirmed_for_an_unrecognized_model():
     with patch("app.services.vehicle_lookup.httpx.get", return_value=models_response):
         result = lookup_nhtsa("Honda", "NotARealModel", 2020)
 
-    assert result == {"vehicle_confirmed": False, "engine_type": None}
+    assert result == {"vehicle_confirmed": False, "engine_type": None, "model_name": None}
 
 
 def test_lookup_nhtsa_never_raises_on_a_network_failure():
@@ -71,7 +76,80 @@ def test_lookup_nhtsa_never_raises_on_a_network_failure():
     ):
         result = lookup_nhtsa("Honda", "Civic", 2020)
 
-    assert result == {"vehicle_confirmed": False, "engine_type": None}
+    assert result == {"vehicle_confirmed": False, "engine_type": None, "model_name": None}
+
+
+def test_lookup_nhtsa_recognizes_a_badge_that_nhtsa_files_under_its_model_family():
+    # Reported in testing: a saved Mercedes-Benz "C230 Kompressor" (2005) was
+    # called unknown to NHTSA, which lists it as "C-Class".
+    models_response = _mock_response(
+        {"Results": [{"Model_Name": "C-Class"}, {"Model_Name": "CLK-Class"}, {"Model_Name": "E-Class"}]}
+    )
+    types_response = _mock_response({"Results": [{"VehicleTypeName": "Passenger Car"}]})
+
+    with patch(
+        "app.services.vehicle_lookup.httpx.get", side_effect=[models_response, types_response]
+    ):
+        result = lookup_nhtsa("Mercedes-Benz", "C230 Kompressor", 2005)
+
+    assert result == {
+        "vehicle_confirmed": True,
+        "engine_type": "Passenger Car",
+        "model_name": "C-Class",
+    }
+
+
+@pytest.mark.parametrize(
+    "typed, official_names, expected",
+    [
+        # same name, any case / spacing
+        ("civic", ["Civic", "Accord"], "Civic"),
+        ("  Grand   Cherokee ", ["Grand Cherokee", "Cherokee"], "Grand Cherokee"),
+        # official name + a trim; the longest official name wins
+        ("Camry LE", ["Camry", "Avalon"], "Camry"),
+        ("Civic-Si", ["Civic", "Accord"], "Civic"),
+        ("Corolla Cross LE", ["Corolla", "Corolla Cross"], "Corolla Cross"),
+        # model families: badge letter/number + digits
+        ("C230 Kompressor", ["C-Class", "E-Class", "CLK-Class"], "C-Class"),
+        ("c320", ["C-Class", "E-Class"], "C-Class"),
+        ("E350", ["C-Class", "E-Class"], "E-Class"),
+        ("ML350", ["M-Class", "ML-Class", "GL-Class"], "ML-Class"),
+        ("328i", ["3 Series", "5 Series"], "3 Series"),
+        # the longer family letter wins, so a CL isn't read as a C
+        ("CL500", ["C-Class", "CL-Class"], "CL-Class"),
+        ("CLK320", ["C-Class", "CLK-Class"], "CLK-Class"),
+        ("GLK350", ["GL-Class", "GLK-Class"], "GLK-Class"),
+        # things that must NOT match
+        ("Civic", ["Civic Type R", "Accord"], None),
+        ("CLK320", ["C-Class", "E-Class"], None),
+        ("Corolla", ["Camry", "Avalon"], None),
+        ("Crv", ["C-Class"], None),
+        ("C", ["C-Class"], None),
+        ("", ["Civic"], None),
+        ("Civic", [], None),
+        ("Civic", ["", None], None),
+    ],
+)
+def test_match_nhtsa_model(typed, official_names, expected):
+    assert match_nhtsa_model(typed, official_names) == expected
+
+
+def test_spec_suggestions_response_does_not_expose_the_internal_model_name():
+    with patch(
+        "app.services.vehicle_lookup.lookup_nhtsa",
+        return_value={"vehicle_confirmed": True, "engine_type": "Passenger Car", "model_name": "C-Class"},
+    ), patch(
+        "app.services.vehicle_lookup.lookup_api_ninjas",
+        return_value={"fuel_efficiency": None, "cylinders": None, "drivetrain": None, "transmission": None},
+    ), patch(
+        "app.services.vehicle_lookup.lookup_fuel_economy", return_value=None
+    ), patch("app.services.vehicle_lookup.lookup_tank_capacity", return_value=None), patch(
+        "app.services.vehicle_lookup.estimate_tank_capacity", return_value=None
+    ):
+        result = get_spec_suggestions("Mercedes-Benz", "C230 Kompressor", 2005)
+
+    assert result["vehicle_confirmed"] is True
+    assert "model_name" not in result
 
 
 def test_lookup_api_ninjas_converts_mpg_to_km_per_liter(monkeypatch):
@@ -374,3 +452,29 @@ def test_get_spec_suggestions_leaves_the_tank_empty_when_nothing_finds_one():
 
     assert result["fuel_tank_capacity_liters"] is None
     assert result["fuel_tank_capacity_source"] is None
+
+
+# --- CAR-23: user input in outbound URLs ------------------------------------
+
+
+@pytest.mark.parametrize(
+    "make",
+    ["Honda/../../admin", "Honda?evil=1", "Honda#frag", "Ho nda", "a%2Fb", "../x", "Honda\\x"],
+)
+def test_lookup_nhtsa_percent_encodes_the_make_so_it_cannot_alter_the_url_path(make):
+    captured = []
+
+    def fake_get(url, **kwargs):
+        captured.append(url)
+        return _mock_response({"Results": []})
+
+    with patch("app.services.vehicle_lookup.httpx.get", side_effect=fake_get):
+        lookup_nhtsa(make, "Civic", 2020)
+
+    url = captured[0]
+    assert url.startswith("https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/")
+    make_segment = url.split("/make/")[1].split("/modelyear/")[0]
+    # Nothing that could add a path segment, a query or a fragment survives raw.
+    assert not any(char in make_segment for char in "/?#\\ ")
+    assert url.endswith("/modelyear/2020")
+    assert url.count("/modelyear/") == 1

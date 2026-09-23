@@ -74,6 +74,14 @@ button {
   background-color: var(--color-primary-hover);
 }
 
+/* A disabled accent button (e.g. "Scan Document", coming soon) must LOOK disabled. */
+.btn-accent:disabled {
+  background-color: var(--color-border);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 .btn-accent {
   background-color: var(--color-accent);
   color: var(--color-text);
@@ -169,6 +177,24 @@ button {
   }
 }
 
+/* CAR-51 follow-up + fix: the decorative background emblem, applied
+   site-wide (was Landing-page-only) using background-texture-icon.svg — a
+   crop of the source file down to just the gear/tire/wrench circle, no
+   baked-in text. Fixed to fill the viewport (inset: 0 + 100vw/100vh) so it
+   covers the whole screen on every route; object-fit: cover fills without
+   stretching. Kept at a low opacity since it's now behind every screen's
+   content, not just a slice of empty background. */
+.app-background-texture {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  opacity: 0.035;
+  pointer-events: none;
+  z-index: -1;
+}
+
 .app-main {
   max-width: 960px;
   margin: 0 auto;
@@ -203,6 +229,7 @@ input[type="text"],
 input[type="email"],
 input[type="password"],
 input[type="number"],
+input[type="date"],
 select {
   font-family: inherit;
   font-size: 1rem;
@@ -278,24 +305,7 @@ select:focus {
 }
 
 .logo {
-  display: inline-flex;
-  align-items: center;
-  gap: calc(var(--spacing-unit) * 1.25);
-}
-
-.logo__mark {
-  flex-shrink: 0;
-}
-
-.logo__wordmark {
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--color-primary);
-}
-
-.logo--on-dark .logo__wordmark {
-  color: #ffffff;
+  display: inline-block;
 }
 
 .btn-secondary {
@@ -597,6 +607,105 @@ select:focus {
   overflow-wrap: break-word;
 }
 
+.dashboard-car-card__specs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: var(--spacing-unit) calc(var(--spacing-unit) * 2);
+  margin: calc(var(--spacing-unit) * 1.5) 0 0;
+  padding-top: calc(var(--spacing-unit) * 1.5);
+  border-top: 1px solid var(--color-border);
+}
+
+.dashboard-car-card__spec dt {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dashboard-car-card__spec dd {
+  margin: calc(var(--spacing-unit) * 0.25) 0 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-car-card__hint {
+  margin: calc(var(--spacing-unit) * 1.5) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.dashboard-car-card__hint a {
+  color: var(--color-primary);
+}
+
+.dashboard-diy-empty {
+  color: var(--color-text-muted);
+}
+
+.dashboard-diy-empty a {
+  color: var(--color-primary);
+}
+
+.dashboard-diy-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--spacing-unit) * 3);
+  align-items: stretch;
+}
+
+.dashboard-stat-tile {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+  padding: calc(var(--spacing-unit) * 2.5);
+  min-width: 200px;
+}
+
+.dashboard-stat-tile__value {
+  margin: 0;
+  color: var(--color-primary);
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dashboard-stat-tile__label {
+  margin: calc(var(--spacing-unit) * 0.75) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.dashboard-latest-fix {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+  padding: calc(var(--spacing-unit) * 2.5);
+  min-width: 200px;
+  flex: 1;
+}
+
+.dashboard-latest-fix__label {
+  margin: 0 0 calc(var(--spacing-unit) * 0.75);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.dashboard-latest-fix__issue {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-latest-fix__time {
+  margin: calc(var(--spacing-unit) * 0.5) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
 .dashboard-modules {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -884,6 +993,7 @@ select:focus {
   z-index: -1;
 }
 
+
 .landing-hero__logo {
   margin-bottom: calc(var(--spacing-unit) * 3);
 }
@@ -1107,24 +1217,25 @@ select:focus {
   color: rgba(255, 255, 255, 0.85);
 }
 
-.landing-footer {
+.site-footer {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: calc(var(--spacing-unit) * 1);
+  margin-top: calc(var(--spacing-unit) * 8);
   padding-top: calc(var(--spacing-unit) * 4);
   border-top: 1px solid var(--color-border);
   color: var(--color-text-muted);
 }
 
-.landing-footer__tagline {
+.site-footer__tagline {
   max-width: 420px;
   margin: 0;
   font-size: 0.875rem;
 }
 
-.landing-footer__copyright {
+.site-footer__copyright {
   margin: 0;
   font-size: 0.75rem;
 }
@@ -1376,6 +1487,68 @@ select:focus {
   color: var(--color-primary);
 }
 
+.advisor-fix-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1);
+  margin-top: calc(var(--spacing-unit) * 1.5);
+  padding-top: calc(var(--spacing-unit) * 1.5);
+  /* The assistant bubble's background is dark (--color-primary) with white text
+     (.advisor-bubble--assistant) — this whole block needs light-on-dark colors,
+     not the page's normal muted-gray-on-light ones. */
+  border-top: 1px solid rgba(255, 255, 255, 0.3);
+  font-size: 0.875rem;
+}
+
+.advisor-fix-feedback__prompt {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.advisor-fix-feedback__btn {
+  padding: 4px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.advisor-fix-feedback__btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.advisor-fix-feedback__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.advisor-fix-feedback__answered {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.advisor-fix-feedback__change {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--color-accent);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.advisor-fix-feedback__error {
+  flex-basis: 100%;
+  margin: 0;
+  /* .auth-form__error's red is tuned for the page's light background; on this
+     dark bubble it needs to be much lighter to stay readable. */
+  color: #ffb4a9;
+}
+
 .advisor-input-row {
   display: flex;
   gap: calc(var(--spacing-unit) * 1.5);
@@ -1625,7 +1798,7 @@ select:focus {
   line-height: 1.5;
 }
 
-.landing-footer__links {
+.site-footer__links {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -1633,12 +1806,251 @@ select:focus {
   font-size: 0.8125rem;
 }
 
-.landing-footer__links a {
+.site-footer__links a {
   color: var(--color-text-muted);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.landing-footer__links a:hover {
+.site-footer__links a:hover {
   color: var(--color-primary);
+}
+
+/* Fuel Log (CAR-53) */
+.fuel-log-car-name {
+  margin: 0;
+  font-weight: 700;
+  color: var(--color-primary);
+  overflow-wrap: break-word;
+}
+
+.fuel-log-cost-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: var(--spacing-unit);
+}
+
+.fuel-log-saved {
+  margin: 0;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.fuel-log-empty {
+  max-width: 480px;
+  margin-top: calc(var(--spacing-unit) * 2);
+  padding: calc(var(--spacing-unit) * 3);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+}
+
+.fuel-log-empty__title {
+  margin: 0 0 var(--spacing-unit);
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+
+.fuel-log-table-wrap {
+  margin-top: calc(var(--spacing-unit) * 2);
+  overflow-x: auto;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+}
+
+.fuel-log-chart__caption {
+  margin: 0 0 var(--spacing-unit);
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.fuel-log-chart__wrap {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+  padding: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 2) 0;
+}
+
+.fuel-log-chart__tooltip {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  padding: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 1.25);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.12);
+  font-size: 0.8125rem;
+}
+
+.fuel-log-chart__tooltip p {
+  margin: 0;
+}
+
+.fuel-log-chart__tooltip-date {
+  font-weight: 700;
+  margin-bottom: 2px !important;
+}
+
+.fuel-log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.fuel-log-table th,
+.fuel-log-table td {
+  padding: calc(var(--spacing-unit) * 1.5) calc(var(--spacing-unit) * 2);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.fuel-log-table th {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.fuel-log-table tbody tr + tr td {
+  border-top: 1px solid var(--color-border);
+}
+
+/* Prices and the USD/LBP toggle (CAR-54) */
+.price__primary {
+  font-weight: 700;
+}
+
+.price__secondary {
+  color: var(--color-text-muted);
+  font-size: max(0.75rem, 0.65em);
+  font-weight: 400;
+}
+
+.currency-toggle {
+  display: inline-flex;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: var(--radius-base);
+  overflow: hidden;
+}
+
+.currency-toggle__option {
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  padding: calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 1.25);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.currency-toggle__option--active {
+  background-color: #ffffff;
+  color: var(--color-primary);
+}
+
+.trip-pump-price {
+  margin: calc(var(--spacing-unit) * 1) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.trip-pump-price .price__primary {
+  color: var(--color-text);
+}
+
+/* Car Onboarding polish */
+.form-legend {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.form-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin: calc(var(--spacing-unit) * 1) 0 0;
+}
+
+.form-subsection__title {
+  margin: 0;
+  padding-bottom: calc(var(--spacing-unit) * 0.75);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-primary);
+  font-size: 1rem;
+}
+
+.form-field__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-unit);
+}
+
+.autofill-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 0.5);
+  padding: 2px calc(var(--spacing-unit) * 1);
+  border-radius: 999px;
+  background-color: rgba(0, 89, 76, 0.1);
+  color: var(--color-primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.spec-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-unit);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.spec-loading__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spec-loading-spin 0.8s linear infinite;
+}
+
+@keyframes spec-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spec-loading__spinner {
+    animation: none;
+  }
+}
+
+/* A field with an error (a required field left empty on submit, or an invalid value) */
+input[aria-invalid="true"],
+select[aria-invalid="true"] {
+  outline: 2px solid var(--color-danger);
+  outline-offset: 1px;
+  background-color: rgba(179, 38, 30, 0.06);
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1.5);
+}
+
+.form-actions .btn-secondary {
+  height: 48px;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+}
+
+.form-actions .btn-block {
+  flex: 1;
+  width: auto;
 }

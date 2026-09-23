@@ -22,6 +22,16 @@ from app.services.google_maps import GoogleMapsError
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def _logged_in_user():
+    """CAR-24: every route now requires a logged-in caller, so these tests run
+    as one (the real token check is covered by test_auth.py and
+    test_auth_required.py)."""
+    app.dependency_overrides[get_current_user_id] = lambda: "user-123"
+    yield
+    app.dependency_overrides.pop(get_current_user_id, None)
+
+
 def test_returns_distance_and_durations_for_a_valid_request():
     with patch("app.routers.trip_planner.get_route_summary") as mock_get_route:
         mock_get_route.return_value = {
@@ -115,7 +125,7 @@ def test_traffic_adjusted_efficiency_guards_against_a_zero_duration():
 def test_returns_current_fuel_prices_in_lbp_and_usd():
     with patch("app.routers.trip_planner.get_current_fuel_prices") as mock_get_prices:
         mock_get_prices.return_value = {
-            "95_octane": 89000.0,
+            "95_octane": 89700.0,
             "98_octane": 88850.0,
             "diesel": 73300.0,
         }
@@ -124,9 +134,9 @@ def test_returns_current_fuel_prices_in_lbp_and_usd():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["lbp_per_usd"] == 89000
+    assert body["lbp_per_usd"] == 89700
     assert body["prices"]["95_octane"] == {
-        "lbp_per_liter": 89000.0,
+        "lbp_per_liter": 89700.0,
         "usd_per_liter": 1.0,
     }
 
@@ -205,7 +215,7 @@ class TestPostEstimate:
             response = client.post(
                 "/trip-planner/estimate",
                 json={
-                    "car_id": "car-1",
+                    "car_id": "00000000-0000-4000-8000-000000000001",
                     "origin": "Beirut",
                     "destination": "Tripoli",
                 },
@@ -215,14 +225,14 @@ class TestPostEstimate:
         body = response.json()
         # 100 km / 10 km/L = 10 L; 10 L * 90000 LBP/L = 900000 LBP.
         assert body["estimated_cost_lbp"] == 900000.0
-        assert body["estimated_cost_usd"] == round(900000 / 89000, 2)
+        assert body["estimated_cost_usd"] == round(900000 / 89700, 2)
         assert body["fuel_price_used_lbp"] == 90000.0
         # duration_in_traffic_min=75 vs duration_min=60 -> 1.25x -> a 7.5%
         # traffic penalty (half of the cap, since the cap is a 2x slowdown).
         assert body["estimated_cost_current_traffic_lbp"] == 967500.0
-        assert body["estimated_cost_current_traffic_usd"] == round(967500 / 89000, 2)
+        assert body["estimated_cost_current_traffic_usd"] == round(967500 / 89700, 2)
         assert captured["row"]["user_id"] == "user-123"
-        assert captured["row"]["car_id"] == "car-1"
+        assert captured["row"]["car_id"] == "00000000-0000-4000-8000-000000000001"
         # trips.estimated_cost stays the light-traffic figure, unchanged.
         assert captured["row"]["estimated_cost"] == 900000.0
 
@@ -251,7 +261,7 @@ class TestPostEstimate:
 
             response = client.post(
                 "/trip-planner/estimate",
-                json={"car_id": "car-1", "origin": "Beirut", "destination": "Tripoli"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "origin": "Beirut", "destination": "Tripoli"},
             )
 
         assert response.status_code == 200
@@ -278,7 +288,7 @@ class TestPostEstimate:
 
             response = client.post(
                 "/trip-planner/estimate",
-                json={"car_id": "car-1", "origin": "Beirut", "destination": "Tripoli"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "origin": "Beirut", "destination": "Tripoli"},
             )
 
         body = response.json()
@@ -302,7 +312,7 @@ class TestPostEstimate:
             response = client.post(
                 "/trip-planner/estimate",
                 json={
-                    "car_id": "car-1",
+                    "car_id": "00000000-0000-4000-8000-000000000001",
                     "origin": "Beirut",
                     "destination": "Tripoli",
                     "fuel_price_per_liter_lbp": 100000,
@@ -332,7 +342,7 @@ class TestPostEstimate:
 
             response = client.post(
                 "/trip-planner/estimate",
-                json={"car_id": "car-1", "origin": "A", "destination": "B"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "origin": "A", "destination": "B"},
             )
 
         assert response.status_code == 200
@@ -344,7 +354,7 @@ class TestPostEstimate:
             response = client.post(
                 "/trip-planner/estimate",
                 json={
-                    "car_id": "someone-elses-car",
+                    "car_id": "00000000-0000-4000-8000-000000000002",
                     "origin": "Beirut",
                     "destination": "Tripoli",
                 },
@@ -359,7 +369,7 @@ class TestPostEstimate:
         with patch("app.routers.trip_planner.supabase", mock_supabase):
             response = client.post(
                 "/trip-planner/estimate",
-                json={"car_id": "car-1", "origin": "A", "destination": "B"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "origin": "A", "destination": "B"},
             )
 
         assert response.status_code == 400
@@ -372,7 +382,7 @@ class TestPostEstimate:
         with patch("app.routers.trip_planner.supabase", mock_supabase):
             response = client.post(
                 "/trip-planner/estimate",
-                json={"car_id": "car-1", "origin": "A", "destination": "B"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "origin": "A", "destination": "B"},
             )
 
         assert response.status_code == 400
@@ -392,7 +402,7 @@ class TestPostEstimate:
 
             response = client.post(
                 "/trip-planner/estimate",
-                json={"car_id": "car-1", "origin": "???", "destination": "!!!"},
+                json={"car_id": "00000000-0000-4000-8000-000000000001", "origin": "???", "destination": "!!!"},
             )
 
         assert response.status_code == 400
@@ -400,11 +410,133 @@ class TestPostEstimate:
 
 
 def test_estimate_requires_authentication():
-    # No dependency override here — hits the real get_current_user_id,
-    # which requires a valid Authorization header.
+    # Hits the real get_current_user_id (the autouse logged-in-user fixture is
+    # switched off for this test), which requires a valid Authorization header.
+    app.dependency_overrides.pop(get_current_user_id, None)
     response = client.post(
         "/trip-planner/estimate",
-        json={"car_id": "car-1", "origin": "A", "destination": "B"},
+        json={"car_id": "00000000-0000-4000-8000-000000000001", "origin": "A", "destination": "B"},
     )
 
     assert response.status_code == 401
+
+
+# --- CAR-23: server-side input validation --------------------------------
+# Every field is checked on the server regardless of what the UI allows: ids
+# must be UUIDs (a malformed id is a 422, not a Postgres crash), places are
+# trimmed and 1-300 characters, and a fuel price override is positive,
+# bounded and finite. Rejected input must never reach the DB or Google.
+
+
+class TestEstimateInputValidation:
+    URL = "/trip-planner/estimate"
+    CAR = "00000000-0000-4000-8000-000000000001"
+
+    def setup_method(self):
+        app.dependency_overrides[get_current_user_id] = lambda: "user-123"
+
+    def teardown_method(self):
+        app.dependency_overrides.pop(get_current_user_id, None)
+
+    def _post(self, body=None, raw=None):
+        mock_supabase, captured = _mock_supabase_for_estimate(
+            {"fuel_efficiency": 10, "fuel_type": "Gasoline"}
+        )
+        route = {"distance_km": 10.0, "duration_min": 10, "duration_in_traffic_min": 10}
+        with patch("app.routers.trip_planner.supabase", mock_supabase), patch(
+            "app.routers.trip_planner.get_route_summary", return_value=route
+        ) as mock_route, patch(
+            "app.routers.trip_planner.get_current_fuel_prices",
+            return_value={"95_octane": 90000.0},
+        ):
+            if raw is not None:
+                response = client.post(
+                    self.URL, content=raw, headers={"Content-Type": "application/json"}
+                )
+            else:
+                response = client.post(self.URL, json=body)
+        return response, mock_supabase, captured, mock_route
+
+    def _body(self, **over):
+        body = {"car_id": self.CAR, "origin": "Beirut", "destination": "Tripoli"}
+        body.update(over)
+        return body
+
+    @pytest.mark.parametrize("car_id", ["not-a-uuid", "car-1", "", "1", "' or 1=1 --", "0" * 200],
+        ids=["not-a-uuid", "car-1", "empty", "one", "sql-injection", "200-zeros"])
+    def test_a_malformed_car_id_is_a_422_and_touches_nothing(self, car_id):
+        response, mock_supabase, captured, mock_route = self._post(self._body(car_id=car_id))
+
+        assert response.status_code == 422
+        mock_supabase.table.assert_not_called()
+        mock_route.assert_not_called()
+        assert captured == {}
+
+    @pytest.mark.parametrize("field", ["destination", "origin"])
+    @pytest.mark.parametrize("value", ["", "     ", "\t\n", "X" * 301, "X" * 200_000],
+        ids=["empty", "spaces", "tab-newline", "301-chars", "200k-chars"])
+    def test_blank_or_oversized_places_are_a_422_and_touch_nothing(self, field, value):
+        response, mock_supabase, _, mock_route = self._post(self._body(**{field: value}))
+
+        assert response.status_code == 422
+        mock_supabase.table.assert_not_called()
+        mock_route.assert_not_called()
+
+    def test_a_place_of_exactly_300_characters_is_accepted_and_trimmed(self):
+        response, _, captured, mock_route = self._post(
+            self._body(destination="  " + "D" * 300 + "  ")
+        )
+
+        assert response.status_code == 200
+        assert captured["row"]["destination"] == "D" * 300
+        mock_route.assert_called_once_with("Beirut", "D" * 300)
+
+    @pytest.mark.parametrize("price", [0, -1, -0.01, 10_000_001, 1e300, "abc", None])
+    def test_an_invalid_fuel_price_override_is_a_422(self, price):
+        if price is None:
+            # null just means "use the default price" — accepted.
+            response, *_ = self._post(self._body(fuel_price_per_liter_lbp=None))
+            assert response.status_code == 200
+            return
+        response, mock_supabase, *_ = self._post(self._body(fuel_price_per_liter_lbp=price))
+
+        assert response.status_code == 422
+        mock_supabase.table.assert_not_called()
+
+    @pytest.mark.parametrize("literal", ["Infinity", "-Infinity", "NaN"])
+    def test_non_finite_fuel_prices_are_rejected(self, literal):
+        raw = (
+            '{"car_id": "%s", "origin": "Beirut", "destination": "Tripoli", '
+            '"fuel_price_per_liter_lbp": %s}' % (self.CAR, literal)
+        )
+
+        response, mock_supabase, *_ = self._post(raw=raw)
+
+        assert response.status_code == 422
+        mock_supabase.table.assert_not_called()
+
+    @pytest.mark.parametrize("price", [0.01, 140500, 10_000_000])
+    def test_fuel_prices_inside_the_bounds_are_accepted(self, price):
+        response, *_ = self._post(self._body(fuel_price_per_liter_lbp=price))
+
+        assert response.status_code == 200
+
+
+class TestDirectionsInputValidation:
+    def setup_method(self):
+        app.dependency_overrides[get_current_user_id] = lambda: "user-123"
+
+    def teardown_method(self):
+        app.dependency_overrides.pop(get_current_user_id, None)
+
+    @pytest.mark.parametrize("field", ["destination", "origin"])
+    @pytest.mark.parametrize("value", ["   ", "X" * 301, "X" * 200_000],
+        ids=["spaces", "301-chars", "200k-chars"])
+    def test_blank_or_oversized_places_are_a_422_and_never_reach_google(self, field, value):
+        body = {"origin": "Beirut", "destination": "Tripoli"}
+        body[field] = value
+        with patch("app.routers.trip_planner.get_route_summary") as mock_route:
+            response = client.post("/trip-planner/directions", json=body)
+
+        assert response.status_code == 422
+        mock_route.assert_not_called()

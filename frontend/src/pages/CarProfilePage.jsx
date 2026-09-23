@@ -13,6 +13,12 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
+import {
+  LIMITS,
+  describeActionError,
+  describeSaveError,
+  getCarFieldErrors,
+} from "../lib/limits.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 
 const FUEL_TYPE_OPTIONS = [
@@ -117,6 +123,25 @@ function validate(form) {
     if (capacityError) errors.fuel_tank_capacity_liters = capacityError;
   }
 
+  // Length / range limits shared with the server (lib/limits.js); the checks
+  // above (required, positive) keep their own messages when they already apply.
+  const FIELD_NAME = { engineType: "engine_type", licensePlate: "license_plate", fuelEfficiency: "fuel_efficiency" };
+  const sharedErrors = getCarFieldErrors({
+    make: form.make,
+    model: form.model,
+    engineType: form.engine_type,
+    drivetrain: form.drivetrain,
+    transmission: form.transmission,
+    licensePlate: form.license_plate,
+    vin: form.vin,
+    fuelEfficiency: form.fuel_efficiency,
+    cylinders: form.cylinders,
+  });
+  for (const [field, message] of Object.entries(sharedErrors)) {
+    const formField = FIELD_NAME[field] ?? field;
+    if (!errors[formField]) errors[formField] = message;
+  }
+
   return errors;
 }
 
@@ -204,7 +229,7 @@ function CarProfilePage() {
     try {
       const { error } = await supabase.from("cars").delete().eq("id", car.id);
       if (error) {
-        setDeleteError(error.message);
+        setDeleteError(describeActionError(error, "Could not delete this car. Please try again."));
         return;
       }
       navigate("/dashboard", { replace: true });
@@ -258,7 +283,7 @@ function CarProfilePage() {
         .single();
 
       if (error) {
-        setSaveError(error.message);
+        setSaveError(describeSaveError(error));
         return;
       }
 
@@ -293,7 +318,7 @@ function CarProfilePage() {
           <div className="form-grid">
             <div className="form-field">
               <label htmlFor="make">Make *</label>
-              <input id="make" type="text" value={form.make} onChange={handleChange("make")} />
+              <input id="make" placeholder="e.g. Toyota" type="text" maxLength={LIMITS.MAKE_MODEL} value={form.make} onChange={handleChange("make")} />
               {fieldErrors.make && (
                 <p role="alert" className="auth-form__error">{fieldErrors.make}</p>
               )}
@@ -301,7 +326,7 @@ function CarProfilePage() {
 
             <div className="form-field">
               <label htmlFor="model">Model *</label>
-              <input id="model" type="text" value={form.model} onChange={handleChange("model")} />
+              <input id="model" placeholder="e.g. Corolla" type="text" maxLength={LIMITS.MAKE_MODEL} value={form.model} onChange={handleChange("model")} />
               {fieldErrors.model && (
                 <p role="alert" className="auth-form__error">{fieldErrors.model}</p>
               )}
@@ -309,7 +334,7 @@ function CarProfilePage() {
 
             <div className="form-field">
               <label htmlFor="year">Year *</label>
-              <input id="year" type="number" value={form.year} onChange={handleChange("year")} />
+              <input id="year" placeholder="e.g. 2020" type="number" value={form.year} onChange={handleChange("year")} />
               {fieldErrors.year && (
                 <p role="alert" className="auth-form__error">{fieldErrors.year}</p>
               )}
@@ -319,10 +344,16 @@ function CarProfilePage() {
               <label htmlFor="engine_type">Engine Type</label>
               <input
                 id="engine_type"
-                type="text"
+                placeholder="e.g. 2.5L Inline-4"
+                type="text" maxLength={LIMITS.ENGINE_TYPE}
                 value={form.engine_type}
                 onChange={handleChange("engine_type")}
               />
+              {fieldErrors.engine_type && (
+                <p role="alert" className="auth-form__error">
+                  {fieldErrors.engine_type}
+                </p>
+              )}
             </div>
 
             <div className="form-field">
@@ -348,7 +379,8 @@ function CarProfilePage() {
               <label htmlFor="fuel_efficiency">Fuel Efficiency (km/L)</label>
               <input
                 id="fuel_efficiency"
-                type="number"
+                placeholder="e.g. 11.5"
+                type="number" max={LIMITS.MAX_FUEL_EFFICIENCY}
                 step="0.1"
                 value={form.fuel_efficiency}
                 onChange={handleChange("fuel_efficiency")}
@@ -362,7 +394,8 @@ function CarProfilePage() {
               <label htmlFor="cylinders">Cylinders</label>
               <input
                 id="cylinders"
-                type="number"
+                placeholder="e.g. 4"
+                type="number" max={LIMITS.MAX_CYLINDERS}
                 value={form.cylinders}
                 onChange={handleChange("cylinders")}
               />
@@ -375,6 +408,7 @@ function CarProfilePage() {
               <label htmlFor="fuel_tank_capacity_liters">Fuel Tank Capacity (L)</label>
               <input
                 id="fuel_tank_capacity_liters"
+                placeholder="e.g. 50"
                 type="number"
                 min="1"
                 step="0.1"
@@ -392,35 +426,58 @@ function CarProfilePage() {
               <label htmlFor="drivetrain">Drivetrain</label>
               <input
                 id="drivetrain"
-                type="text"
+                placeholder="e.g. fwd, rwd, awd"
+                type="text" maxLength={LIMITS.DRIVETRAIN}
                 value={form.drivetrain}
                 onChange={handleChange("drivetrain")}
               />
+              {fieldErrors.drivetrain && (
+                <p role="alert" className="auth-form__error">
+                  {fieldErrors.drivetrain}
+                </p>
+              )}
             </div>
 
             <div className="form-field">
               <label htmlFor="transmission">Transmission</label>
               <input
                 id="transmission"
-                type="text"
+                placeholder="e.g. Automatic"
+                type="text" maxLength={LIMITS.TRANSMISSION}
                 value={form.transmission}
                 onChange={handleChange("transmission")}
               />
+              {fieldErrors.transmission && (
+                <p role="alert" className="auth-form__error">
+                  {fieldErrors.transmission}
+                </p>
+              )}
             </div>
 
             <div className="form-field">
               <label htmlFor="license_plate">License Plate</label>
               <input
                 id="license_plate"
-                type="text"
+                placeholder="e.g. 7XYZ890"
+                type="text" maxLength={LIMITS.LICENSE_PLATE}
                 value={form.license_plate}
                 onChange={handleChange("license_plate")}
               />
+              {fieldErrors.license_plate && (
+                <p role="alert" className="auth-form__error">
+                  {fieldErrors.license_plate}
+                </p>
+              )}
             </div>
 
             <div className="form-field">
               <label htmlFor="vin">VIN</label>
-              <input id="vin" type="text" value={form.vin} onChange={handleChange("vin")} />
+              <input id="vin" placeholder="e.g. 4S4BSANC8M3801249" type="text" maxLength={LIMITS.VIN} value={form.vin} onChange={handleChange("vin")} />
+              {fieldErrors.vin && (
+                <p role="alert" className="auth-form__error">
+                  {fieldErrors.vin}
+                </p>
+              )}
             </div>
           </div>
 
@@ -471,7 +528,7 @@ function CarProfilePage() {
               <div>
                 <dt>{label}</dt>
                 <dd>
-                  {car[field] == null || car[field] === "" ? "—" : car[field]}
+                  {car[field] == null || car[field] === "" ? "-" : car[field]}
                 </dd>
               </div>
             </div>

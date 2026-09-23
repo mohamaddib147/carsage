@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
+import { LIMITS, describeAuthError } from "../lib/limits.js";
 
 /**
  * Combined Sign Up / Log In screen. Mode is determined by the route
@@ -37,6 +38,13 @@ function AuthPage() {
       setError("Email and password are required.");
       return;
     }
+    // Supabase Auth enforces the same minimum on the server; catching it here
+    // just saves a round trip. (Not applied to Log In: an existing account
+    // must always be able to try its own password.)
+    if (isSignUp && password.length < LIMITS.PASSWORD_MIN) {
+      setError(`Password must be at least ${LIMITS.PASSWORD_MIN} characters.`);
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -45,7 +53,9 @@ function AuthPage() {
         : await signIn(email.trim(), password);
 
       if (authError) {
-        setError(authError.message);
+        // Supabase's raw wording can be technical (e.g. "Database error
+        // saving new user"), so only known user-meant messages are passed on.
+        setError(describeAuthError(authError));
         return;
       }
 
@@ -104,7 +114,8 @@ function AuthPage() {
               name="email"
               type="email"
               autoComplete="email"
-              placeholder="eleanor@example.com"
+              maxLength={LIMITS.EMAIL}
+              placeholder="e.g. you@example.com"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
             />
@@ -116,7 +127,8 @@ function AuthPage() {
               name="password"
               type="password"
               autoComplete={isSignUp ? "new-password" : "current-password"}
-              placeholder="••••••••"
+              placeholder={isSignUp ? `At least ${LIMITS.PASSWORD_MIN} characters` : "Your password"}
+              maxLength={LIMITS.PASSWORD_MAX}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />
