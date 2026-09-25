@@ -1,0 +1,4 @@
+# Netlify SPA fallback (CAR-28): React Router handles routing client-side,
+# so every path must serve index.html instead of Netlify 404ing on a
+# direct load/refresh of e.g. /dashboard or /cars/mine.
+/*  /index.html  200
