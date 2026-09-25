@@ -67,6 +67,9 @@ const prices = () => [...document.querySelectorAll(".price")].map((node) => node
 const primaries = () => [...new Set([...document.querySelectorAll(".price")].map((node) => node.dataset.primary))];
 
 async function planATrip(user) {
+  // CAR-27: Starting Location is required now (the backend can't route
+  // without an origin), not the "Optional" it used to claim.
+  await user.type(await screen.findByLabelText(/Starting Location/), "Beirut, Lebanon");
   await user.type(await screen.findByLabelText("Destination *"), "Byblos, Lebanon");
   await user.click(screen.getByRole("button", { name: "Plan Trip" }));
   await screen.findByText("Full Tank Cost");
