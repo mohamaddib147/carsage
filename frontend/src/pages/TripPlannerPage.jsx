@@ -72,6 +72,7 @@ import { apiFetch } from "../lib/apiClient.js";
 import { LIMITS, getFuelPriceError } from "../lib/limits.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { getTrafficLevel } from "../lib/trafficLevel.js";
+import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 
 /** Maps a car's general fuel_type onto the price bucket fuel-prices
  * tracks — mirrors app/routers/trip_planner.py's
@@ -109,6 +110,7 @@ function tankInputFor(car) {
  */
 function TripPlannerPage() {
   const { user, session } = useAuth();
+  const { setActiveCarId } = useActiveCar();
 
   const [cars, setCars] = useState([]);
   const [loadingCar, setLoadingCar] = useState(true);
@@ -195,11 +197,13 @@ function TripPlannerPage() {
 
   /** CAR-49: switching cars fully replaces the Tank Size text with the new
    * car's capacity (or empties it) in the same update — never appends to
-   * or keeps anything typed for the previous car.
+   * or keeps anything typed for the previous car. CAR-55: also makes the
+   * picked car the active one for site-wide brand theming.
    * @param {string} carId */
   function handleCarChange(carId) {
     setSelectedCarId(carId);
     setTankSizeInput(tankInputFor(cars.find((car) => car.id === carId)));
+    setActiveCarId(carId);
   }
 
   // Prefills the fuel price for the selected car's fuel grade, but never

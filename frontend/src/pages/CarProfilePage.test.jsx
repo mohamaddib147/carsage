@@ -172,6 +172,27 @@ describe("CarProfilePage — viewing", () => {
   });
 });
 
+describe("CarProfilePage — brand badge (CAR-55)", () => {
+  it("shows a brand badge next to the car name for a recognized make (normal case)", async () => {
+    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+
+    renderAt("/cars/mine");
+
+    expect(await screen.findByLabelText("Toyota brand badge")).toBeInTheDocument();
+  });
+
+  it("shows no brand badge for an unrecognized make (edge case)", async () => {
+    mockCarsTable({
+      selectResult: { data: { ...SAMPLE_CAR, make: "Yugo" }, error: null },
+    });
+
+    renderAt("/cars/mine");
+
+    expect(await screen.findByText("Yugo")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/brand badge/)).not.toBeInTheDocument();
+  });
+});
+
 describe("CarProfilePage — editing", () => {
   it("saves an edited field via an update scoped to the car's id (normal case)", async () => {
     const user = userEvent.setup();

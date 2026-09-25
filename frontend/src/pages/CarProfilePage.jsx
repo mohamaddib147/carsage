@@ -20,6 +20,8 @@ import {
   getCarFieldErrors,
 } from "../lib/limits.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
+import { useActiveCar } from "../theme/ActiveCarContext.jsx";
+import BrandBadge from "../theme/BrandBadge.jsx";
 
 const FUEL_TYPE_OPTIONS = [
   "Gasoline",
@@ -155,6 +157,7 @@ function CarProfilePage() {
   const { carId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { setActiveCarId } = useActiveCar();
 
   const [car, setCar] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -207,6 +210,12 @@ function CarProfilePage() {
       cancelled = true;
     };
   }, [carId, user]);
+
+  // CAR-55: viewing a car's profile makes it the active car for site-wide
+  // brand theming, same as picking it in a car selector elsewhere.
+  useEffect(() => {
+    if (car) setActiveCarId(car.id);
+  }, [car, setActiveCarId]);
 
   function startEditing() {
     setForm(toFormValues(car));
@@ -508,7 +517,7 @@ function CarProfilePage() {
         </span>
         <div className="profile-header__info">
           <h1 className="profile-header__title">
-            {car.make} {car.model}
+            <BrandBadge make={car.make} /> {car.make} {car.model}
           </h1>
           {headerMeta && <p className="profile-header__meta">{headerMeta}</p>}
         </div>

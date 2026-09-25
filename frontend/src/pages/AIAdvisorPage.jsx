@@ -38,6 +38,7 @@ import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
 import { supabase } from "../lib/supabaseClient.js";
+import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 
 const EXAMPLE_PROMPTS = [
   "Squeaking brakes at low speed",
@@ -85,6 +86,7 @@ function youtubeVideoId(videoUrl) {
  */
 function AIAdvisorPage() {
   const { user, session } = useAuth();
+  const { setActiveCarId } = useActiveCar();
 
   const [cars, setCars] = useState([]);
   const [loadingCars, setLoadingCars] = useState(true);
@@ -320,7 +322,10 @@ function AIAdvisorPage() {
             <select
               id="advisorCarId"
               value={selectedCarId}
-              onChange={(event) => setSelectedCarId(event.target.value)}
+              onChange={(event) => {
+                setSelectedCarId(event.target.value);
+                setActiveCarId(event.target.value);
+              }}
             >
               {cars.map((car) => (
                 <option key={car.id} value={car.id}>

@@ -120,6 +120,23 @@ describe("DashboardPage — vehicle summary", () => {
     expect(screen.getByText("2019 Honda Civic")).toBeInTheDocument();
   });
 
+  it("shows a brand badge next to a recognized make, and none for an unrecognized one (CAR-55)", async () => {
+    mockCarsList({
+      data: [
+        { id: "car-1", make: "Ferrari", model: "488 GTB", year: 2019 },
+        { id: "car-2", make: "Yugo", model: "45", year: 1985 },
+      ],
+      error: null,
+    });
+
+    renderDashboard();
+
+    expect(await screen.findByLabelText("Ferrari brand badge")).toBeInTheDocument();
+    expect(screen.getByText("2019 Ferrari 488 GTB")).toBeInTheDocument();
+    expect(screen.getByText("1985 Yugo 45")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Yugo brand badge")).not.toBeInTheDocument();
+  });
+
   it("falls back to the empty state without crashing if loading the cars fails", async () => {
     mockCarsList({ data: null, error: { message: "network error" } });
 

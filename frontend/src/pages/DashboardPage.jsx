@@ -17,6 +17,7 @@ import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { diyFixRate, latestFixedMessage, timeAgo } from "../lib/diySuccess.js";
 import { supabase } from "../lib/supabaseClient.js";
+import BrandBadge from "../theme/BrandBadge.jsx";
 
 /** Builds the "Engine Type • Fuel Type • Plate" meta line, skipping any fields the car doesn't have set. */
 function carMetaLine(car) {
@@ -177,7 +178,7 @@ function DashboardPage() {
                     to={`/cars/${car.id}`}
                     className="dashboard-car-card__title"
                   >
-                    {car.year} {car.make} {car.model}
+                    <BrandBadge make={car.make} /> {car.year} {car.make} {car.model}
                   </Link>
                   {meta && (
                     <p className="dashboard-car-card__meta">{meta}</p>
