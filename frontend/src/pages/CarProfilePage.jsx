@@ -22,6 +22,7 @@ import {
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 import BrandBadge from "../theme/BrandBadge.jsx";
+import { getBrandIcon } from "../theme/carBrandIcons.js";
 
 const FUEL_TYPE_OPTIONS = [
   "Gasoline",
@@ -578,12 +579,16 @@ function CarProfilePage() {
       )}
 
       <div className="profile-header">
-        <span className="profile-header__icon" aria-hidden="true">
-          🚗
+        <span className="profile-header__icon">
+          {getBrandIcon(car.make) ? (
+            <BrandBadge make={car.make} size={32} />
+          ) : (
+            <span aria-hidden="true">🚗</span>
+          )}
         </span>
         <div className="profile-header__info">
           <h1 className="profile-header__title">
-            <BrandBadge make={car.make} /> {car.make} {car.model}
+            {car.make} {car.model}
           </h1>
           {headerMeta && <p className="profile-header__meta">{headerMeta}</p>}
         </div>

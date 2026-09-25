@@ -623,20 +623,26 @@ select:focus {
   box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
 }
 
-/* CAR-55: a small, generic brand-identifying badge (initial letter on a
-   colored circle) — deliberately not an official manufacturer logo. */
+/* CAR-55: a small brand-identifying badge — the manufacturer's real logo
+   mark (.brand-badge--logo) where BrandBadge has one, else a colored
+   circle with the make's initial. Sized via the `size` prop (inline
+   width/height), not here. */
 .brand-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.25em;
-  height: 1.25em;
   border-radius: 50%;
   color: #ffffff;
   font-size: 0.7em;
   font-weight: 700;
   line-height: 1;
   vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.brand-badge--logo {
+  border-radius: 0;
+  vertical-align: -0.2em;
 }
 
 .dashboard-car-card__title {
