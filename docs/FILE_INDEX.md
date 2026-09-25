@@ -36,6 +36,7 @@ Format: `path/to/file — what this file does`
 ## frontend/
 
 - `frontend/README.md` — frontend setup and npm script reference.
+- `frontend/public/_redirects` — CAR-28 deploy prep: Netlify SPA fallback rule (`/*  /index.html  200`) so a direct load or refresh of a client-side route (e.g. `/dashboard`, `/cars/mine`) serves `index.html` instead of Netlify 404ing on it. Copied into `dist/` by Vite automatically; has no effect outside Netlify (other hosts need their own equivalent, e.g. Vercel's rewrites).
 - `frontend/index.html` — Vite HTML entry point, mounts the React app. CAR-51: favicon `<link>` points at `/favicon.svg` (`type="image/svg+xml"`), a copy of `frontend/src/assets/favicon-icon.svg` (icon only, no wordmark/tagline — illegible at 16-32px), kept in sync manually. That file has an embedded `prefers-color-scheme` style so the tab icon auto-switches to white on a dark browser tab.
 - `frontend/index.html.test.js` — CAR-51 guard: the favicon `<link>` points at a file that actually exists in `public/`, its `type` matches that file's real extension, and `public/` has no other favicon-looking file left over that the tag doesn't reference (this originally caught a real bug: the tag pointed at `/favicon.svg` before that file existed).
 - `frontend/package.json` — frontend dependencies and npm scripts (dev, build, test, lint). Adds `recharts` (Fuel Log's price trend chart, mentor feedback, no Jira task).
