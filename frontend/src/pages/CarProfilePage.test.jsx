@@ -43,26 +43,78 @@ vi.mock("../lib/supabaseClient.js", () => ({
   },
 }));
 
-/** Wires supabase.from("cars") to resolve `selectResult` for both the
- * by-id and "mine" query shapes, `updateResult` for update(), and
- * `deleteResult` for delete() (CAR-38). */
-function mockCarsTable({ selectResult, updateResult, deleteResult }) {
-  const maybeSingle = vi.fn().mockResolvedValue(selectResult);
-  const limit = vi.fn(() => ({ maybeSingle }));
-  const order = vi.fn(() => ({ limit }));
-  const eqForSelect = vi.fn(() => ({ maybeSingle, order }));
-  const select = vi.fn(() => ({ eq: eqForSelect }));
+/**
+ * Wires supabase.from("cars") and supabase.from("profiles") for every
+ * shape CarProfilePage now queries: the specific car's full row
+ * (`selectResult`, used for both the by-id and the resolved "mine" car),
+ * the switcher's light-weight car list (`carsList` — defaults to just
+ * `[selectResult.data]` so existing single-car tests need no changes),
+ * the saved default car (`profile`), `updateResult`/`deleteResult` for a
+ * car edit/delete, and `setDefaultResult` for "Set as Default" (CAR-55
+ * follow-up, mentor feedback, no Jira task).
+ */
+function mockCarsTable({
+  selectResult,
+  carsById,
+  carsList,
+  profile = { data: { default_car_id: null }, error: null },
+  updateResult,
+  deleteResult,
+  setDefaultResult,
+}) {
+  const resolvedCarsList = carsList ?? (selectResult?.data ? [selectResult.data] : []);
+  const resolvedCarsById = carsById ?? (selectResult?.data ? { [selectResult.data.id]: selectResult } : {});
+
+  // cars.select("*")...eq("id", x).maybeSingle() — one specific car's full
+  // row, resolved by the requested id when multiple cars are mocked
+  // (carsById), else always `selectResult` (the single-car test shape).
+  const eqForDetail = vi.fn((_column, id) => ({
+    maybeSingle: vi.fn().mockResolvedValue(resolvedCarsById[id] ?? selectResult ?? { data: null, error: null }),
+  }));
+
+  // cars.select("id, make, model, year")...eq(...).order(...) — the switcher list,
+  // awaited directly (no .limit()/.maybeSingle() after .order() for this shape).
+  const orderList = vi.fn().mockResolvedValue({ data: resolvedCarsList, error: null });
+  const eqForList = vi.fn(() => ({ order: orderList }));
+
+  const carsSelect = vi.fn((columns) =>
+    typeof columns === "string" && columns.includes("*")
+      ? { eq: eqForDetail }
+      : { eq: eqForList },
+  );
 
   const single = vi.fn().mockResolvedValue(updateResult ?? { data: null, error: null });
   const selectAfterUpdate = vi.fn(() => ({ single }));
-  const eqForUpdate = vi.fn(() => ({ select: selectAfterUpdate }));
-  const update = vi.fn(() => ({ eq: eqForUpdate }));
+  const eqForCarUpdate = vi.fn(() => ({ select: selectAfterUpdate }));
+  const carsUpdate = vi.fn(() => ({ eq: eqForCarUpdate }));
 
   const eqForDelete = vi.fn().mockResolvedValue(deleteResult ?? { error: null });
   const carDelete = vi.fn(() => ({ eq: eqForDelete }));
 
-  supabase.from.mockReturnValue({ select, update, delete: carDelete });
-  return { eqForSelect, eqForUpdate, update, eqForDelete, delete: carDelete };
+  // profiles.select("default_car_id")...eq("id", x).maybeSingle()
+  const maybeSingleProfile = vi.fn().mockResolvedValue(profile);
+  const eqForProfileSelect = vi.fn(() => ({ maybeSingle: maybeSingleProfile }));
+  const profilesSelect = vi.fn(() => ({ eq: eqForProfileSelect }));
+
+  // profiles.update({ default_car_id }).eq("id", x) — awaited directly.
+  const eqForProfileUpdate = vi.fn().mockResolvedValue(setDefaultResult ?? { data: null, error: null });
+  const profilesUpdate = vi.fn(() => ({ eq: eqForProfileUpdate }));
+
+  supabase.from.mockImplementation((table) => {
+    if (table === "cars") return { select: carsSelect, update: carsUpdate, delete: carDelete };
+    if (table === "profiles") return { select: profilesSelect, update: profilesUpdate };
+    throw new Error(`mockCarsTable: unexpected table "${table}"`);
+  });
+
+  return {
+    eqForDetail,
+    eqForCarUpdate,
+    update: carsUpdate,
+    eqForDelete,
+    delete: carDelete,
+    eqForProfileUpdate,
+    profilesUpdate,
+  };
 }
 
 function renderAt(path) {
@@ -193,10 +245,161 @@ describe("CarProfilePage — brand badge (CAR-55)", () => {
   });
 });
 
+const SECOND_CAR = {
+  id: "car-789",
+  user_id: "user-123",
+  make: "Honda",
+  model: "Civic",
+  year: 2019,
+  fuel_type: "Gasoline",
+};
+
+describe("CarProfilePage — car switcher and default car (mentor feedback, no Jira task)", () => {
+  it("shows no switcher with only one car (normal case)", async () => {
+    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+
+    renderAt("/cars/mine");
+
+    await screen.findByText("Toyota");
+    expect(screen.queryByLabelText("Car")).not.toBeInTheDocument();
+  });
+
+  it("shows a switcher with more than one car, and switching navigates to that car's own profile", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({
+      carsById: {
+        "car-456": { data: SAMPLE_CAR, error: null },
+        "car-789": { data: SECOND_CAR, error: null },
+      },
+      carsList: [SAMPLE_CAR, SECOND_CAR],
+    });
+
+    renderAt("/cars/car-456");
+    await screen.findByText("Toyota");
+
+    const carSelect = screen.getByLabelText("Car");
+    expect(carSelect).toHaveValue("car-456");
+
+    await user.selectOptions(carSelect, "car-789");
+
+    expect(await screen.findByText("Civic")).toBeInTheDocument();
+    expect(screen.queryByText("Corolla")).not.toBeInTheDocument();
+  });
+
+  it("marks the default car in the switcher's options", async () => {
+    mockCarsTable({
+      carsById: {
+        "car-456": { data: SAMPLE_CAR, error: null },
+        "car-789": { data: SECOND_CAR, error: null },
+      },
+      carsList: [SAMPLE_CAR, SECOND_CAR],
+      profile: { data: { default_car_id: "car-789" }, error: null },
+    });
+
+    renderAt("/cars/car-456");
+    await screen.findByText("Toyota");
+
+    expect(
+      screen.getByRole("option", { name: "2019 Honda Civic (Default)" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "2020 Toyota Corolla" })).toBeInTheDocument();
+  });
+
+  it("/cars/mine opens on the saved default car, not the oldest one (normal case)", async () => {
+    mockCarsTable({
+      carsById: {
+        "car-456": { data: SAMPLE_CAR, error: null },
+        "car-789": { data: SECOND_CAR, error: null },
+      },
+      carsList: [SAMPLE_CAR, SECOND_CAR],
+      profile: { data: { default_car_id: "car-789" }, error: null },
+    });
+
+    renderAt("/cars/mine");
+
+    expect(await screen.findByText("Civic")).toBeInTheDocument();
+    expect(screen.queryByText("Corolla")).not.toBeInTheDocument();
+  });
+
+  it("/cars/mine falls back to the oldest car when no default is set (edge case)", async () => {
+    mockCarsTable({
+      carsById: {
+        "car-456": { data: SAMPLE_CAR, error: null },
+        "car-789": { data: SECOND_CAR, error: null },
+      },
+      carsList: [SAMPLE_CAR, SECOND_CAR],
+      profile: { data: { default_car_id: null }, error: null },
+    });
+
+    renderAt("/cars/mine");
+
+    expect(await screen.findByText("Corolla")).toBeInTheDocument();
+  });
+
+  it("shows a 'Set as Default' button for a non-default car, and it saves and flips to the '✓ Default car' badge", async () => {
+    const user = userEvent.setup();
+    const { profilesUpdate, eqForProfileUpdate } = mockCarsTable({
+      carsById: {
+        "car-456": { data: SAMPLE_CAR, error: null },
+        "car-789": { data: SECOND_CAR, error: null },
+      },
+      carsList: [SAMPLE_CAR, SECOND_CAR],
+      profile: { data: { default_car_id: "car-789" }, error: null },
+    });
+
+    renderAt("/cars/car-456");
+    await screen.findByText("Toyota");
+
+    expect(screen.queryByText("✓ Default car")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Set as Default" }));
+
+    expect(await screen.findByText("✓ Default car")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Set as Default" })).not.toBeInTheDocument();
+    expect(profilesUpdate).toHaveBeenCalledWith({ default_car_id: "car-456" });
+    expect(eqForProfileUpdate).toHaveBeenCalledWith("id", "user-123");
+  });
+
+  it("shows the '✓ Default car' badge (no button) for the car that's already the default", async () => {
+    mockCarsTable({
+      carsById: {
+        "car-456": { data: SAMPLE_CAR, error: null },
+        "car-789": { data: SECOND_CAR, error: null },
+      },
+      carsList: [SAMPLE_CAR, SECOND_CAR],
+      profile: { data: { default_car_id: "car-456" }, error: null },
+    });
+
+    renderAt("/cars/car-456");
+
+    expect(await screen.findByText("✓ Default car")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Set as Default" })).not.toBeInTheDocument();
+  });
+
+  it("shows a plain error and keeps the button if saving the default fails", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({
+      carsById: {
+        "car-456": { data: SAMPLE_CAR, error: null },
+        "car-789": { data: SECOND_CAR, error: null },
+      },
+      carsList: [SAMPLE_CAR, SECOND_CAR],
+      profile: { data: { default_car_id: "car-789" }, error: null },
+      setDefaultResult: { data: null, error: { message: "network error" } },
+    });
+
+    renderAt("/cars/car-456");
+    await screen.findByText("Toyota");
+    await user.click(screen.getByRole("button", { name: "Set as Default" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save that, try again.");
+    expect(screen.getByRole("button", { name: "Set as Default" })).toBeInTheDocument();
+  });
+});
+
 describe("CarProfilePage — editing", () => {
   it("saves an edited field via an update scoped to the car's id (normal case)", async () => {
     const user = userEvent.setup();
-    const { eqForUpdate, update } = mockCarsTable({
+    const { eqForCarUpdate, update } = mockCarsTable({
       selectResult: { data: SAMPLE_CAR, error: null },
       updateResult: {
         data: { ...SAMPLE_CAR, model: "Camry" },
@@ -215,7 +418,7 @@ describe("CarProfilePage — editing", () => {
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ model: "Camry", make: "Toyota" }),
     );
-    expect(eqForUpdate).toHaveBeenCalledWith("id", "car-456");
+    expect(eqForCarUpdate).toHaveBeenCalledWith("id", "car-456");
     await waitFor(() => expect(screen.getByText("Camry")).toBeInTheDocument());
   });
 

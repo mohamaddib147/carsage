@@ -416,6 +416,42 @@ select:focus {
   max-width: 720px;
 }
 
+/* Mentor feedback (no Jira task): the car switcher and "default car"
+   control on Car Profile. */
+.car-profile__switcher {
+  max-width: 320px;
+  margin-bottom: calc(var(--spacing-unit) * 2);
+}
+
+.car-profile__default {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--spacing-unit) * 0.5);
+}
+
+.car-profile__default-badge {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  white-space: nowrap;
+}
+
+.car-profile__default-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  padding: calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 1.5);
+  font-size: 0.875rem;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.car-profile__default-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
 .profile-header {
   display: flex;
   align-items: center;
