@@ -21,8 +21,7 @@ import {
 } from "../lib/limits.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
-import BrandBadge from "../theme/BrandBadge.jsx";
-import { getBrandIcon } from "../theme/carBrandIcons.js";
+import BrandBadge, { hasBrandBadge } from "../theme/BrandBadge.jsx";
 
 const FUEL_TYPE_OPTIONS = [
   "Gasoline",
@@ -580,7 +579,7 @@ function CarProfilePage() {
 
       <div className="profile-header">
         <span className="profile-header__icon">
-          {getBrandIcon(car.make) ? (
+          {hasBrandBadge(car.make) ? (
             <BrandBadge make={car.make} size={32} />
           ) : (
             <span aria-hidden="true">🚗</span>

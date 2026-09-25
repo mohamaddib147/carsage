@@ -1,16 +1,35 @@
 // Tests for the small brand-identifying badge (CAR-55; CAR-55 follow-up,
-// mentor feedback, no Jira task): shows the real logo mark for a make
-// simple-icons carries (carBrandIcons.js), falls back to a colored
-// initial for a mapped make it doesn't carry (Mercedes-Benz) or renders
-// nothing for an unmapped/missing make (never implying a false or
-// missing match), and the logo is always drawn from the bundled SVG path
-// data — never an <img> pointing at a separate asset file.
+// mentor feedback, no Jira task): shows a user-supplied raster logo for
+// Mercedes-Benz, the real SVG logo mark for a make simple-icons carries
+// (carBrandIcons.js), falls back to a colored initial for a mapped make
+// with neither, or renders nothing for an unmapped/missing make (never
+// implying a false or missing match). Also tests hasBrandBadge(), the
+// helper a caller uses to know whether BrandBadge will render anything.
 
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import BrandBadge from "./BrandBadge.jsx";
+import BrandBadge, { hasBrandBadge } from "./BrandBadge.jsx";
 
-describe("BrandBadge — real logo marks", () => {
+describe("BrandBadge — user-supplied raster logo (Mercedes-Benz)", () => {
+  it("shows the Mercedes-Benz logo image (normal case)", () => {
+    render(<BrandBadge make="Mercedes-Benz" />);
+
+    const badge = screen.getByLabelText("Mercedes-Benz brand badge");
+    expect(badge.tagName).toBe("IMG");
+    expect(badge).toHaveAttribute("src");
+    expect(badge.getAttribute("src")).toMatch(/Mercedes-Benz-Logo/);
+  });
+
+  it("sizes the logo from the size prop", () => {
+    render(<BrandBadge make="Mercedes-Benz" size={40} />);
+
+    const badge = screen.getByLabelText("Mercedes-Benz brand badge");
+    expect(badge).toHaveAttribute("width", "40");
+    expect(badge).toHaveAttribute("height", "40");
+  });
+});
+
+describe("BrandBadge — real SVG logo marks (simple-icons)", () => {
   it("shows the real logo mark for a make simple-icons carries (normal case)", () => {
     render(<BrandBadge make="Ferrari" />);
 
@@ -26,25 +45,6 @@ describe("BrandBadge — real logo marks", () => {
     expect(badge).toHaveAttribute("width", "40");
     expect(badge).toHaveAttribute("height", "40");
   });
-
-  it("never renders an <img> — the logo is drawn from bundled SVG path data, not a separate asset file", () => {
-    const { container } = render(<BrandBadge make="Toyota" />);
-    // The SVG itself carries role="img" for accessibility (an <img>-role
-    // element is expected here) — what must never appear is an actual
-    // <img> tag pointing at a separate logo asset file.
-    expect(container.querySelector("img")).toBeNull();
-  });
-});
-
-describe("BrandBadge — fallback for a mapped make without a logo mark", () => {
-  it("shows the brand's first letter on its theme color for Mercedes-Benz (simple-icons has no Mercedes-Benz mark)", () => {
-    render(<BrandBadge make="Mercedes-Benz" />);
-
-    const badge = screen.getByLabelText("Mercedes-Benz brand badge");
-    expect(badge.tagName).not.toBe("svg");
-    expect(badge).toHaveTextContent("M");
-    expect(badge).toHaveStyle({ backgroundColor: "#1b1b1b" });
-  });
 });
 
 describe("BrandBadge — unrecognized or missing make", () => {
@@ -56,5 +56,18 @@ describe("BrandBadge — unrecognized or missing make", () => {
   it("renders nothing for a missing make (edge case)", () => {
     const { container } = render(<BrandBadge make={null} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("hasBrandBadge", () => {
+  it("is true for a make with a raster logo, an SVG logo, or neither but a mapped theme", () => {
+    expect(hasBrandBadge("Mercedes-Benz")).toBe(true);
+    expect(hasBrandBadge("Ferrari")).toBe(true);
+  });
+
+  it("is false for an unrecognized or missing make", () => {
+    expect(hasBrandBadge("Yugo")).toBe(false);
+    expect(hasBrandBadge(null)).toBe(false);
+    expect(hasBrandBadge("")).toBe(false);
   });
 });
