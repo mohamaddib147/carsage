@@ -44,6 +44,7 @@ import {
   sortFillUps,
   todayLocal,
 } from "../lib/fuelLog.js";
+import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 
 const ENTRY_COLUMNS = "id, filled_at, liters, cost_amount, cost_currency, created_at";
 
@@ -78,6 +79,7 @@ function carLabel(car) {
  */
 function FuelLogPage() {
   const { user } = useAuth();
+  const { setActiveCarId } = useActiveCar();
 
   const [cars, setCars] = useState([]);
   const [loadingCars, setLoadingCars] = useState(true);
@@ -166,12 +168,15 @@ function FuelLogPage() {
     };
   }, [selectedCarId]);
 
-  /** Switching cars drops any message about the previous car's form; what was typed stays. */
+  /** Switching cars drops any message about the previous car's form; what was
+   * typed stays. CAR-55: also makes the picked car the active one for
+   * site-wide brand theming. */
   function handleCarChange(carId) {
     setSelectedCarId(carId);
     setFieldErrors({});
     setSaveError("");
     setSaved(false);
+    setActiveCarId(carId);
   }
 
   /** @param {import('react').FormEvent} event */

@@ -72,6 +72,7 @@ import { apiFetch } from "../lib/apiClient.js";
 import { LIMITS, getFuelPriceError } from "../lib/limits.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { getTrafficLevel } from "../lib/trafficLevel.js";
+import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 
 /** Maps a car's general fuel_type onto the price bucket fuel-prices
  * tracks — mirrors app/routers/trip_planner.py's
@@ -99,14 +100,17 @@ function tankInputFor(car) {
 }
 
 /**
- * Trip Planner screen: enter an (optional) starting location and a
- * (required) destination, call the FastAPI cost-estimate endpoint for
+ * Trip Planner screen: enter a starting location and a destination (both
+ * required — the backend can't calculate a route without an origin, since
+ * there's no saved default location on a user's profile yet), call the
+ * FastAPI cost-estimate endpoint for
  * the user's car, and show the resulting fuel cost, duration, and
  * distance — or a clear error if the trip couldn't be planned.
  * @returns {JSX.Element}
  */
 function TripPlannerPage() {
   const { user, session } = useAuth();
+  const { setActiveCarId } = useActiveCar();
 
   const [cars, setCars] = useState([]);
   const [loadingCar, setLoadingCar] = useState(true);
@@ -115,6 +119,7 @@ function TripPlannerPage() {
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
   const [destinationError, setDestinationError] = useState("");
+  const [originError, setOriginError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
@@ -192,11 +197,13 @@ function TripPlannerPage() {
 
   /** CAR-49: switching cars fully replaces the Tank Size text with the new
    * car's capacity (or empties it) in the same update — never appends to
-   * or keeps anything typed for the previous car.
+   * or keeps anything typed for the previous car. CAR-55: also makes the
+   * picked car the active one for site-wide brand theming.
    * @param {string} carId */
   function handleCarChange(carId) {
     setSelectedCarId(carId);
     setTankSizeInput(tankInputFor(cars.find((car) => car.id === carId)));
+    setActiveCarId(carId);
   }
 
   // Prefills the fuel price for the selected car's fuel grade, but never
@@ -220,6 +227,15 @@ function TripPlannerPage() {
       return;
     }
     setDestinationError("");
+
+    // CAR-27: the backend has no saved default location on a user's
+    // profile yet, so it can't calculate a route without an explicit
+    // origin — validate that here instead of letting the request 400.
+    if (!origin.trim()) {
+      setOriginError("Starting location is required.");
+      return;
+    }
+    setOriginError("");
 
     // Same 1 - 10,000,000 bound the server enforces; show it instead of sending.
     if (getFuelPriceError(fuelPriceInput)) {
@@ -324,9 +340,7 @@ function TripPlannerPage() {
           )}
 
           <div className="form-field">
-            <label htmlFor="origin">
-              Starting Location <span className="form-field__hint">Optional</span>
-            </label>
+            <label htmlFor="origin">Starting Location *</label>
             <div className="route-input-row">
               <span
                 className="route-input-row__marker route-input-row__marker--origin"
@@ -340,6 +354,11 @@ function TripPlannerPage() {
                 onChange={setOrigin}
               />
             </div>
+            {originError && (
+              <p role="alert" className="auth-form__error">
+                {originError}
+              </p>
+            )}
           </div>
 
           <div className="form-field">

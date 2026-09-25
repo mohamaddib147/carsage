@@ -4,12 +4,16 @@
 // a selector (same pattern as Trip Planner's CAR-37 fix) so the right
 // car's context is sent — picking the wrong car silently here would be
 // the same class of bug CAR-37 fixed.
-// Conversation persistence (CAR-21): on mount, loads the user's most
+// Conversation persistence (CAR-21): loads the selected car's most
 // recent advisor_conversations row (if any) and its advisor_messages,
-// hydrating the transcript so returning to this screen picks up where
-// you left off. The backend creates a new conversation on the first
-// message (returning its id) and every later message in the same page
-// session passes that id back to append to it. Reading history is done
+// hydrating the transcript so returning to this screen (or switching
+// cars) picks up where you left off with that specific car — history
+// is scoped by car_id, not just user_id, so switching the car selector
+// re-loads that car's own thread instead of always showing whichever
+// conversation happens to be most recent overall. The backend creates
+// a new conversation tied to the selected car on the first message
+// (returning its id) and every later message in the same page session
+// passes that id back to append to it. Reading history is done
 // directly against Supabase (RLS-protected, same pattern as the
 // Dashboard's car list) rather than via a backend endpoint, since it's
 // a plain read already scoped to the caller.
@@ -34,6 +38,7 @@ import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
 import { supabase } from "../lib/supabaseClient.js";
+import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 
 const EXAMPLE_PROMPTS = [
   "Squeaking brakes at low speed",
@@ -81,6 +86,7 @@ function youtubeVideoId(videoUrl) {
  */
 function AIAdvisorPage() {
   const { user, session } = useAuth();
+  const { setActiveCarId } = useActiveCar();
 
   const [cars, setCars] = useState([]);
   const [loadingCars, setLoadingCars] = useState(true);
@@ -123,16 +129,20 @@ function AIAdvisorPage() {
   }, [user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !selectedCarId) return;
 
     let cancelled = false;
 
     async function loadHistory() {
       setLoadingHistory(true);
+      setMessages([]);
+      conversationIdRef.current = null;
+
       const { data: conversation } = await supabase
         .from("advisor_conversations")
         .select("id")
         .eq("user_id", user.id)
+        .eq("car_id", selectedCarId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -177,7 +187,7 @@ function AIAdvisorPage() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, selectedCarId]);
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView?.({ behavior: "smooth" });
@@ -280,7 +290,7 @@ function AIAdvisorPage() {
     );
   }
 
-  if (loadingCars || loadingHistory) {
+  if (loadingCars) {
     return <PageShell title="AI Advisor" description="Loading your car..." />;
   }
 
@@ -312,7 +322,10 @@ function AIAdvisorPage() {
             <select
               id="advisorCarId"
               value={selectedCarId}
-              onChange={(event) => setSelectedCarId(event.target.value)}
+              onChange={(event) => {
+                setSelectedCarId(event.target.value);
+                setActiveCarId(event.target.value);
+              }}
             >
               {cars.map((car) => (
                 <option key={car.id} value={car.id}>
@@ -324,7 +337,11 @@ function AIAdvisorPage() {
         )}
       </div>
 
-      {messages.length === 0 && (
+      {loadingHistory && (
+        <p className="advisor-header__subtitle">Loading this car&apos;s conversation...</p>
+      )}
+
+      {!loadingHistory && messages.length === 0 && (
         <div className="advisor-welcome">
           <p>
             Describe any noise, warning light, or issue in plain language.

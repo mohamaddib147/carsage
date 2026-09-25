@@ -1,0 +1,26 @@
+-- Default car (mentor feedback, no Jira task): lets a user pick which of their
+-- cars Car Profile shows by default (previously always the oldest one, with no
+-- way to change it) and adds a car switcher there to browse the rest. Applied
+-- to the live Supabase project via the MCP connector; kept here so the
+-- database can be recreated from this repo. Everything below the line is the
+-- migration's SQL, verbatim. Apply the files in this folder in filename order
+-- -- see README.md, "Database setup".
+--
+-- Design notes:
+--  * default_car_id is nullable: null means "no explicit default yet", and the
+--    app falls back to the oldest car by created_at, same as before this
+--    feature existed.
+--  * ON DELETE SET NULL: deleting the currently-default car must not leave a
+--    dangling reference or break loading the profile; it just falls back to
+--    the oldest remaining car.
+--  * No same-owner constraint on the FK beyond RLS: profiles.default_car_id
+--    could in principle be set to another user's car id via a raw API call,
+--    but that's harmless — fetching that car is separately RLS-scoped to its
+--    own owner (public.cars' SELECT policy), so it would just resolve to
+--    nothing, never leak another user's data. profiles already has a full
+--    table-level UPDATE grant to `authenticated` (unchanged, existing
+--    columns like email/full_name already relied on it) and an UPDATE RLS
+--    policy scoped to `auth.uid() = id`, so no new grant or policy is needed.
+-- ----------------------------------------------------------------------------------
+alter table public.profiles
+  add column default_car_id uuid references public.cars (id) on delete set null;
