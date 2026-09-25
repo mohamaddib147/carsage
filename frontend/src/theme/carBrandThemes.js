@@ -21,18 +21,23 @@ export const DEFAULT_THEME = {
  * make (lowercased) -> palette. Each palette only overrides the same four
  * tokens as DEFAULT_THEME, so it can never leave a partially-themed page.
  */
+// Only Ferrari is a red-primary theme — Toyota and Honda are also
+// red-logo brands in real life, but three near-identical reds in a row
+// read as "everything is just red" rather than as distinct brands, so
+// their primary color leans into a different (still brand-plausible)
+// tone instead, with a small red accent as the only nod to the real logo.
 const BRAND_THEMES = {
   toyota: {
-    "--color-primary": "#c8102e",
-    "--color-primary-hover": "#970c22",
-    "--color-accent": "#1a1a1a",
-    "--color-background": "#fbeaec",
+    "--color-primary": "#2f3640",
+    "--color-primary-hover": "#1e2229",
+    "--color-accent": "#c8102e",
+    "--color-background": "#f2f3f4",
   },
   honda: {
-    "--color-primary": "#e4002b",
-    "--color-primary-hover": "#b40022",
-    "--color-accent": "#4d4d4d",
-    "--color-background": "#fdecec",
+    "--color-primary": "#37474f",
+    "--color-primary-hover": "#263238",
+    "--color-accent": "#e4002b",
+    "--color-background": "#eff2f3",
   },
   "mercedes-benz": {
     "--color-primary": "#1b1b1b",
@@ -53,8 +58,8 @@ const BRAND_THEMES = {
     "--color-background": "#eaf4fb",
   },
   audi: {
-    "--color-primary": "#333333",
-    "--color-primary-hover": "#1a1a1a",
+    "--color-primary": "#4a4a4a",
+    "--color-primary-hover": "#333333",
     "--color-accent": "#bb0a30",
     "--color-background": "#f2f2f2",
   },
@@ -65,10 +70,10 @@ const BRAND_THEMES = {
     "--color-background": "#eaf0fb",
   },
   tesla: {
-    "--color-primary": "#cc0000",
-    "--color-primary-hover": "#990000",
-    "--color-accent": "#171a20",
-    "--color-background": "#fbeceb",
+    "--color-primary": "#171a20",
+    "--color-primary-hover": "#000000",
+    "--color-accent": "#e82127",
+    "--color-background": "#f4f4f4",
   },
 };
 
