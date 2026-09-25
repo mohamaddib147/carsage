@@ -7,6 +7,7 @@
 // works safely without a surrounding provider.
 
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
@@ -39,12 +40,29 @@ function mockCars(cars) {
   });
 }
 
+// Rendered at /dashboard (a themed page, not one of UNTHEMED_PATHS) so
+// existing tests can observe the theme actually being applied; the
+// untheming behavior itself has its own dedicated tests below.
 function wrapper({ children }) {
   return (
-    <AuthProvider>
-      <ActiveCarProvider>{children}</ActiveCarProvider>
-    </AuthProvider>
+    <MemoryRouter initialEntries={["/dashboard"]}>
+      <AuthProvider>
+        <ActiveCarProvider>{children}</ActiveCarProvider>
+      </AuthProvider>
+    </MemoryRouter>
   );
+}
+
+function wrapperAt(path) {
+  return function AtPathWrapper({ children }) {
+    return (
+      <MemoryRouter initialEntries={[path]}>
+        <AuthProvider>
+          <ActiveCarProvider>{children}</ActiveCarProvider>
+        </AuthProvider>
+      </MemoryRouter>
+    );
+  };
 }
 
 beforeEach(() => {
@@ -115,6 +133,32 @@ describe("ActiveCarProvider", () => {
 
     const second = renderHook(() => useActiveCar(), { wrapper });
     await waitFor(() => expect(second.result.current.activeCarId).toBe("car-2"));
+  });
+});
+
+describe("ActiveCarProvider — public/marketing pages keep the default look", () => {
+  it.each(["/", "/login", "/signup", "/terms", "/privacy"])(
+    "does not apply the active car's brand theme on %s, even with a mapped active car",
+    async (path) => {
+      mockCars([{ id: "car-1", make: "Ferrari" }]);
+      const { result } = renderHook(() => useActiveCar(), { wrapper: wrapperAt(path) });
+
+      await waitFor(() => expect(result.current.activeCarId).toBe("car-1"));
+      // The hook's own `theme` still reflects the active car (Trip Planner,
+      // Car Profile etc. read it too) — only the document root is spared.
+      expect(result.current.theme["--color-primary"]).toBe("#d40000");
+      expect(document.documentElement.style.getPropertyValue("--color-primary")).toBe(
+        DEFAULT_THEME["--color-primary"],
+      );
+    },
+  );
+
+  it("still applies the brand theme on a themed page like /dashboard", async () => {
+    mockCars([{ id: "car-1", make: "Ferrari" }]);
+    const { result } = renderHook(() => useActiveCar(), { wrapper: wrapperAt("/dashboard") });
+
+    await waitFor(() => expect(result.current.activeCarId).toBe("car-1"));
+    expect(document.documentElement.style.getPropertyValue("--color-primary")).toBe("#d40000");
   });
 });
 

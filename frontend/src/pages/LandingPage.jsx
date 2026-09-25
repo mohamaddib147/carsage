@@ -120,7 +120,7 @@ function LandingPage() {
 
       <section className="landing-hero">
         <div className="landing-hero__glow" aria-hidden="true" />
-        <Logo size={64} className="landing-hero__logo" />
+        <Logo size={104} className="landing-hero__logo" />
         <div className="landing-eyebrow">
           <span aria-hidden="true">✦</span>
           <span>The Mindful Driver&apos;s Co-Pilot</span>

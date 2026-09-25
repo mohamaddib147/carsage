@@ -20,6 +20,7 @@
 // value like an un-provided currency would be.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { DEFAULT_THEME, getBrandTheme } from "./carBrandThemes.js";
@@ -27,6 +28,12 @@ import { DEFAULT_THEME, getBrandTheme } from "./carBrandThemes.js";
 const ActiveCarContext = createContext(undefined);
 
 const STORAGE_PREFIX = "carsage.activeCarId.";
+
+// Public/marketing pages keep CarSage's own brand look even when logged in
+// (e.g. clicking the header logo takes a signed-in user back to "/") — a
+// car's brand theme belongs on the screens about that car, not on
+// CarSage's own landing/auth/legal pages.
+const UNTHEMED_PATHS = new Set(["/", "/login", "/signup", "/terms", "/privacy"]);
 
 /** The browser's localStorage, or null where it's blocked. Never throws. */
 function getStorage() {
@@ -63,6 +70,7 @@ function storeActiveCarId(userId, carId) {
  */
 export function ActiveCarProvider({ children }) {
   const { user } = useAuth();
+  const { pathname } = useLocation();
   const [cars, setCars] = useState([]);
   const [activeCarId, setActiveCarIdState] = useState(null);
 
@@ -112,12 +120,15 @@ export function ActiveCarProvider({ children }) {
 
   const theme = useMemo(() => getBrandTheme(activeCar?.make), [activeCar]);
 
-  // Applies the active theme to the document root. Resets to the default
+  // Applies the active theme to the document root, except on CarSage's own
+  // public/marketing pages (UNTHEMED_PATHS), which keep the default look
+  // even while a brand theme is active elsewhere. Resets to the default
   // theme on unmount so a page that renders without this provider (a
   // logged-out screen, or a test) never inherits a stale brand theme.
   useEffect(() => {
     const root = document.documentElement;
-    for (const [property, value] of Object.entries(theme)) {
+    const effectiveTheme = UNTHEMED_PATHS.has(pathname) ? DEFAULT_THEME : theme;
+    for (const [property, value] of Object.entries(effectiveTheme)) {
       root.style.setProperty(property, value);
     }
     return () => {
@@ -125,7 +136,7 @@ export function ActiveCarProvider({ children }) {
         root.style.removeProperty(property);
       }
     };
-  }, [theme]);
+  }, [theme, pathname]);
 
   const value = useMemo(
     () => ({ cars, activeCarId, setActiveCarId, activeCar, theme }),
