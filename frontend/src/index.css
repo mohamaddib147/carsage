@@ -416,6 +416,42 @@ select:focus {
   max-width: 720px;
 }
 
+/* Mentor feedback (no Jira task): the car switcher and "default car"
+   control on Car Profile. */
+.car-profile__switcher {
+  max-width: 320px;
+  margin-bottom: calc(var(--spacing-unit) * 2);
+}
+
+.car-profile__default {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--spacing-unit) * 0.5);
+}
+
+.car-profile__default-badge {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  white-space: nowrap;
+}
+
+.car-profile__default-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  padding: calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 1.5);
+  font-size: 0.875rem;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.car-profile__default-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
 .profile-header {
   display: flex;
   align-items: center;
@@ -585,6 +621,28 @@ select:focus {
   background-color: var(--color-surface);
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+}
+
+/* CAR-55: a small brand-identifying badge — the manufacturer's real logo
+   mark (.brand-badge--logo) where BrandBadge has one, else a colored
+   circle with the make's initial. Sized via the `size` prop (inline
+   width/height), not here. */
+.brand-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 0.7em;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.brand-badge--logo {
+  border-radius: 0;
+  vertical-align: -0.2em;
 }
 
 .dashboard-car-card__title {

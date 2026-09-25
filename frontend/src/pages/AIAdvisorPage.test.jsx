@@ -5,8 +5,11 @@
 // car, shown/switchable with multiple), the clear-error case, and the
 // CAR-21 history reload (a past conversation's messages hydrate the
 // transcript on mount, and a reply's conversation_id is reused on the
-// next send). The Supabase client and the backend apiFetch call are
-// both mocked so no real network calls happen.
+// next send). Also covers the fix for switching cars always showing the
+// same conversation: history is now loaded per selected car_id (not
+// just the most recent conversation overall), so switching the car
+// selector reloads that car's own thread. The Supabase client and the
+// backend apiFetch call are both mocked so no real network calls happen.
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -38,27 +41,47 @@ vi.mock("../lib/apiClient.js", () => ({
 
 /**
  * Wires supabase.from(...) for all three tables AIAdvisorPage reads on
- * mount: "cars" (same shape Trip Planner's CAR-37 uses), and CAR-21's
- * history reload — "advisor_conversations" (most recent conversation,
- * or none) and "advisor_messages" (that conversation's rows, if any) —
- * plus the DIY fix-feedback update ("Did this fix it?", mentor feedback,
- * no Jira task). Returns `updateCalls`, one {id, marked_fixed} per update.
+ * mount/car-switch: "cars" (same shape Trip Planner's CAR-37 uses), and
+ * CAR-21's history reload — "advisor_conversations" (the *selected car's*
+ * most recent conversation, or none) and "advisor_messages" (that
+ * conversation's rows, if any) — plus the DIY fix-feedback update ("Did
+ * this fix it?", mentor feedback, no Jira task). Returns `updateCalls`,
+ * one {id, marked_fixed} per update.
+ *
+ * `conversation`/`messages` cover the single-car-history case. For
+ * multi-car history (verifying switching cars loads that car's own
+ * thread, not always the same one), pass `conversationsByCar`: a map of
+ * car id -> { conversation, messages }.
  */
-function mockSupabaseTables({ cars, conversation = null, messages = [], updateError = null }) {
+function mockSupabaseTables({
+  cars,
+  conversation = null,
+  messages = [],
+  conversationsByCar = null,
+  updateError = null,
+}) {
   const carsOrder = vi.fn().mockResolvedValue({ data: cars, error: null });
   const carsEq = vi.fn(() => ({ order: carsOrder }));
   const carsSelect = vi.fn(() => ({ eq: carsEq }));
 
-  const conversationMaybeSingle = vi
-    .fn()
-    .mockResolvedValue({ data: conversation, error: null });
-  const conversationLimit = vi.fn(() => ({ maybeSingle: conversationMaybeSingle }));
-  const conversationOrder = vi.fn(() => ({ limit: conversationLimit }));
-  const conversationEq = vi.fn(() => ({ order: conversationOrder }));
-  const conversationSelect = vi.fn(() => ({ eq: conversationEq }));
+  const conversationEq2 = vi.fn((_column, carId) => {
+    const conv = conversationsByCar ? (conversationsByCar[carId]?.conversation ?? null) : conversation;
+    const maybeSingle = vi.fn().mockResolvedValue({ data: conv, error: null });
+    return { order: vi.fn(() => ({ limit: vi.fn(() => ({ maybeSingle })) })) };
+  });
+  const conversationEq1 = vi.fn(() => ({ eq: conversationEq2 }));
+  const conversationSelect = vi.fn(() => ({ eq: conversationEq1 }));
 
-  const messagesOrder = vi.fn().mockResolvedValue({ data: messages, error: null });
-  const messagesEq = vi.fn(() => ({ order: messagesOrder }));
+  const messagesEq = vi.fn((_column, conversationId) => {
+    let rows = messages;
+    if (conversationsByCar) {
+      const entry = Object.values(conversationsByCar).find(
+        (candidate) => candidate.conversation?.id === conversationId,
+      );
+      rows = entry?.messages ?? [];
+    }
+    return { order: vi.fn().mockResolvedValue({ data: rows, error: null }) };
+  });
   const messagesSelect = vi.fn(() => ({ eq: messagesEq }));
 
   const updateCalls = [];
@@ -277,6 +300,71 @@ describe("AIAdvisorPage — car selector", () => {
         body: expect.objectContaining({ car_id: "car-2" }),
       }),
     );
+  });
+
+  it("loads each car's own conversation history when switching, instead of always showing the same one", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({
+      cars: [
+        { id: "car-1", make: "Toyota", model: "Corolla", year: 2020 },
+        { id: "car-2", make: "Honda", model: "CR-V", year: 2018 },
+      ],
+      conversationsByCar: {
+        "car-1": {
+          conversation: { id: "conv-corolla" },
+          messages: [
+            { sender: "user", message_text: "Corolla tire pressure light", recommendation: null },
+            { sender: "ai", message_text: "Check the tires.", recommendation: "diy" },
+          ],
+        },
+        "car-2": {
+          conversation: { id: "conv-crv" },
+          messages: [
+            { sender: "user", message_text: "CR-V AC blowing warm air", recommendation: null },
+            { sender: "ai", message_text: "See a mechanic.", recommendation: "mechanic" },
+          ],
+        },
+      },
+    });
+
+    renderPage();
+    expect(await screen.findByText("Corolla tire pressure light")).toBeInTheDocument();
+    expect(screen.queryByText("CR-V AC blowing warm air")).not.toBeInTheDocument();
+
+    await user.selectOptions(await screen.findByLabelText("Car"), "car-2");
+
+    expect(await screen.findByText("CR-V AC blowing warm air")).toBeInTheDocument();
+    expect(screen.queryByText("Corolla tire pressure light")).not.toBeInTheDocument();
+  });
+
+  it("shows the welcome state for a car with no conversation yet, after switching from one that has history", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({
+      cars: [
+        { id: "car-1", make: "Toyota", model: "Corolla", year: 2020 },
+        { id: "car-2", make: "Honda", model: "CR-V", year: 2018 },
+      ],
+      conversationsByCar: {
+        "car-1": {
+          conversation: { id: "conv-corolla" },
+          messages: [
+            { sender: "user", message_text: "Corolla tire pressure light", recommendation: null },
+            { sender: "ai", message_text: "Check the tires.", recommendation: "diy" },
+          ],
+        },
+        // car-2 has no conversationsByCar entry -> no past conversation.
+      },
+    });
+
+    renderPage();
+    await screen.findByText("Corolla tire pressure light");
+
+    await user.selectOptions(await screen.findByLabelText("Car"), "car-2");
+
+    expect(
+      await screen.findByRole("button", { name: "Squeaking brakes at low speed" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Corolla tire pressure light")).not.toBeInTheDocument();
   });
 });
 

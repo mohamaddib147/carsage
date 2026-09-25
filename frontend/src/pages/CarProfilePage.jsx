@@ -20,6 +20,8 @@ import {
   getCarFieldErrors,
 } from "../lib/limits.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
+import { useActiveCar } from "../theme/ActiveCarContext.jsx";
+import BrandBadge, { hasBrandBadge } from "../theme/BrandBadge.jsx";
 
 const FUEL_TYPE_OPTIONS = [
   "Gasoline",
@@ -155,6 +157,7 @@ function CarProfilePage() {
   const { carId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { setActiveCarId } = useActiveCar();
 
   const [car, setCar] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -168,6 +171,15 @@ function CarProfilePage() {
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
 
+  // Mentor feedback (no Jira task): browse the user's other cars from here
+  // (previously Car Profile only ever showed one), and pick which one it
+  // opens on by default (previously always the oldest, with no way to
+  // change it — see docs/db_migrations/2026-09-25_profiles_default_car.sql).
+  const [allCars, setAllCars] = useState([]);
+  const [defaultCarId, setDefaultCarId] = useState(null);
+  const [settingDefault, setSettingDefault] = useState(false);
+  const [defaultError, setDefaultError] = useState("");
+
   useEffect(() => {
     // Guards against rendering before the auth session has resolved. In
     // practice ProtectedRoute already guarantees `user` is set before
@@ -180,17 +192,36 @@ function CarProfilePage() {
       setLoading(true);
       setNotFound(false);
 
-      const query = carId
-        ? supabase.from("cars").select("*").eq("id", carId).maybeSingle()
-        : supabase
-            .from("cars")
-            .select("*")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: true })
-            .limit(1)
-            .maybeSingle();
+      // The switcher's own light-weight list (also used to resolve which
+      // car /cars/mine opens on) and the saved default, loaded together.
+      const [{ data: carsData }, { data: profile }] = await Promise.all([
+        supabase
+          .from("cars")
+          .select("id, make, model, year")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: true }),
+        supabase.from("profiles").select("default_car_id").eq("id", user.id).maybeSingle(),
+      ]);
 
-      const { data, error } = await query;
+      if (cancelled) return;
+      const loadedCars = carsData ?? [];
+      const loadedDefaultId = profile?.default_car_id ?? null;
+      setAllCars(loadedCars);
+      setDefaultCarId(loadedDefaultId);
+
+      // /cars/mine: open on the default car if one is still in the list,
+      // else the oldest car, same as before this feature existed.
+      const targetId =
+        carId ?? loadedCars.find((c) => c.id === loadedDefaultId)?.id ?? loadedCars[0]?.id;
+
+      if (!targetId) {
+        setCar(null);
+        setNotFound(true);
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase.from("cars").select("*").eq("id", targetId).maybeSingle();
       if (cancelled) return;
 
       if (error || !data) {
@@ -207,6 +238,35 @@ function CarProfilePage() {
       cancelled = true;
     };
   }, [carId, user]);
+
+  // CAR-55: viewing a car's profile makes it the active car for site-wide
+  // brand theming, same as picking it in a car selector elsewhere.
+  useEffect(() => {
+    if (car) setActiveCarId(car.id);
+  }, [car, setActiveCarId]);
+
+  /** Switching cars navigates to that car's own profile URL. */
+  function handleSwitchCar(event) {
+    const nextId = event.target.value;
+    if (nextId) navigate(`/cars/${nextId}`);
+  }
+
+  /** Marks the car currently being viewed as the one Car Profile opens on by default. */
+  async function handleSetDefault() {
+    setSettingDefault(true);
+    setDefaultError("");
+    const { error } = await supabase
+      .from("profiles")
+      .update({ default_car_id: car.id })
+      .eq("id", user.id);
+
+    if (error) {
+      setDefaultError("Couldn't save that, try again.");
+    } else {
+      setDefaultCarId(car.id);
+    }
+    setSettingDefault(false);
+  }
 
   function startEditing() {
     setForm(toFormValues(car));
@@ -499,12 +559,31 @@ function CarProfilePage() {
   }
 
   const headerMeta = [car.year, car.fuel_type].filter(Boolean).join(" · ");
+  const isDefault = defaultCarId === car.id;
 
   return (
     <div className="profile-page">
+      {allCars.length > 1 && (
+        <div className="form-field car-profile__switcher">
+          <label htmlFor="carProfileSwitcher">Car</label>
+          <select id="carProfileSwitcher" value={car.id} onChange={handleSwitchCar}>
+            {allCars.map((option) => (
+              <option key={option.id} value={option.id}>
+                {[option.year, option.make, option.model].filter(Boolean).join(" ")}
+                {option.id === defaultCarId ? " (Default)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div className="profile-header">
-        <span className="profile-header__icon" aria-hidden="true">
-          🚗
+        <span className="profile-header__icon">
+          {hasBrandBadge(car.make) ? (
+            <BrandBadge make={car.make} size={32} />
+          ) : (
+            <span aria-hidden="true">🚗</span>
+          )}
         </span>
         <div className="profile-header__info">
           <h1 className="profile-header__title">
@@ -512,6 +591,27 @@ function CarProfilePage() {
           </h1>
           {headerMeta && <p className="profile-header__meta">{headerMeta}</p>}
         </div>
+        {allCars.length > 1 && (
+          <div className="car-profile__default">
+            {isDefault ? (
+              <span className="car-profile__default-badge">✓ Default car</span>
+            ) : (
+              <button
+                type="button"
+                className="car-profile__default-btn"
+                onClick={handleSetDefault}
+                disabled={settingDefault}
+              >
+                {settingDefault ? "Saving..." : "Set as Default"}
+              </button>
+            )}
+            {defaultError && (
+              <p role="alert" className="auth-form__error">
+                {defaultError}
+              </p>
+            )}
+          </div>
+        )}
         <button className="btn-primary" type="button" onClick={startEditing}>
           Edit
         </button>

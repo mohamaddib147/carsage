@@ -9,7 +9,9 @@ import mainSource from "../main.jsx?raw";
 describe("main.jsx wiring", () => {
   it("wraps <App /> in the CurrencyProvider", () => {
     expect(mainSource).toContain('import { CurrencyProvider } from "./currency/CurrencyContext.jsx"');
-    expect(mainSource).toMatch(/<CurrencyProvider>\s*<App \/>\s*<\/CurrencyProvider>/);
+    // <App /> may be nested inside other providers (e.g. ActiveCarProvider,
+    // CAR-55) as long as CurrencyProvider is still an ancestor of it.
+    expect(mainSource).toMatch(/<CurrencyProvider>[\s\S]*<App \/>[\s\S]*<\/CurrencyProvider>/);
   });
 
   it("keeps the AuthProvider (the switch is only shown to signed-in users) and the router around it", () => {

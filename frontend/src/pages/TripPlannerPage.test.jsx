@@ -1,7 +1,9 @@
 // Tests for the Trip Planner screen: the empty state (no car yet),
-// required-destination validation, a successful trip (loading state +
-// results card), the clear-error case when the backend rejects the
-// trip, that Starting Location really is optional, the CAR-37 car
+// required-destination and required-origin validation (CAR-27: the
+// backend can't calculate a route without an origin, so the field is
+// required, not the "Optional" it used to claim), a successful trip
+// (loading state + results card), the clear-error case when the backend
+// rejects the trip, the CAR-37 car
 // selector (hidden with 0-1 cars, shown and switchable with 2+), CAR-41
 // (editable fuel price prefilled from GET /trip-planner/fuel-prices,
 // sent as an override; the Full Tank Cost stat), and CAR-42 (light vs
@@ -125,6 +127,10 @@ describe("TripPlannerPage — planning a trip", () => {
     mockCarsLookup([{ id: "car-1" }]);
 
     renderPage();
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(await screen.findByRole("button", { name: "Plan Trip" }));
 
     expect(
@@ -151,6 +157,10 @@ describe("TripPlannerPage — planning a trip", () => {
 
     renderPage();
     await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
+    await user.type(
       await screen.findByLabelText("Destination *"),
       "Tripoli, Lebanon",
     );
@@ -172,7 +182,27 @@ describe("TripPlannerPage — planning a trip", () => {
     expect(screen.getByText("81.9 km")).toBeInTheDocument();
   });
 
-  it("submits without a Starting Location, since it's optional", async () => {
+  it("requires a Starting Location before submitting (CAR-27: the backend can't route without one)", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1" }]);
+
+    renderPage();
+    await user.type(
+      await screen.findByLabelText("Destination *"),
+      "Byblos, Lebanon",
+    );
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    expect(
+      await screen.findByText("Starting location is required."),
+    ).toBeInTheDocument();
+    expect(apiFetch).not.toHaveBeenCalledWith(
+      "/trip-planner/estimate",
+      expect.anything(),
+    );
+  });
+
+  it("submits with both a Starting Location and a Destination (normal case)", async () => {
     const user = userEvent.setup();
     mockCarsLookup([{ id: "car-1" }]);
     apiFetch.mockResolvedValue({
@@ -185,6 +215,10 @@ describe("TripPlannerPage — planning a trip", () => {
     });
 
     renderPage();
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.type(
       await screen.findByLabelText("Destination *"),
       "Byblos, Lebanon",
@@ -199,7 +233,7 @@ describe("TripPlannerPage — planning a trip", () => {
         body: expect.objectContaining({
           car_id: "car-1",
           destination: "Byblos, Lebanon",
-          origin: undefined,
+          origin: "Beirut, Lebanon",
         }),
       }),
     );
@@ -215,6 +249,10 @@ describe("TripPlannerPage — planning a trip", () => {
     );
 
     renderPage();
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.type(
       await screen.findByLabelText("Destination *"),
       "???",
@@ -259,6 +297,10 @@ describe("TripPlannerPage — car selector (CAR-37)", () => {
 
     await user.selectOptions(carSelect, "car-2");
     await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     await waitFor(() => expect(apiFetch).toHaveBeenCalled());
@@ -313,6 +355,10 @@ describe("TripPlannerPage — editable fuel price & tank cost (CAR-41)", () => {
     await user.clear(fuelPriceInput);
     await user.type(fuelPriceInput, "100000");
     await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     await waitFor(() =>
@@ -334,6 +380,10 @@ describe("TripPlannerPage — editable fuel price & tank cost (CAR-41)", () => {
     await user.type(
       await screen.findByLabelText("Destination *"),
       "Byblos, Lebanon",
+    );
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
     );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
@@ -360,6 +410,10 @@ describe("TripPlannerPage — editable fuel price & tank cost (CAR-41)", () => {
     await user.clear(tankInput);
     await user.type(tankInput, "40");
     await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     // 40L * 90000 LBP/L = 3,600,000 LBP.
@@ -388,6 +442,10 @@ describe("TripPlannerPage — light vs current-traffic estimates (CAR-42)", () =
     await user.type(
       await screen.findByLabelText("Destination *"),
       "Tripoli, Lebanon",
+    );
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
     );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
@@ -419,6 +477,10 @@ describe("TripPlannerPage — light vs current-traffic estimates (CAR-42)", () =
       await screen.findByLabelText("Destination *"),
       "Byblos, Lebanon",
     );
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     expect(await screen.findByText("Fuel Cost")).toBeInTheDocument();
@@ -444,6 +506,10 @@ describe("TripPlannerPage — ideal-conditions info tooltip (CAR-45)", () => {
 
     renderPage();
     await user.type(await screen.findByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     const info = await screen.findByRole("button", {
@@ -482,6 +548,10 @@ describe("TripPlannerPage — traffic level indicator (CAR-46)", () => {
 
       renderPage();
       await user.type(await screen.findByLabelText("Destination *"), "Byblos, Lebanon");
+      await user.type(
+        await screen.findByLabelText(/Starting Location/),
+        "Beirut, Lebanon",
+      );
       await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
       const badge = await screen.findByText(expectedLabel);
@@ -533,6 +603,10 @@ describe("TripPlannerPage — address autocomplete (CAR-47)", () => {
     await user.click(
       await screen.findByRole("option", { name: "Tripoli, North Governorate, Lebanon" }),
     );
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     await waitFor(() =>
@@ -563,6 +637,10 @@ describe("TripPlannerPage — address autocomplete (CAR-47)", () => {
 
     renderPage();
     await user.type(await screen.findByLabelText("Destination *"), "My cousin's house");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     await waitFor(() =>
@@ -677,6 +755,10 @@ describe("TripPlannerPage — static route map (CAR-48)", () => {
 describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
   async function planTrip(user) {
     await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
   }
 
@@ -731,6 +813,10 @@ describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
 
     await user.selectOptions(screen.getByLabelText("Car"), "car-2");
     expect(screen.getByLabelText(/Tank Size/)).toHaveValue("55");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     // 55L * 90000 = 4,950,000 LBP.
@@ -794,6 +880,10 @@ describe("TripPlannerPage — per-car tank capacity (CAR-49)", () => {
 describe("TripPlannerPage — tank size reset and range check (CAR-49)", () => {
   async function planTrip(user) {
     await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
   }
 
@@ -929,6 +1019,10 @@ describe("TripPlannerPage — Advanced options & thousand separators (polish)", 
     await waitFor(() => expect(screen.getByLabelText(/Fuel Price/)).toHaveValue("140,500"));
     // Pick car -> destination -> Plan Trip, never opening the section.
     await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     await waitFor(() =>
@@ -971,6 +1065,10 @@ describe("TripPlannerPage — Advanced options & thousand separators (polish)", 
     expect(priceInput).toHaveValue("1,234,567");
 
     await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     await waitFor(() =>
@@ -996,6 +1094,10 @@ describe("TripPlannerPage — Advanced options & thousand separators (polish)", 
     expect(tankInput).toHaveValue("43.5");
 
     await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     // 43.5 L x 90,000 = 3,915,000 LBP.
@@ -1037,6 +1139,10 @@ describe("TripPlannerPage — Advanced options & thousand separators (polish)", 
 
     renderPage();
     await user.type(await screen.findByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     expect(await screen.findByText(/Enter a tank size under Advanced options/)).toBeInTheDocument();
@@ -1066,6 +1172,10 @@ describe("TripPlannerPage — input limits (CAR-23)", () => {
     await user.clear(price);
     await user.type(price, "99999999999");
     await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     await waitFor(() => expect(screen.getByText(/Fuel price must be between 1 and 10,000,000/)).toBeVisible());
@@ -1100,6 +1210,10 @@ describe("TripPlannerPage — input limits (CAR-23)", () => {
     await user.clear(price);
     await user.type(price, "10000000");
     await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
 
     await waitFor(() =>
@@ -1186,6 +1300,10 @@ describe("TripPlannerPage — currency toggle (CAR-54)", () => {
     mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline", fuel_tank_capacity_liters: 50 }]);
     mockApiFetch({ estimate: ESTIMATE });
     await user.type(await screen.findByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
     await screen.findByText("Full Tank Cost");
   }
@@ -1367,6 +1485,10 @@ describe("TripPlannerPage — the switch visibly changes this screen (CAR-54 bug
     mockApiFetch({ fuelPrices: FUEL_PRICES, estimate: ESTIMATE });
     renderWithSwitch();
     await user.type(await screen.findByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
     await screen.findByText("Full Tank Cost");
     await waitFor(() => expect(pumpLine()).toBeDefined());
@@ -1390,6 +1512,10 @@ describe("TripPlannerPage — the switch visibly changes this screen (CAR-54 bug
     expect(unconvertedMoney(document.body)).toEqual([]); // before planning
 
     await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(
+      await screen.findByLabelText(/Starting Location/),
+      "Beirut, Lebanon",
+    );
     await user.click(screen.getByRole("button", { name: "Plan Trip" }));
     await screen.findByText("Full Tank Cost");
 
