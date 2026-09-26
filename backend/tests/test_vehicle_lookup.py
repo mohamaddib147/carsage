@@ -14,6 +14,7 @@ import httpx
 import pytest
 
 from app.services.vehicle_lookup import (
+    _extract_engine_type,
     get_spec_suggestions,
     lookup_api_ninjas,
     lookup_fuel_economy,
@@ -156,6 +157,7 @@ def test_lookup_api_ninjas_converts_mpg_to_km_per_liter(monkeypatch):
                 "cylinders": 4,
                 "drive": "fwd",
                 "transmission": "a",
+                "displacement": 1.5,
             }
         ]
     )
@@ -168,6 +170,7 @@ def test_lookup_api_ninjas_converts_mpg_to_km_per_liter(monkeypatch):
         "cylinders": 4,
         "drivetrain": "fwd",
         "transmission": "a",
+        "engine_type": "1.5L 4-Cylinder",
         "fuel_tank_capacity_liters": None,
     }
 
@@ -182,6 +185,7 @@ def test_lookup_api_ninjas_returns_all_none_without_a_configured_key(monkeypatch
         "cylinders": None,
         "drivetrain": None,
         "transmission": None,
+        "engine_type": None,
         "fuel_tank_capacity_liters": None,
     }
 
@@ -198,6 +202,7 @@ def test_lookup_api_ninjas_returns_all_none_when_there_is_no_match(monkeypatch):
         "cylinders": None,
         "drivetrain": None,
         "transmission": None,
+        "engine_type": None,
         "fuel_tank_capacity_liters": None,
     }
 
@@ -216,8 +221,35 @@ def test_lookup_api_ninjas_never_raises_on_a_network_failure(monkeypatch):
         "cylinders": None,
         "drivetrain": None,
         "transmission": None,
+        "engine_type": None,
         "fuel_tank_capacity_liters": None,
     }
+
+
+def test_lookup_api_ninjas_builds_engine_type_from_displacement_and_cylinders():
+    # Real API Ninjas response for a 2020 Honda Civic (confirmed live) — displacement
+    # and cylinders both come through on the free tier, unlike the MPG fields.
+    car = {"cylinders": 4, "displacement": 1.5, "drive": "fwd", "fuel_type": "gas", "transmission": "m"}
+    assert _extract_engine_type(car) == "1.5L 4-Cylinder"
+
+
+@pytest.mark.parametrize(
+    "car",
+    [
+        {"cylinders": 4},  # no displacement
+        {"displacement": 1.5},  # no cylinders
+        {"cylinders": 4, "displacement": "this field is for premium subscribers only"},
+        {"cylinders": True, "displacement": 1.5},  # bool, not a real cylinder count
+        {"cylinders": 4, "displacement": True},  # bool, not a real displacement
+        {"cylinders": 4, "displacement": 0},
+        {"cylinders": 4, "displacement": -1.5},
+        {"cylinders": 0, "displacement": 1.5},
+        {"cylinders": 4, "displacement": 25},  # implausible
+        {"cylinders": 20, "displacement": 1.5},  # implausible
+    ],
+)
+def test_extract_engine_type_never_guesses_from_missing_or_implausible_data(car):
+    assert _extract_engine_type(car) is None
 
 
 def test_lookup_api_ninjas_picks_up_a_tank_capacity_when_the_response_has_one(monkeypatch):
@@ -370,6 +402,25 @@ def test_get_spec_suggestions_merges_all_lookups_and_falls_back_to_fueleconomy_g
         "fuel_tank_capacity_liters": None,
         "fuel_tank_capacity_source": None,
     }
+
+
+def test_get_spec_suggestions_uses_api_ninjas_engine_type_over_nhtsas_always_none():
+    with patch(
+        "app.services.vehicle_lookup.lookup_nhtsa",
+        return_value={"vehicle_confirmed": True, "engine_type": None},
+    ), patch(
+        "app.services.vehicle_lookup.lookup_api_ninjas",
+        return_value={
+            "fuel_efficiency": None,
+            "cylinders": 4,
+            "drivetrain": "fwd",
+            "transmission": "a",
+            "engine_type": "1.5L 4-Cylinder",
+        },
+    ), patch("app.services.vehicle_lookup.lookup_fuel_economy", return_value=None):
+        result = get_spec_suggestions("Honda", "Civic", 2020)
+
+    assert result["engine_type"] == "1.5L 4-Cylinder"
 
 
 def test_get_spec_suggestions_prefers_api_ninjas_fuel_efficiency_when_present():
