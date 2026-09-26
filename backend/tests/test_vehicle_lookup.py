@@ -39,23 +39,21 @@ def _mock_response(json_body):
     return response
 
 
-def test_lookup_nhtsa_confirms_a_known_model_and_returns_a_vehicle_type():
+def test_lookup_nhtsa_confirms_a_known_model_and_never_fills_engine_type():
+    # engine_type is always None: vPIC has no free per-model engine-spec
+    # endpoint, and an earlier version filled it with the vehicle's general
+    # body class (e.g. "Passenger Car") instead, which was misleading under
+    # an "Engine Type" label with a "✓ Auto-filled" tag (confirmed live).
     models_response = _mock_response(
         {"Results": [{"Model_Name": "Civic"}, {"Model_Name": "Accord"}]}
     )
-    types_response = _mock_response(
-        {"Results": [{"VehicleTypeName": "Passenger Car"}]}
-    )
 
-    with patch(
-        "app.services.vehicle_lookup.httpx.get",
-        side_effect=[models_response, types_response],
-    ):
+    with patch("app.services.vehicle_lookup.httpx.get", return_value=models_response):
         result = lookup_nhtsa("Honda", "Civic", 2020)
 
     assert result == {
         "vehicle_confirmed": True,
-        "engine_type": "Passenger Car",
+        "engine_type": None,
         "model_name": "Civic",
     }
 
@@ -85,16 +83,13 @@ def test_lookup_nhtsa_recognizes_a_badge_that_nhtsa_files_under_its_model_family
     models_response = _mock_response(
         {"Results": [{"Model_Name": "C-Class"}, {"Model_Name": "CLK-Class"}, {"Model_Name": "E-Class"}]}
     )
-    types_response = _mock_response({"Results": [{"VehicleTypeName": "Passenger Car"}]})
 
-    with patch(
-        "app.services.vehicle_lookup.httpx.get", side_effect=[models_response, types_response]
-    ):
+    with patch("app.services.vehicle_lookup.httpx.get", return_value=models_response):
         result = lookup_nhtsa("Mercedes-Benz", "C230 Kompressor", 2005)
 
     assert result == {
         "vehicle_confirmed": True,
-        "engine_type": "Passenger Car",
+        "engine_type": None,
         "model_name": "C-Class",
     }
 
@@ -137,7 +132,7 @@ def test_match_nhtsa_model(typed, official_names, expected):
 def test_spec_suggestions_response_does_not_expose_the_internal_model_name():
     with patch(
         "app.services.vehicle_lookup.lookup_nhtsa",
-        return_value={"vehicle_confirmed": True, "engine_type": "Passenger Car", "model_name": "C-Class"},
+        return_value={"vehicle_confirmed": True, "engine_type": None, "model_name": "C-Class"},
     ), patch(
         "app.services.vehicle_lookup.lookup_api_ninjas",
         return_value={"fuel_efficiency": None, "cylinders": None, "drivetrain": None, "transmission": None},
@@ -346,7 +341,7 @@ def test_lookup_fuel_economy_never_raises_on_a_network_failure():
 def test_get_spec_suggestions_merges_all_lookups_and_falls_back_to_fueleconomy_gov():
     with patch(
         "app.services.vehicle_lookup.lookup_nhtsa",
-        return_value={"vehicle_confirmed": True, "engine_type": "Passenger Car"},
+        return_value={"vehicle_confirmed": True, "engine_type": None},
     ) as mock_nhtsa, patch(
         "app.services.vehicle_lookup.lookup_api_ninjas",
         # Matches real API Ninjas free-tier behavior: fuel_efficiency is
@@ -367,7 +362,7 @@ def test_get_spec_suggestions_merges_all_lookups_and_falls_back_to_fueleconomy_g
     mock_fuel_economy.assert_called_once_with("Honda", "Civic", 2020)
     assert result == {
         "vehicle_confirmed": True,
-        "engine_type": "Passenger Car",
+        "engine_type": None,
         "fuel_efficiency": 14.5,
         "cylinders": 4,
         "drivetrain": "fwd",

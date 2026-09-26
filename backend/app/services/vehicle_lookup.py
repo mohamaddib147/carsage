@@ -89,16 +89,21 @@ def match_nhtsa_model(model: str, official_names: list[str]) -> str | None:
 
 def lookup_nhtsa(make: str, model: str, year: int) -> dict:
     """
-    Confirms a make/model/year exists in NHTSA vPIC and returns an
-    approximate vehicle type for it.
+    Confirms a make/model/year exists in NHTSA vPIC.
 
-    vPIC has no free endpoint that returns true per-model engine specs
-    without decoding a real VIN, so "engine_type" here is the vehicle's
-    general NHTSA vehicle type (e.g. "Passenger Car", "Truck") — the
-    closest available signal, not a literal engine spec.
+    "engine_type" is always None here: vPIC has no free endpoint that
+    returns true per-model engine specs without decoding a real VIN. An
+    earlier version filled it with NHTSA's general vehicle type instead
+    (e.g. "Passenger Car", "Truck") as an approximation, but that's a body
+    classification, not an engine spec, and auto-filling "Engine Type"
+    with "Passenger Car" under a "✓ Auto-filled" tag was misleading in
+    practice (confirmed live) — worse than leaving the field for the user
+    to fill in themselves. The key stays in the response shape (rather
+    than being removed) so a real per-model source could populate it
+    later without a breaking change.
 
     Returns:
-        {"vehicle_confirmed": bool, "engine_type": str | None,
+        {"vehicle_confirmed": bool, "engine_type": None,
         "model_name": str | None} — model_name is NHTSA's own name for the
         model (see match_nhtsa_model), which the safety check needs because
         NHTSA's recall/complaint data is filed under it. Always this shape,
@@ -122,21 +127,7 @@ def lookup_nhtsa(make: str, model: str, year: int) -> dict:
     if official_name is None:
         return {"vehicle_confirmed": False, "engine_type": None, "model_name": None}
 
-    engine_type = None
-    try:
-        type_response = httpx.get(
-            f"{NHTSA_BASE_URL}/GetVehicleTypesForMake/{quote(make.strip(), safe='')}",
-            params={"format": "json"},
-            timeout=8.0,
-        )
-        type_response.raise_for_status()
-        type_results = type_response.json().get("Results", [])
-        if type_results:
-            engine_type = type_results[0].get("VehicleTypeName")
-    except httpx.HTTPError:
-        pass
-
-    return {"vehicle_confirmed": True, "engine_type": engine_type, "model_name": official_name}
+    return {"vehicle_confirmed": True, "engine_type": None, "model_name": official_name}
 
 
 def _extract_tank_capacity(car: dict) -> float | None:
