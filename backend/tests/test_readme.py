@@ -140,13 +140,14 @@ def test_every_npm_script_the_readme_tells_you_to_run_exists():
     assert named <= set(scripts), f"README mentions npm scripts that do not exist: {named - set(scripts)}"
 
 
-def test_the_readme_says_plainly_that_nothing_is_deployed_yet():
-    # Guards against a made-up URL sneaking in. When the app IS deployed, update the
-    # Deployment table and change this test to expect the real addresses.
+def test_the_readme_lists_the_real_deployed_addresses():
+    # CAR-28: the app is deployed. Guards that the Deployment table names the
+    # actual live hosts (not a placeholder, not a made-up address) for both halves.
     deployment = README.split("## Deployment", 1)[1].split("\n## ", 1)[0]
 
-    assert "has not been deployed yet" in deployment
-    assert not re.search(r"https?://(?!localhost)\S+\.(?:onrender\.com|vercel\.app|netlify\.app|fly\.dev)", deployment)
+    assert "not deployed yet" not in deployment
+    assert "https://carsage.netlify.app" in deployment
+    assert "https://carsage-cp21.onrender.com" in deployment
 
 
 def test_the_readme_contains_no_secret_looking_value():
