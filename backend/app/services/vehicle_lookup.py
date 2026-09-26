@@ -130,6 +130,28 @@ def lookup_nhtsa(make: str, model: str, year: int) -> dict:
     return {"vehicle_confirmed": True, "engine_type": None, "model_name": official_name}
 
 
+def _extract_engine_type(car: dict) -> str | None:
+    """
+    Builds a real engine description ("1.5L 4-Cylinder") from API Ninjas'
+    `displacement` (engine size in liters) and `cylinders` fields, or None
+    if either is missing/implausible. Both are genuinely per-model engine
+    facts (unlike NHTSA's vehicle-type category, see lookup_nhtsa) and
+    come through on the free tier — confirmed live, not gated like the
+    MPG fields. Cylinder layout (inline vs. V) isn't in the response, so
+    this never guesses "I4"/"V6" — just the plain count, which is always
+    correct given what's actually known.
+    """
+    displacement = car.get("displacement")
+    cylinders = car.get("cylinders")
+    if isinstance(displacement, bool) or not isinstance(displacement, (int, float)):
+        return None
+    if isinstance(cylinders, bool) or not isinstance(cylinders, int):
+        return None
+    if not (0 < displacement <= 20) or not (0 < cylinders <= 16):
+        return None
+    return f"{displacement}L {cylinders}-Cylinder"
+
+
 def _extract_tank_capacity(car: dict) -> float | None:
     """
     Returns a fuel tank capacity in liters from an API Ninjas car record,
@@ -154,15 +176,16 @@ def _extract_tank_capacity(car: dict) -> float | None:
 def lookup_api_ninjas(make: str, model: str, year: int) -> dict:
     """
     Looks up detailed specs (fuel economy, cylinders, drivetrain,
-    transmission, and — only if the response happens to include one —
-    fuel tank capacity) from API Ninjas' Cars API.
+    transmission, a real engine description, and — only if the response
+    happens to include one — fuel tank capacity) from API Ninjas' Cars
+    API.
 
     Returns:
         {"fuel_efficiency": float | None, "cylinders": int | None,
          "drivetrain": str | None, "transmission": str | None,
-         "fuel_tank_capacity_liters": float | None}. All None
-        (never raises) if API_NINJAS_KEY isn't configured, the API call
-        fails, or there's no match for this make/model/year.
+         "engine_type": str | None, "fuel_tank_capacity_liters": float | None}.
+        All None (never raises) if API_NINJAS_KEY isn't configured, the
+        API call fails, or there's no match for this make/model/year.
         fuel_efficiency is converted from the API's combined MPG figure
         to km/L, matching the unit `cars.fuel_efficiency` is stored in —
         NOTE: API Ninjas' free tier gates all MPG fields behind a paid
@@ -170,12 +193,16 @@ def lookup_api_ninjas(make: str, model: str, year: int) -> dict:
         premium subscribers only" instead of a number), so this is
         effectively always None on a free key; get_spec_suggestions()
         falls back to lookup_fuel_economy() for this field instead.
+        engine_type is built from `displacement` + `cylinders` (see
+        _extract_engine_type) — both come through on the free tier,
+        unlike the MPG fields.
     """
     empty = {
         "fuel_efficiency": None,
         "cylinders": None,
         "drivetrain": None,
         "transmission": None,
+        "engine_type": None,
         "fuel_tank_capacity_liters": None,
     }
     if not API_NINJAS_KEY:
@@ -209,6 +236,7 @@ def lookup_api_ninjas(make: str, model: str, year: int) -> dict:
         "cylinders": car.get("cylinders"),
         "drivetrain": car.get("drive"),
         "transmission": car.get("transmission"),
+        "engine_type": _extract_engine_type(car),
         "fuel_tank_capacity_liters": _extract_tank_capacity(car),
     }
 
@@ -323,6 +351,11 @@ def get_spec_suggestions(make: str, model: str, year: int) -> dict:
     fuel_efficiency prefers API Ninjas' figure (in case a paid key is
     ever configured) and falls back to fueleconomy.gov, since API
     Ninjas' free tier doesn't include it.
+
+    engine_type comes from API Ninjas (displacement + cylinders, e.g.
+    "1.5L 4-Cylinder" — see _extract_engine_type) when available, since
+    NHTSA's own contribution is always None (see lookup_nhtsa); the dict
+    merge order below lets API Ninjas' value win when it has one.
 
     Fuel tank capacity, best source first, with the winner reported in
     `fuel_tank_capacity_source` so the UI can label it: API Ninjas if it
