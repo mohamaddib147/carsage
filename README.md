@@ -249,19 +249,19 @@ cd backend       # on macOS / Linux use .venv/bin/python instead of .venv\Script
 
 ## Deployment
 
-**CarSage has not been deployed yet**, so there are no live addresses to list here. Add them below once the frontend and the API are hosted.
+**CarSage is live.**
 
 | Part | Host | Live address |
 |---|---|---|
-| Frontend | _not deployed yet_ | _to be added_ |
-| FastAPI service | _not deployed yet_ | _to be added_ |
+| Frontend | Netlify | https://carsage.netlify.app |
+| FastAPI service | Render | https://carsage-cp21.onrender.com |
 | Database and login | Supabase (hosted, project `ehjvbkhoafldqfsivtrn`) | managed by Supabase |
 
-The repository is ready for deployment:
+Deployed as:
 
-- **FastAPI service.** `backend/Dockerfile` builds an image that runs on any Docker host (Render, Fly.io and similar). Set the backend variables from the table above as environment variables on the host; the image never contains secrets. Set `ALLOWED_ORIGINS` to the exact address of the deployed frontend.
-- **Frontend.** Run `npm run build` in `frontend/` and publish the `frontend/dist` folder on any static host. Set the `VITE_*` variables when building, because they are baked in. Configure the host to serve `index.html` for every path so page refreshes on routes such as `/dashboard` work.
-- **After deploying:** set the deployed frontend address as the Site URL in Supabase (Authentication → URL Configuration); add that address to the browser Google key's allowed referrers; and check that the fuel price lookup works from the host. The price source sits behind Cloudflare, which can treat a hosting provider's address differently from a laptop. If it is blocked the app keeps using the last saved price instead of failing.
+- **FastAPI service (Render).** Built from `backend/Dockerfile` (Docker runtime, root directory `backend`, Dockerfile path `backend/Dockerfile`). The backend variables from the table above are set as environment variables on Render; the image never contains secrets. `ALLOWED_ORIGINS` is set to the Netlify address above. Health check path: `/health`.
+- **Frontend (Netlify).** Built from `frontend/` (base directory `frontend`, build command `npm run build`, publish directory `dist`). The `VITE_*` variables are set on Netlify and baked in at build time. `frontend/public/_redirects` serves `index.html` for every path so page refreshes on routes such as `/dashboard` work.
+- **After deploying:** the Netlify address is set as the Site URL in Supabase (Authentication → URL Configuration), and added to the browser Google key's allowed referrers. Fuel price lookup from the host is still worth re-checking periodically — the price source sits behind Cloudflare, which can treat a hosting provider's address differently from a laptop; if it's blocked the app keeps using the last saved price instead of failing.
 
 ## Project structure
 
