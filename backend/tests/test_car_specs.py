@@ -28,7 +28,7 @@ def test_returns_suggestions_for_a_valid_request():
     with patch("app.routers.car_specs.get_spec_suggestions") as mock_lookup:
         mock_lookup.return_value = {
             "vehicle_confirmed": True,
-            "engine_type": "Passenger Car",
+            "engine_type": None,
             "fuel_efficiency": 14.5,
             "cylinders": 4,
             "drivetrain": "fwd",
@@ -43,7 +43,7 @@ def test_returns_suggestions_for_a_valid_request():
     assert response.status_code == 200
     assert response.json() == {
         "vehicle_confirmed": True,
-        "engine_type": "Passenger Car",
+        "engine_type": None,
         "fuel_efficiency": 14.5,
         "cylinders": 4,
         "drivetrain": "fwd",
