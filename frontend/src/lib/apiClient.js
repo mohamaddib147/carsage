@@ -1,6 +1,7 @@
 // Thin wrapper around fetch() for calling the FastAPI backend, so pages
 // don't each repeat the base URL, JSON headers, and error-shape handling.
 
+import { trackRequest } from "./coldStart.js";
 import { GENERIC_ERROR_MESSAGE, NETWORK_ERROR_MESSAGE } from "./limits.js";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -18,6 +19,12 @@ export async function apiFetch(path, { method = "GET", body, accessToken } = {})
     headers.Authorization = `Bearer ${accessToken}`;
   }
 
+  // Render's free tier spins the backend down after inactivity, so the
+  // first request after that can take up to a minute to wake it back up.
+  // Flags that (via ColdStartBanner) instead of leaving the page looking
+  // stuck, without touching the request/response itself.
+  const stopTracking = trackRequest();
+
   let response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
@@ -29,6 +36,8 @@ export async function apiFetch(path, { method = "GET", body, accessToken } = {})
     // The browser's own wording ("Failed to fetch", "Load failed", ...) is
     // technical and differs per browser; say it in plain words instead.
     throw new Error(NETWORK_ERROR_MESSAGE);
+  } finally {
+    stopTracking();
   }
 
   const data = await response.json().catch(() => null);

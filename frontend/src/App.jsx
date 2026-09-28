@@ -4,6 +4,7 @@
 
 import { Route, Routes } from "react-router-dom";
 import backgroundTexture from "./assets/background-texture-icon.svg";
+import ColdStartBanner from "./components/ColdStartBanner.jsx";
 import SiteFooter from "./components/SiteFooter.jsx";
 import SiteNav from "./components/SiteNav.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
@@ -39,6 +40,7 @@ function App() {
         className="app-background-texture"
       />
       <SiteNav />
+      <ColdStartBanner />
       <main className="app-main">
         <Routes>
           <Route path="/" element={<LandingPage />} />

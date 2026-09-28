@@ -6,6 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiFetch } from "./apiClient.js";
+import { COLD_START_THRESHOLD_MS, onColdStartChange } from "./coldStart.js";
 import { GENERIC_ERROR_MESSAGE, NETWORK_ERROR_MESSAGE } from "./limits.js";
 
 /** A minimal fetch Response: ok flag plus a json() that resolves or rejects. */
@@ -77,5 +78,44 @@ describe("apiFetch — errors are always plain language", () => {
     fetch.mockResolvedValue(fakeResponse({ ok: false, body: {} }));
 
     await expect(apiFetch("/health")).rejects.toThrow(GENERIC_ERROR_MESSAGE);
+  });
+});
+
+describe("apiFetch — cold-start tracking (professional-polish pass, no Jira task)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("reports a slow request to lib/coldStart.js once it outlives the threshold, and clears it once the request settles", async () => {
+    const listener = vi.fn();
+    const unsubscribe = onColdStartChange(listener);
+
+    let resolveFetch;
+    fetch.mockReturnValue(new Promise((resolve) => (resolveFetch = resolve)));
+
+    const promise = apiFetch("/health");
+    await vi.advanceTimersByTimeAsync(COLD_START_THRESHOLD_MS);
+    expect(listener).toHaveBeenCalledWith(true);
+
+    resolveFetch(fakeResponse({ ok: true, body: { ok: 1 } }));
+    await promise;
+
+    expect(listener).toHaveBeenLastCalledWith(false);
+    unsubscribe();
+  });
+
+  it("never reports a request that resolves before the threshold", async () => {
+    const listener = vi.fn();
+    const unsubscribe = onColdStartChange(listener);
+    fetch.mockResolvedValue(fakeResponse({ ok: true, body: { ok: 1 } }));
+
+    await apiFetch("/health");
+
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
   });
 });
