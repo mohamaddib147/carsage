@@ -2,13 +2,44 @@
 // Handles both modes with one form, wired to Supabase Auth via useAuth().
 // Layout matches docs/stitch_carsage_landing_page/carsage_sign_up_authentication:
 // centered card, segmented Sign Up/Log In tab switcher, filled rounded
-// inputs. Out-of-scope elements from that reference (Google/Apple SSO,
-// VIN quick-add, marketing/trust footer) are intentionally omitted.
+// inputs. Out-of-scope elements from that reference (VIN quick-add,
+// marketing/trust footer) are intentionally omitted.
+// Mentor feedback (no Jira task): adds a "Continue with Google" option —
+// Apple/"Sign in with Apple" is left out for now, since it needs a paid
+// Apple Developer account and extra setup before it can even work.
 
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { LIMITS, describeAuthError } from "../lib/limits.js";
+
+/** The standard multi-color Google "G" mark, per Google's own Sign In
+ * branding guidelines (developers.google.com/identity/branding-guidelines)
+ * — required to be used as-is for a "Sign in with Google" button, unlike
+ * a car manufacturer's logo (see theme/BrandBadge.jsx's own note), which
+ * Google doesn't authorize third parties to use as their own branding. */
+function GoogleLogo() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <path
+        fill="#4285F4"
+        d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"
+      />
+      <path
+        fill="#34A853"
+        d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"
+      />
+      <path
+        fill="#EA4335"
+        d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"
+      />
+    </svg>
+  );
+}
 
 /**
  * Combined Sign Up / Log In screen. Mode is determined by the route
@@ -19,7 +50,7 @@ import { LIMITS, describeAuthError } from "../lib/limits.js";
 function AuthPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { signUp, signIn } = useAuth();
+  const { signUp, signIn, signInWithGoogle } = useAuth();
 
   const isSignUp = location.pathname === "/signup";
   const [email, setEmail] = useState("");
@@ -27,6 +58,27 @@ function AuthPage() {
   const [error, setError] = useState("");
   const [infoMessage, setInfoMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
+
+  /** Starts the Google redirect. Works the same for both Sign Up and Log
+   * In — Supabase creates the account on first sign-in, same as any other
+   * new user, so there's nothing mode-specific to do here. */
+  async function handleGoogleClick() {
+    setError("");
+    setGoogleSubmitting(true);
+    try {
+      const { error: authError } = await signInWithGoogle();
+      if (authError) {
+        setError(describeAuthError(authError));
+        setGoogleSubmitting(false);
+      }
+      // On success the page is about to navigate away to Google, so
+      // there's nothing left to reset here.
+    } catch {
+      setError("Could not start Google sign-in. Please try again.");
+      setGoogleSubmitting(false);
+    }
+  }
 
   /** @param {import('react').FormEvent} event */
   async function handleSubmit(event) {
@@ -105,6 +157,20 @@ function AuthPage() {
             ? "Create an account to start tracking your cars."
             : "Log in to access your dashboard."}
         </p>
+
+        <button
+          type="button"
+          className="auth-card__google-btn"
+          onClick={handleGoogleClick}
+          disabled={googleSubmitting || submitting}
+        >
+          <GoogleLogo />
+          {googleSubmitting ? "Redirecting..." : `Continue with Google`}
+        </button>
+
+        <div className="auth-card__divider">
+          <span>or</span>
+        </div>
 
         <form onSubmit={handleSubmit} noValidate className="auth-card__form">
           <div className="form-field">

@@ -995,6 +995,51 @@ select:focus {
   font-size: 0.875rem;
 }
 
+/* Mentor feedback (no Jira task): "Continue with Google" button and its
+   divider, styled per Google's own Sign In branding guidelines (white
+   background, dark text, light border, real logo mark — not recolored to
+   the site's own palette). */
+.auth-card__google-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--spacing-unit) * 1.25);
+  height: 48px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background-color: #ffffff;
+  color: #3c4043;
+  font-weight: 500;
+  font-size: 0.9375rem;
+}
+
+.auth-card__google-btn:hover:not(:disabled) {
+  background-color: #f7f7f7;
+}
+
+.auth-card__google-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.auth-card__divider {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin: calc(var(--spacing-unit) * 2.5) 0;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.auth-card__divider::before,
+.auth-card__divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background-color: var(--color-border);
+}
+
 .auth-card__form {
   display: flex;
   flex-direction: column;
