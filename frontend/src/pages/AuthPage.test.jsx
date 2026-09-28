@@ -1,6 +1,9 @@
 // Tests for the combined Sign Up / Log In screen: valid signup, valid
 // login, invalid password, duplicate email signup, and empty fields.
-// The Supabase client is mocked so no real network/auth calls happen.
+// Also (mentor feedback, no Jira task) the "Continue with Google" button:
+// starts the OAuth redirect, shows a clear error if it can't even start,
+// and is disabled while a redirect is in flight. The Supabase client is
+// mocked so no real network/auth calls happen.
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -19,6 +22,7 @@ vi.mock("../lib/supabaseClient.js", () => ({
       })),
       signUp: vi.fn(),
       signInWithPassword: vi.fn(),
+      signInWithOAuth: vi.fn(),
       signOut: vi.fn(),
     },
   },
@@ -219,6 +223,52 @@ describe("AuthPage — input limits (CAR-23)", () => {
         password: "abc",
       }),
     );
+  });
+});
+
+describe("AuthPage — Continue with Google (mentor feedback, no Jira task)", () => {
+  it("starts the Google OAuth redirect on click, from both Log In and Sign Up", async () => {
+    const user = userEvent.setup();
+    supabase.auth.signInWithOAuth.mockResolvedValue({ data: { url: "https://accounts.google.com/..." }, error: null });
+
+    for (const path of ["/login", "/signup"]) {
+      supabase.auth.signInWithOAuth.mockClear();
+      renderAuthPage(path);
+      await user.click(screen.getByRole("button", { name: /Continue with Google/ }));
+      await waitFor(() => expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
+        provider: "google",
+        options: { redirectTo: `${window.location.origin}/dashboard` },
+      }));
+    }
+  });
+
+  it("shows a clear error if the redirect can't even start, instead of Supabase's raw wording", async () => {
+    const user = userEvent.setup();
+    supabase.auth.signInWithOAuth.mockResolvedValue({
+      data: { url: null },
+      error: { message: "Unsupported provider: provider is not enabled" },
+    });
+
+    renderAuthPage("/login");
+    await user.click(screen.getByRole("button", { name: /Continue with Google/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Something went wrong. Please try again.");
+  });
+
+  it("does not block the email/password form, and vice versa", async () => {
+    const user = userEvent.setup();
+    supabase.auth.signInWithPassword.mockResolvedValue({
+      data: { session: { user: { email: "driver@example.com" } } },
+      error: null,
+    });
+
+    renderAuthPage("/login");
+    await user.type(screen.getByLabelText("Email"), "driver@example.com");
+    await user.type(screen.getByLabelText("Password"), "correct-password");
+    await user.click(screen.getByRole("button", { name: "Log In" }));
+
+    await waitFor(() => expect(screen.getByText("Dashboard placeholder")).toBeInTheDocument());
+    expect(supabase.auth.signInWithOAuth).not.toHaveBeenCalled();
   });
 });
 
