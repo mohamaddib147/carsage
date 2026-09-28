@@ -195,6 +195,39 @@ button {
   z-index: -1;
 }
 
+/* Idea #1 (professional-polish pass, no Jira task): a friendly notice
+   while a request is likely stuck on Render's free-tier cold start,
+   instead of the page just looking stuck. Sits below the nav, above the
+   page content, so it's visible on any screen without each page adding
+   it itself. */
+.cold-start-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--spacing-unit) * 1.25);
+  padding: calc(var(--spacing-unit) * 1.25) calc(var(--spacing-unit) * 2);
+  background-color: var(--color-accent);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.cold-start-banner__spinner {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(43, 43, 43, 0.3);
+  border-top-color: var(--color-text);
+  border-radius: 50%;
+  animation: cold-start-spin 0.8s linear infinite;
+}
+
+@keyframes cold-start-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .app-main {
   max-width: 960px;
   margin: 0 auto;
