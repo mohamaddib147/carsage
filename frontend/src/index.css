@@ -1,6 +1,19 @@
 /* Global design tokens and base styles for CarSage — implements the
    British Racing Green palette from the wireframe design system. */
 
+/* Site-audit follow-up (no Jira task): Netlify injects its own "build your
+   own site" promo widget as a fixed-position iframe (#nl-badge-frame) via
+   a <script> tag it adds to the deployed HTML directly, outside React's
+   root and with no per-site setting to turn it off. On mobile it overlaps
+   real page content (was observed covering the Dashboard's car stats and
+   the Trip Planner's Plan Trip button). Hidden here since we control the
+   parent page's CSS and this iframe has no inline `display` to override.
+   Has no effect locally (`npm run dev`) or in tests — the script that
+   injects it only runs on the deployed Netlify site. */
+iframe#nl-badge-frame {
+  display: none !important;
+}
+
 :root {
   --color-primary: #00594c;
   --color-background: #f5f1e8;
