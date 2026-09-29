@@ -350,30 +350,8 @@ function CarOnboardingPage() {
   return (
     <PageShell
       title="Meet Your Car"
-      description="Add your vehicle details to get started. Enter them manually, or scan your registration card (coming soon)."
+      description="Add your vehicle details to get started."
     >
-      <div className="scan-card">
-        <span className="scan-card__icon" aria-hidden="true">
-          📷
-        </span>
-        <div className="scan-card__text">
-          <p className="scan-card__title">
-            Scan Registration Card
-            <span className="pill">Coming soon</span>
-          </p>
-          <p className="scan-card__desc">
-            Instant auto-fill from your registration document.
-          </p>
-        </div>
-        <button className="btn-accent" type="button" disabled>
-          Scan Document
-        </button>
-      </div>
-
-      <div className="form-divider">
-        <span>Or enter manually</span>
-      </div>
-
       <form onSubmit={handleSubmit} noValidate className="car-form">
         <p className="form-legend">* Required</p>
         <p className="form-section-label">Core Specifications</p>

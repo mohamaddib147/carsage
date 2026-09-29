@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /cars/
+Disallow: /trip-planner
+Disallow: /advisor
+Disallow: /fuel-log
+Disallow: /reset-password
+
+Sitemap: https://carsage.netlify.app/sitemap.xml

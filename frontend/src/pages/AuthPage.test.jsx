@@ -24,6 +24,7 @@ vi.mock("../lib/supabaseClient.js", () => ({
       signInWithPassword: vi.fn(),
       signInWithOAuth: vi.fn(),
       signOut: vi.fn(),
+      resetPasswordForEmail: vi.fn(),
     },
   },
 }));
@@ -269,6 +270,74 @@ describe("AuthPage — Continue with Google (mentor feedback, no Jira task)", ()
 
     await waitFor(() => expect(screen.getByText("Dashboard placeholder")).toBeInTheDocument());
     expect(supabase.auth.signInWithOAuth).not.toHaveBeenCalled();
+  });
+});
+
+describe("AuthPage — show/hide password (professional-polish pass, no Jira task)", () => {
+  it("hides the password by default and reveals it on toggle click", async () => {
+    const user = userEvent.setup();
+    renderAuthPage("/login");
+
+    const passwordInput = screen.getByLabelText("Password");
+    expect(passwordInput).toHaveAttribute("type", "password");
+
+    await user.click(screen.getByRole("button", { name: "Show password" }));
+    expect(passwordInput).toHaveAttribute("type", "text");
+
+    await user.click(screen.getByRole("button", { name: "Hide password" }));
+    expect(passwordInput).toHaveAttribute("type", "password");
+  });
+});
+
+describe("AuthPage — Forgot password (professional-polish pass, no Jira task)", () => {
+  it("shows the link on Log In", () => {
+    renderAuthPage("/login");
+    expect(screen.getByRole("button", { name: "Forgot password?" })).toBeInTheDocument();
+  });
+
+  it("does not show the link on Sign Up", () => {
+    renderAuthPage("/signup");
+    expect(screen.queryByRole("button", { name: "Forgot password?" })).not.toBeInTheDocument();
+  });
+
+  it("sends a reset email and shows a non-committal confirmation (never reveals whether the account exists)", async () => {
+    const user = userEvent.setup();
+    supabase.auth.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
+
+    renderAuthPage("/login");
+    await user.click(screen.getByRole("button", { name: "Forgot password?" }));
+    await user.type(screen.getByLabelText("Email"), "driver@example.com");
+    await user.click(screen.getByRole("button", { name: /Send reset link/ }));
+
+    expect(supabase.auth.resetPasswordForEmail).toHaveBeenCalledWith(
+      "driver@example.com",
+      { redirectTo: `${window.location.origin}/reset-password` },
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "If that email has an account, a reset link is on its way.",
+    );
+  });
+
+  it("requires an email before submitting", async () => {
+    const user = userEvent.setup();
+    renderAuthPage("/login");
+
+    await user.click(screen.getByRole("button", { name: "Forgot password?" }));
+    await user.click(screen.getByRole("button", { name: /Send reset link/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter your email address.");
+    expect(supabase.auth.resetPasswordForEmail).not.toHaveBeenCalled();
+  });
+
+  it("returns to the normal Log In form via \"Back to Log In\"", async () => {
+    const user = userEvent.setup();
+    renderAuthPage("/login");
+
+    await user.click(screen.getByRole("button", { name: "Forgot password?" }));
+    expect(screen.getByRole("heading", { name: "Reset your password" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Back to Log In" }));
+    expect(screen.getByRole("heading", { name: "Log In" })).toBeInTheDocument();
   });
 });
 

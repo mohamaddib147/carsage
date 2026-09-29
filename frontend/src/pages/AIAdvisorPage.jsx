@@ -290,6 +290,21 @@ function AIAdvisorPage() {
     );
   }
 
+  /**
+   * Starts a fresh conversation with the selected car (professional-polish
+   * pass, no Jira task): clears the local transcript and forgets the
+   * current conversation id, so the next sendMessage() call omits
+   * conversation_id and the backend creates a brand-new
+   * advisor_conversations row (see ai_advisor.py's _get_or_create_conversation).
+   * The old conversation isn't deleted — it's just no longer the most
+   * recent for this car, so the history loader won't pick it up next visit.
+   */
+  function handleNewConversation() {
+    setMessages([]);
+    conversationIdRef.current = null;
+    setError("");
+  }
+
   if (loadingCars) {
     return <PageShell title="AI Advisor" description="Loading your car..." />;
   }
@@ -316,25 +331,37 @@ function AIAdvisorPage() {
             Describe a car issue to get DIY-vs-mechanic guidance.
           </p>
         </div>
-        {cars.length > 1 && (
-          <div className="form-field advisor-header__car-select">
-            <label htmlFor="advisorCarId">Car</label>
-            <select
-              id="advisorCarId"
-              value={selectedCarId}
-              onChange={(event) => {
-                setSelectedCarId(event.target.value);
-                setActiveCarId(event.target.value);
-              }}
+        <div className="advisor-header__actions">
+          {cars.length > 1 && (
+            <div className="form-field advisor-header__car-select">
+              <label htmlFor="advisorCarId">Car</label>
+              <select
+                id="advisorCarId"
+                value={selectedCarId}
+                onChange={(event) => {
+                  setSelectedCarId(event.target.value);
+                  setActiveCarId(event.target.value);
+                }}
+              >
+                {cars.map((car) => (
+                  <option key={car.id} value={car.id}>
+                    {[car.year, car.make, car.model].filter(Boolean).join(" ")}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {!loadingHistory && messages.length > 0 && (
+            <button
+              type="button"
+              className="btn-secondary advisor-header__new-btn"
+              onClick={handleNewConversation}
+              disabled={submitting}
             >
-              {cars.map((car) => (
-                <option key={car.id} value={car.id}>
-                  {[car.year, car.make, car.model].filter(Boolean).join(" ")}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+              + New Conversation
+            </button>
+          )}
+        </div>
       </div>
 
       {loadingHistory && (

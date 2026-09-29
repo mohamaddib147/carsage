@@ -126,7 +126,7 @@ describe("App routing — protected screens redirect logged-out users", () => {
 // neither wrapped in <ProtectedRoute> nor deliberately listed as public makes
 // this fail instead of silently shipping an unprotected screen.
 
-const PUBLIC_PATHS = ["*", "/", "/login", "/privacy", "/signup", "/terms"];
+const PUBLIC_PATHS = ["*", "/", "/login", "/privacy", "/reset-password", "/signup", "/terms"];
 
 const declaredRoutes = appSource
   .split("<Route")
@@ -143,7 +143,7 @@ describe("App routing — every route is either protected or deliberately public
     expect(declaredRoutes.some((route) => route.path === "/trip-planner")).toBe(true);
   });
 
-  it("the unprotected routes are exactly the public allow-list (Landing, Log In, Sign Up, Terms, Privacy, 404)", () => {
+  it("the unprotected routes are exactly the public allow-list (Landing, Log In, Sign Up, Reset Password, Terms, Privacy, 404)", () => {
     const unprotected = declaredRoutes.filter((route) => !route.protectedRoute).map((route) => route.path);
 
     expect([...unprotected].sort()).toEqual(PUBLIC_PATHS);

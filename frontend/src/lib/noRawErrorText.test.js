@@ -15,8 +15,15 @@ import { describe, expect, it } from "vitest";
 const modules = import.meta.glob("/src/pages/*.jsx", { query: "?raw", import: "default", eager: true });
 const pages = Object.entries(modules).filter(([path]) => !/\.test\.jsx$/.test(path));
 
-// Files whose only error source is apiFetch (already sanitised).
-const API_FETCH_ONLY = ["/src/pages/TripPlannerPage.jsx", "/src/pages/AIAdvisorPage.jsx"];
+// Files whose only error source is apiFetch (already sanitised). Matched
+// case-insensitively (site-audit follow-up, no Jira task): on Windows'
+// case-insensitive filesystem, import.meta.glob's reported key casing for
+// AiAdvisorPage.jsx has been observed to vary between runs (a Vite glob-
+// cache quirk, not a real rename), which made an exact-case string list
+// here flaky — this filters by lowercased filename instead, so it holds
+// regardless of which casing Vite happens to report.
+const API_FETCH_ONLY_NAMES = ["tripplannerpage.jsx", "aiadvisorpage.jsx"];
+const isApiFetchOnly = (path) => API_FETCH_ONLY_NAMES.includes(path.split("/").pop().toLowerCase());
 
 // set...Error(<anything>.message) / set...Error(<anything>?.message ...)
 const RAW_MESSAGE_INTO_STATE = /set\w*Error\(\s*[\w.?]+\??\.message\b/;
@@ -38,14 +45,16 @@ describe("pages never show a raw error message", () => {
   });
 
   it("no page except the apiFetch-only ones puts error.message into its error state", () => {
-    const checked = pages.filter(([path]) => !API_FETCH_ONLY.includes(path));
+    const checked = pages.filter(([path]) => !isApiFetchOnly(path));
 
     expect(offenders(checked)).toEqual([]);
   });
 
   it("the apiFetch-only pages really do get their errors from apiFetch, not from Supabase", () => {
-    for (const path of API_FETCH_ONLY) {
-      const text = modules[path];
+    const apiFetchOnlyEntries = pages.filter(([path]) => isApiFetchOnly(path));
+    expect(apiFetchOnlyEntries).toHaveLength(API_FETCH_ONLY_NAMES.length);
+
+    for (const [path, text] of apiFetchOnlyEntries) {
       expect(text, path).toContain("apiFetch(");
       // A Supabase call whose error is destructured and shown would break the exemption.
       expect(/\{\s*(data\s*,\s*)?error\s*\}\s*=\s*await\s+supabase/.test(text), path).toBe(false);
