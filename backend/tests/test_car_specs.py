@@ -165,3 +165,127 @@ def test_boundary_years_and_a_60_character_make_are_accepted(year):
         )
 
     assert response.status_code == 200
+
+
+# --- CAR-57: POST /cars/scan-registration -----------------------------------
+
+from app.services.llm_client import LLMError  # noqa: E402
+
+
+def _fake_image_file(content_type="image/jpeg", size=1024):
+    return {"file": ("registration.jpg", b"x" * size, content_type)}
+
+
+def test_scan_registration_returns_the_extracted_fields_on_success():
+    with patch("app.routers.car_specs.extract_registration_fields") as mock_extract:
+        mock_extract.return_value = {
+            "readable": True,
+            "make": "Toyota",
+            "model": "Corolla",
+            "year": 2019,
+            "vin": "1HGCM82633A004352",
+            "license_plate": "BML 78901",
+        }
+        response = client.post("/cars/scan-registration", files=_fake_image_file())
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "readable": True,
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2019,
+        "vin": "1HGCM82633A004352",
+        "license_plate": "BML 78901",
+    }
+    mock_extract.assert_called_once()
+    assert mock_extract.call_args.args[0] == b"x" * 1024
+    assert mock_extract.call_args.args[1] == "image/jpeg"
+
+
+def test_scan_registration_returns_unreadable_fields_without_erroring():
+    # A genuine registration photo Gemini just couldn't confidently read —
+    # distinct from a request-level failure, still a 200.
+    with patch("app.routers.car_specs.extract_registration_fields") as mock_extract:
+        mock_extract.return_value = {
+            "readable": False, "make": None, "model": None, "year": None, "vin": None, "license_plate": None,
+        }
+        response = client.post("/cars/scan-registration", files=_fake_image_file())
+
+    assert response.status_code == 200
+    assert response.json()["readable"] is False
+
+
+def test_scan_registration_requires_a_file():
+    response = client.post("/cars/scan-registration")
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "content_type",
+    ["text/plain", "application/pdf", "application/octet-stream", "video/mp4", ""],
+)
+def test_scan_registration_rejects_a_non_image_content_type(content_type):
+    with patch("app.routers.car_specs.extract_registration_fields") as mock_extract:
+        response = client.post(
+            "/cars/scan-registration", files=_fake_image_file(content_type=content_type)
+        )
+
+    assert response.status_code == 422
+    mock_extract.assert_not_called()
+
+
+def test_scan_registration_rejects_an_oversized_file():
+    with patch("app.routers.car_specs.extract_registration_fields") as mock_extract:
+        response = client.post(
+            "/cars/scan-registration",
+            files=_fake_image_file(size=8 * 1024 * 1024 + 1),
+        )
+
+    assert response.status_code == 422
+    mock_extract.assert_not_called()
+
+
+def test_scan_registration_accepts_a_file_right_at_the_8mb_boundary():
+    with patch("app.routers.car_specs.extract_registration_fields") as mock_extract:
+        mock_extract.return_value = {
+            "readable": True, "make": "Toyota", "model": "Corolla", "year": 2019, "vin": None, "license_plate": None,
+        }
+        response = client.post(
+            "/cars/scan-registration",
+            files=_fake_image_file(size=8 * 1024 * 1024),
+        )
+
+    assert response.status_code == 200
+
+
+def test_scan_registration_rejects_an_empty_file():
+    with patch("app.routers.car_specs.extract_registration_fields") as mock_extract:
+        response = client.post("/cars/scan-registration", files=_fake_image_file(size=0))
+
+    assert response.status_code == 422
+    mock_extract.assert_not_called()
+
+
+def test_scan_registration_surfaces_a_gemini_failure_as_a_plain_422():
+    with patch("app.routers.car_specs.extract_registration_fields") as mock_extract:
+        mock_extract.side_effect = LLMError("Could not read that image right now. Please try again or enter details manually.")
+        response = client.post("/cars/scan-registration", files=_fake_image_file())
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "Could not read that image right now. Please try again or enter details manually."
+    )
+
+
+@pytest.mark.parametrize("content_type", ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"])
+def test_scan_registration_accepts_every_allowed_image_type(content_type):
+    with patch("app.routers.car_specs.extract_registration_fields") as mock_extract:
+        mock_extract.return_value = {
+            "readable": True, "make": None, "model": None, "year": None, "vin": None, "license_plate": None,
+        }
+        response = client.post(
+            "/cars/scan-registration", files=_fake_image_file(content_type=content_type)
+        )
+
+    assert response.status_code == 200

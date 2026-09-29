@@ -155,6 +155,11 @@ export function PrivacyPage() {
             <strong>Google Gemini and Groq</strong>: the AI models used to classify a
             described car issue and generate AI Advisor guidance. The issue
             description you type is sent to whichever of these is available.
+            Gemini is also used, when you choose to scan a registration card
+            on Car Onboarding, to read that photo and extract your car's
+            make, model, year, VIN and license plate; the photo itself is
+            never stored, only the resulting fields, which you can review
+            and edit before saving.
           </li>
           <li>
             <strong>YouTube Data API</strong>: used to find a relevant tutorial video

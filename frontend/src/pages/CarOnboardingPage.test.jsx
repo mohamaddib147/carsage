@@ -907,3 +907,162 @@ describe("CarOnboardingPage polish — Cancel", () => {
     expect(supabase.from).not.toHaveBeenCalled();
   });
 });
+
+// --- CAR-57: registration-card scan ----------------------------------------
+
+/** A minimal fake image File, small and of an allowed type by default. */
+function fakeImageFile({ name = "registration.jpg", type = "image/jpeg", size = 1024 } = {}) {
+  const file = new File([new Uint8Array(size)], name, { type });
+  return file;
+}
+
+/** Wires apiFetch so /cars/scan-registration resolves to `scanResult`, and
+ * any other call (the CAR-34 spec lookup, once make/model/year are filled)
+ * resolves to {} — same "no autofill data" default the other tests rely on. */
+function mockScanResult(scanResult) {
+  apiFetch.mockImplementation((path) =>
+    path === "/cars/scan-registration" ? Promise.resolve(scanResult) : Promise.resolve({}),
+  );
+}
+
+describe("CarOnboardingPage — registration card scan (CAR-57)", () => {
+  it("uploads a photo and fills the currently-empty fields, tagged 'From scanned card' (normal case)", async () => {
+    const user = userEvent.setup();
+    mockScanResult({
+      readable: true,
+      make: "Toyota",
+      model: "Corolla",
+      year: 2019,
+      vin: "1HGCM82633A004352",
+      license_plate: "BML 78901",
+    });
+    renderPage();
+
+    await user.upload(document.getElementById("scanFile"), fakeImageFile());
+
+    await waitFor(() => expect(screen.getByLabelText("Make *")).toHaveValue("Toyota"));
+    expect(screen.getByLabelText("Model *")).toHaveValue("Corolla");
+    expect(screen.getByLabelText("Year *")).toHaveValue(2019);
+    expect(screen.getByLabelText("VIN")).toHaveValue("1HGCM82633A004352");
+    expect(screen.getByLabelText("License Plate")).toHaveValue("BML 78901");
+    expect(screen.getAllByText("From scanned card")).toHaveLength(5);
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/cars/scan-registration",
+      expect.objectContaining({
+        method: "POST",
+        accessToken: "test-access-token",
+        body: expect.any(FormData),
+      }),
+    );
+  });
+
+  it("never overwrites a field the user already typed into", async () => {
+    const user = userEvent.setup();
+    mockScanResult({
+      readable: true,
+      make: "Toyota",
+      model: "Corolla",
+      year: 2019,
+      vin: null,
+      license_plate: null,
+    });
+    renderPage();
+
+    await user.type(screen.getByLabelText("Make *"), "Honda");
+    await user.upload(document.getElementById("scanFile"), fakeImageFile());
+
+    await waitFor(() => expect(screen.getByLabelText("Model *")).toHaveValue("Corolla"));
+    // The user's own typed value survives untouched, and isn't tagged —
+    // only the fields the scan actually filled (Model, Year) are.
+    expect(screen.getByLabelText("Make *")).toHaveValue("Honda");
+    expect(within(screen.getByLabelText("Make *").closest(".form-field")).queryByText("From scanned card")).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("Model *").closest(".form-field")).getByText("From scanned card")).toBeInTheDocument();
+  });
+
+  it("shows a plain message and never blocks manual entry when the photo isn't readable (edge case)", async () => {
+    const user = userEvent.setup();
+    mockScanResult({
+      readable: false, make: null, model: null, year: null, vin: null, license_plate: null,
+    });
+    renderPage();
+
+    await user.upload(document.getElementById("scanFile"), fakeImageFile());
+
+    expect(
+      await screen.findByText(/Couldn't read that as a registration card/),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Make *")).toHaveValue("");
+    // Manual entry still works.
+    await fillRequiredFields(user);
+    expect(screen.getByLabelText("Make *")).toHaveValue("Toyota");
+  });
+
+  it("shows the request's error message and never blocks manual entry when the upload fails", async () => {
+    const user = userEvent.setup();
+    apiFetch.mockImplementation((path) =>
+      path === "/cars/scan-registration"
+        ? Promise.reject(new Error("Could not read that image right now. Please try again or enter details manually."))
+        : Promise.resolve({}),
+    );
+    renderPage();
+
+    await user.upload(document.getElementById("scanFile"), fakeImageFile());
+
+    expect(
+      await screen.findByText("Could not read that image right now. Please try again or enter details manually."),
+    ).toBeInTheDocument();
+    await fillRequiredFields(user);
+    expect(screen.getByLabelText("Make *")).toHaveValue("Toyota");
+  });
+
+  it("rejects an oversized file client-side, without calling apiFetch (edge case)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.upload(
+      document.getElementById("scanFile"),
+      fakeImageFile({ size: 8 * 1024 * 1024 + 1 }),
+    );
+
+    expect(
+      await screen.findByText("That image is too large. Please use a photo under 8 MB."),
+    ).toBeInTheDocument();
+    expect(apiFetch).not.toHaveBeenCalledWith("/cars/scan-registration", expect.anything());
+  });
+
+  it("rejects a non-image file client-side, without calling apiFetch (edge case)", async () => {
+    renderPage();
+    const input = document.getElementById("scanFile");
+    // userEvent.upload enforces the input's own accept="" attribute and
+    // silently refuses a mismatched file before firing change — fine for a
+    // real browser, but this test wants to exercise our own JS validation
+    // (getRegistrationImageError) specifically, so it fires the change
+    // event directly instead.
+    fireEvent.change(input, { target: { files: [fakeImageFile({ name: "notes.txt", type: "text/plain" })] } });
+
+    expect(
+      await screen.findByText("Please choose a JPEG, PNG, WEBP or HEIC photo."),
+    ).toBeInTheDocument();
+    expect(apiFetch).not.toHaveBeenCalledWith("/cars/scan-registration", expect.anything());
+  });
+
+  it("shows a 'Reading registration card' status while the request is in flight", async () => {
+    const user = userEvent.setup();
+    let resolveScan;
+    apiFetch.mockImplementation((path) =>
+      path === "/cars/scan-registration"
+        ? new Promise((resolve) => (resolveScan = resolve))
+        : Promise.resolve({}),
+    );
+    renderPage();
+
+    await user.upload(document.getElementById("scanFile"), fakeImageFile());
+    expect(await screen.findByRole("status")).toHaveTextContent("Reading registration card");
+
+    resolveScan({
+      readable: true, make: "Toyota", model: null, year: null, vin: null, license_plate: null,
+    });
+    await waitFor(() => expect(screen.getByLabelText("Make *")).toHaveValue("Toyota"));
+  });
+});

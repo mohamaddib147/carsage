@@ -34,6 +34,24 @@ describe("apiFetch — success", () => {
     expect(data).toEqual({ ok: 1 });
     expect(fetch.mock.calls[0][1].headers.Authorization).toBe("Bearer tok-123");
   });
+
+  it("CAR-57: sends a FormData body as-is, without JSON-stringifying it or setting Content-Type", async () => {
+    fetch.mockResolvedValue(fakeResponse({ ok: true, body: { readable: true } }));
+    const formData = new FormData();
+    formData.append("file", new Blob(["fake-image"], { type: "image/jpeg" }), "registration.jpg");
+
+    const data = await apiFetch("/cars/scan-registration", {
+      method: "POST",
+      body: formData,
+      accessToken: "tok-123",
+    });
+
+    expect(data).toEqual({ readable: true });
+    const [, options] = fetch.mock.calls[0];
+    expect(options.body).toBe(formData);
+    expect(options.headers["Content-Type"]).toBeUndefined();
+    expect(options.headers.Authorization).toBe("Bearer tok-123");
+  });
 });
 
 describe("apiFetch — errors are always plain language", () => {
