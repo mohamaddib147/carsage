@@ -16,7 +16,7 @@ const modules = import.meta.glob("/src/pages/*.jsx", { query: "?raw", import: "d
 const pages = Object.entries(modules).filter(([path]) => !/\.test\.jsx$/.test(path));
 
 // Files whose only error source is apiFetch (already sanitised).
-const API_FETCH_ONLY = ["/src/pages/TripPlannerPage.jsx", "/src/pages/AIAdvisorPage.jsx"];
+const API_FETCH_ONLY = ["/src/pages/TripPlannerPage.jsx", "/src/pages/AiAdvisorPage.jsx"];
 
 // set...Error(<anything>.message) / set...Error(<anything>?.message ...)
 const RAW_MESSAGE_INTO_STATE = /set\w*Error\(\s*[\w.?]+\??\.message\b/;

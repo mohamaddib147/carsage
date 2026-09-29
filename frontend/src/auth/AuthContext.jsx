@@ -75,6 +75,30 @@ export function AuthProvider({ children }) {
     return supabase.auth.signOut();
   }
 
+  /**
+   * Sends a password-reset email (professional-polish pass, no Jira task).
+   * Supabase's GoTrue never reveals whether the address has an account —
+   * this resolves the same way either way, so the caller can't be used to
+   * enumerate registered emails.
+   * @param {string} email
+   */
+  async function resetPasswordForEmail(email) {
+    return supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+  }
+
+  /**
+   * Sets a new password for the signed-in user. Only meaningful right after
+   * following a reset-password email link, which signs the browser into a
+   * short-lived recovery session (supabase-js's detectSessionInUrl picks
+   * this up the same way it does a Google OAuth redirect).
+   * @param {string} password
+   */
+  async function updatePassword(password) {
+    return supabase.auth.updateUser({ password });
+  }
+
   const value = {
     session,
     user: session?.user ?? null,
@@ -83,6 +107,8 @@ export function AuthProvider({ children }) {
     signIn,
     signInWithGoogle,
     signOut,
+    resetPasswordForEmail,
+    updatePassword,
   };
 
   return (
@@ -107,7 +133,7 @@ export function useAuthStatus() {
 
 /**
  * Reads the current auth context. Must be used within an <AuthProvider>.
- * @returns {{ session: object|null, user: object|null, loading: boolean, signUp: Function, signIn: Function, signInWithGoogle: Function, signOut: Function }}
+ * @returns {{ session: object|null, user: object|null, loading: boolean, signUp: Function, signIn: Function, signInWithGoogle: Function, signOut: Function, resetPasswordForEmail: Function, updatePassword: Function }}
  */
 export function useAuth() {
   const context = useContext(AuthContext);

@@ -159,7 +159,18 @@ function DashboardPage() {
         </div>
 
         {loading ? (
-          <p>Loading your cars...</p>
+          <>
+            <p role="status" className="sr-only">Loading your cars...</p>
+            <ul className="dashboard-car-list" aria-hidden="true">
+              {[0, 1].map((index) => (
+                <li key={index} className="dashboard-car-card dashboard-car-card--skeleton">
+                  <div className="skeleton-bar skeleton-bar--title" />
+                  <div className="skeleton-bar skeleton-bar--meta" />
+                  <div className="skeleton-bar skeleton-bar--specs" />
+                </li>
+              ))}
+            </ul>
+          </>
         ) : cars.length === 0 ? (
           <>
             <p>You haven&apos;t added a car yet.</p>
@@ -211,7 +222,13 @@ function DashboardPage() {
       <section className="dashboard-section" aria-label="DIY suggestion success rate">
         <h2>DIY Success</h2>
         {diyStats.loading ? (
-          <p>Loading...</p>
+          <>
+            <p role="status" className="sr-only">Loading...</p>
+            <div className="dashboard-stat-tile dashboard-stat-tile--skeleton" aria-hidden="true">
+              <div className="skeleton-bar skeleton-bar--stat-value" />
+              <div className="skeleton-bar skeleton-bar--stat-label" />
+            </div>
+          </>
         ) : diyStats.fixRate === null ? (
           <p className="dashboard-diy-empty">
             No feedback yet. After trying a DIY suggestion in the{" "}
