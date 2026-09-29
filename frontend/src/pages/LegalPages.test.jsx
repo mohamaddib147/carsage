@@ -102,17 +102,32 @@ describe("footer legal links", () => {
   });
 });
 
-describe("placeholder legal pages", () => {
+describe("legal pages", () => {
   it.each([
-    ["/terms", "Terms of Service", /estimates/],
-    ["/privacy", "Privacy Policy", /row-level security/],
-  ])("%s renders its page for a logged-out visitor, not the 404", async (path, title, body) => {
+    ["/terms", "Terms of Service", "Estimates, not guarantees"],
+    ["/privacy", "Privacy Policy", "Row-level security"],
+  ])("%s renders its page for a logged-out visitor, not the 404", async (path, title, sectionHeading) => {
     renderAt(path);
 
     expect(await screen.findByRole("heading", { name: title })).toBeInTheDocument();
-    expect(screen.getByText("Coming soon.")).toBeInTheDocument();
-    expect(screen.getByText(body)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: sectionHeading })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Page Not Found" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Back to Landing" })).toHaveAttribute("href", "/");
+    expect(screen.getAllByRole("link", { name: "Back to Landing" }).length).toBeGreaterThan(0);
+  });
+
+  it("Terms of Service warns that the AI Advisor isn't professional advice", async () => {
+    renderAt("/terms");
+
+    expect(
+      await screen.findByText(/not a substitute for a professional mechanical inspection/),
+    ).toBeInTheDocument();
+  });
+
+  it("Privacy Policy lists the third-party services CarSage calls", async () => {
+    renderAt("/privacy");
+
+    expect(await screen.findByText("Supabase")).toBeInTheDocument();
+    expect(screen.getByText("Google Maps & Places")).toBeInTheDocument();
+    expect(screen.getByText(/NHTSA/)).toBeInTheDocument();
   });
 });

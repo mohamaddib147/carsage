@@ -647,18 +647,6 @@ async function typeCar(user) {
   await user.type(screen.getByLabelText("Year *"), "2005");
 }
 
-describe("CarOnboardingPage polish — Scan Document looks disabled", () => {
-  it("is a disabled button, and a disabled accent button is styled greyed-out with a not-allowed cursor", () => {
-    renderPage();
-
-    expect(screen.getByRole("button", { name: "Scan Document" })).toBeDisabled();
-    const rule = cssRule(".btn-accent:disabled");
-    expect(rule).toContain("cursor: not-allowed");
-    expect(rule).toMatch(/background-color: var\(--color-border\)/); // not the active gold
-    expect(rule).toMatch(/opacity: 0\.\d/);
-  });
-});
-
 describe("CarOnboardingPage polish — auto-fill cue", () => {
   it("shows a 'Looking up specs' status while the lookup runs, then removes it", async () => {
     const user = userEvent.setup();

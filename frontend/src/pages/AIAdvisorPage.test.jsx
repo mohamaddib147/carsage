@@ -439,6 +439,55 @@ describe("AIAdvisorPage — conversation history (CAR-21)", () => {
   });
 });
 
+describe("AIAdvisorPage — New Conversation (professional-polish pass, no Jira task)", () => {
+  it("is not shown while there is no transcript yet (edge case)", async () => {
+    mockSupabaseTables({ cars: [{ id: "car-1" }], conversation: null });
+    renderPage();
+
+    await screen.findByRole("button", { name: "Squeaking brakes at low speed" });
+    expect(screen.queryByRole("button", { name: "+ New Conversation" })).not.toBeInTheDocument();
+  });
+
+  it("clears the transcript and forgets the conversation id, so the next message starts a fresh conversation", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({
+      cars: [{ id: "car-1" }],
+      conversation: { id: "conv-old" },
+      messages: [
+        { sender: "user", message_text: "Old issue", recommendation: null },
+        { sender: "ai", message_text: "Old guidance.", recommendation: "mechanic" },
+      ],
+    });
+    apiFetch.mockResolvedValue({
+      conversation_id: "conv-brand-new",
+      recommendation: "diy",
+      guidance: "New guidance.",
+    });
+
+    renderPage();
+    expect(await screen.findByText("Old issue")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "+ New Conversation" }));
+    expect(screen.queryByText("Old issue")).not.toBeInTheDocument();
+    // Clearing the transcript re-shows the welcome/example-chips state.
+    expect(
+      await screen.findByRole("button", { name: "Squeaking brakes at low speed" }),
+    ).toBeInTheDocument();
+
+    const input = screen.getByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
+    await user.type(input, "New issue");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(apiFetch).toHaveBeenCalled());
+    const [, options] = apiFetch.mock.calls[0];
+    expect(options.body.car_id).toBe("car-1");
+    expect(options.body.description).toBe("New issue");
+    // No conversation_id carried over from the cleared conversation — the
+    // backend treats this as "start a new one" (ai_advisor.py).
+    expect(options.body.conversation_id).toBeUndefined();
+  });
+});
+
 describe("AIAdvisorPage — DIY video suggestion (CAR-40)", () => {
   it("shows a video card linking out to YouTube when the response includes one (normal case)", async () => {
     const user = userEvent.setup();

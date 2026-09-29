@@ -50,15 +50,19 @@ function GoogleLogo() {
 function AuthPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { signUp, signIn, signInWithGoogle } = useAuth();
+  const { signUp, signIn, signInWithGoogle, resetPasswordForEmail } = useAuth();
 
   const isSignUp = location.pathname === "/signup";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [infoMessage, setInfoMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
+  // "auth" is the normal Sign Up / Log In form; "forgot" swaps in a
+  // one-field "email a reset link" form (login mode only).
+  const [mode, setMode] = useState("auth");
 
   /** Starts the Google redirect. Works the same for both Sign Up and Log
    * In — Supabase creates the account on first sign-in, same as any other
@@ -77,6 +81,32 @@ function AuthPage() {
     } catch {
       setError("Could not start Google sign-in. Please try again.");
       setGoogleSubmitting(false);
+    }
+  }
+
+  /** @param {import('react').FormEvent} event */
+  async function handleForgotPasswordSubmit(event) {
+    event.preventDefault();
+    setError("");
+    setInfoMessage("");
+
+    if (!email.trim()) {
+      setError("Enter your email address.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { error: authError } = await resetPasswordForEmail(email.trim());
+      if (authError) {
+        setError(describeAuthError(authError));
+        return;
+      }
+      // Never confirms whether the address has an account (GoTrue itself
+      // doesn't reveal this), so the message is deliberately non-committal.
+      setInfoMessage("If that email has an account, a reset link is on its way.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -140,94 +170,187 @@ function AuthPage() {
           <Link
             to="/signup"
             className={`auth-tabs__tab${isSignUp ? " active" : ""}`}
+            onClick={() => {
+              setMode("auth");
+              setError("");
+              setInfoMessage("");
+            }}
           >
             Sign Up
           </Link>
           <Link
             to="/login"
             className={`auth-tabs__tab${!isSignUp ? " active" : ""}`}
+            onClick={() => {
+              setMode("auth");
+              setError("");
+              setInfoMessage("");
+            }}
           >
             Log In
           </Link>
         </div>
 
-        <h1 className="auth-card__title">{isSignUp ? "Sign Up" : "Log In"}</h1>
-        <p className="auth-card__subtitle">
-          {isSignUp
-            ? "Create an account to start tracking your cars."
-            : "Log in to access your dashboard."}
-        </p>
-
-        <button
-          type="button"
-          className="auth-card__google-btn"
-          onClick={handleGoogleClick}
-          disabled={googleSubmitting || submitting}
-        >
-          <GoogleLogo />
-          {googleSubmitting ? "Redirecting..." : `Continue with Google`}
-        </button>
-
-        <div className="auth-card__divider">
-          <span>or</span>
-        </div>
-
-        <form onSubmit={handleSubmit} noValidate className="auth-card__form">
-          <div className="form-field">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              maxLength={LIMITS.EMAIL}
-              placeholder="e.g. you@example.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </div>
-          <div className="form-field">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete={isSignUp ? "new-password" : "current-password"}
-              placeholder={isSignUp ? `At least ${LIMITS.PASSWORD_MIN} characters` : "Your password"}
-              maxLength={LIMITS.PASSWORD_MAX}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </div>
-
-          {error && (
-            <p role="alert" className="auth-form__error">
-              {error}
+        {mode === "forgot" ? (
+          <>
+            <h1 className="auth-card__title">Reset your password</h1>
+            <p className="auth-card__subtitle">
+              Enter your account email and we&apos;ll send you a link to set a new password.
             </p>
-          )}
-          {infoMessage && (
-            <p role="status" className="auth-form__info">
-              {infoMessage}
+
+            <form onSubmit={handleForgotPasswordSubmit} noValidate className="auth-card__form">
+              <div className="form-field">
+                <label htmlFor="forgotEmail">Email</label>
+                <input
+                  id="forgotEmail"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  maxLength={LIMITS.EMAIL}
+                  placeholder="e.g. you@example.com"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </div>
+
+              {error && (
+                <p role="alert" className="auth-form__error">
+                  {error}
+                </p>
+              )}
+              {infoMessage && (
+                <p role="status" className="auth-form__info">
+                  {infoMessage}
+                </p>
+              )}
+
+              <button className="btn-primary auth-card__submit" type="submit" disabled={submitting}>
+                Send reset link
+                <span aria-hidden="true">→</span>
+              </button>
+            </form>
+
+            <p className="auth-card__switch">
+              <button
+                type="button"
+                className="auth-card__link-btn"
+                onClick={() => {
+                  setMode("auth");
+                  setError("");
+                  setInfoMessage("");
+                }}
+              >
+                Back to Log In
+              </button>
             </p>
-          )}
+          </>
+        ) : (
+          <>
+            <h1 className="auth-card__title">{isSignUp ? "Sign Up" : "Log In"}</h1>
+            <p className="auth-card__subtitle">
+              {isSignUp
+                ? "Create an account to start tracking your cars."
+                : "Log in to access your dashboard."}
+            </p>
 
-          <button className="btn-primary auth-card__submit" type="submit" disabled={submitting}>
-            {isSignUp ? "Sign Up" : "Log In"}
-            <span aria-hidden="true">→</span>
-          </button>
-        </form>
+            <button
+              type="button"
+              className="auth-card__google-btn"
+              onClick={handleGoogleClick}
+              disabled={googleSubmitting || submitting}
+            >
+              <GoogleLogo />
+              {googleSubmitting ? "Redirecting..." : `Continue with Google`}
+            </button>
 
-        <p className="auth-card__switch">
-          {isSignUp ? (
-            <>
-              Already have an account? <Link to="/login">Log In</Link>
-            </>
-          ) : (
-            <>
-              Need an account? <Link to="/signup">Sign Up</Link>
-            </>
-          )}
-        </p>
+            <div className="auth-card__divider">
+              <span>or</span>
+            </div>
+
+            <form onSubmit={handleSubmit} noValidate className="auth-card__form">
+              <div className="form-field">
+                <label htmlFor="email">Email</label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  maxLength={LIMITS.EMAIL}
+                  placeholder="e.g. you@example.com"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </div>
+              <div className="form-field">
+                <div className="form-field__label-row">
+                  <label htmlFor="password">Password</label>
+                  {!isSignUp && (
+                    <button
+                      type="button"
+                      className="auth-card__link-btn"
+                      onClick={() => {
+                        setMode("forgot");
+                        setError("");
+                        setInfoMessage("");
+                      }}
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <div className="auth-card__password-row">
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete={isSignUp ? "new-password" : "current-password"}
+                    placeholder={isSignUp ? `At least ${LIMITS.PASSWORD_MIN} characters` : "Your password"}
+                    maxLength={LIMITS.PASSWORD_MAX}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="auth-card__password-toggle"
+                    onClick={() => setShowPassword((previous) => !previous)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <p role="alert" className="auth-form__error">
+                  {error}
+                </p>
+              )}
+              {infoMessage && (
+                <p role="status" className="auth-form__info">
+                  {infoMessage}
+                </p>
+              )}
+
+              <button className="btn-primary auth-card__submit" type="submit" disabled={submitting}>
+                {isSignUp ? "Sign Up" : "Log In"}
+                <span aria-hidden="true">→</span>
+              </button>
+            </form>
+
+            <p className="auth-card__switch">
+              {isSignUp ? (
+                <>
+                  Already have an account? <Link to="/login">Log In</Link>
+                </>
+              ) : (
+                <>
+                  Need an account? <Link to="/signup">Sign Up</Link>
+                </>
+              )}
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

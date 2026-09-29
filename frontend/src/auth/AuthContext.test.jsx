@@ -18,6 +18,8 @@ vi.mock("../lib/supabaseClient.js", () => ({
       })),
       signOut: vi.fn(),
       signInWithOAuth: vi.fn(),
+      resetPasswordForEmail: vi.fn(),
+      updateUser: vi.fn(),
     },
   },
 }));
@@ -83,5 +85,32 @@ describe("AuthProvider", () => {
       provider: "google",
       options: { redirectTo: `${window.location.origin}/dashboard` },
     });
+  });
+
+  it("resetPasswordForEmail sends the reset email with a redirect back to /reset-password (professional-polish pass, no Jira task)", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    supabase.auth.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await result.current.resetPasswordForEmail("driver@example.com");
+
+    expect(supabase.auth.resetPasswordForEmail).toHaveBeenCalledWith(
+      "driver@example.com",
+      { redirectTo: `${window.location.origin}/reset-password` },
+    );
+  });
+
+  it("updatePassword calls Supabase's updateUser with the new password", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    supabase.auth.updateUser.mockResolvedValue({ data: {}, error: null });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await result.current.updatePassword("newSecurePass123");
+
+    expect(supabase.auth.updateUser).toHaveBeenCalledWith({ password: "newSecurePass123" });
   });
 });

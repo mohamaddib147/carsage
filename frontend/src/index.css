@@ -74,7 +74,7 @@ button {
   background-color: var(--color-primary-hover);
 }
 
-/* A disabled accent button (e.g. "Scan Document", coming soon) must LOOK disabled. */
+/* A disabled accent button must LOOK disabled. */
 .btn-accent:disabled {
   background-color: var(--color-border);
   color: var(--color-text-muted);
@@ -238,6 +238,44 @@ button {
   max-width: 60ch;
 }
 
+/* Professional-polish pass (no Jira task): typography for the real Terms
+   of Service / Privacy Policy body text (LegalPages.jsx), replacing the
+   earlier single-paragraph placeholders. */
+.legal-content {
+  max-width: 70ch;
+}
+
+.legal-content h2 {
+  margin: calc(var(--spacing-unit) * 3) 0 calc(var(--spacing-unit) * 1);
+  font-size: 1.125rem;
+}
+
+.legal-content h2:first-of-type {
+  margin-top: calc(var(--spacing-unit) * 2);
+}
+
+.legal-content p,
+.legal-content ul {
+  margin: 0 0 calc(var(--spacing-unit) * 1.5);
+  color: var(--color-text-muted);
+}
+
+.legal-content ul {
+  padding-left: calc(var(--spacing-unit) * 2.5);
+}
+
+.legal-content li {
+  margin-bottom: calc(var(--spacing-unit) * 0.75);
+}
+
+.legal-content li strong {
+  color: var(--color-text);
+}
+
+.legal-content a {
+  color: var(--color-primary);
+}
+
 .site-nav__logout {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.6);
@@ -356,82 +394,6 @@ select:focus {
 
 .btn-secondary:hover {
   background-color: var(--color-border);
-}
-
-.form-divider {
-  display: flex;
-  align-items: center;
-  gap: calc(var(--spacing-unit) * 2);
-  margin: calc(var(--spacing-unit) * 3) 0;
-  max-width: 640px;
-  color: var(--color-text-muted);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.form-divider::before,
-.form-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background-color: var(--color-border);
-}
-
-.scan-card {
-  display: flex;
-  align-items: center;
-  gap: calc(var(--spacing-unit) * 2);
-  max-width: 640px;
-  margin-top: calc(var(--spacing-unit) * 3);
-  padding: calc(var(--spacing-unit) * 2);
-  background-color: var(--color-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
-  flex-wrap: wrap;
-}
-
-.scan-card__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
-  border-radius: var(--radius-base);
-  background-color: var(--color-input-bg);
-  font-size: 1.25rem;
-}
-
-.scan-card__text {
-  flex: 1;
-  min-width: 200px;
-}
-
-.scan-card__title {
-  display: flex;
-  align-items: center;
-  gap: calc(var(--spacing-unit) * 1);
-  margin: 0;
-  font-weight: 700;
-}
-
-.scan-card__desc {
-  margin: 4px 0 0;
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-}
-
-.pill {
-  padding: 2px calc(var(--spacing-unit) * 1);
-  border-radius: 999px;
-  background-color: var(--color-accent);
-  color: var(--color-text);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
 }
 
 .btn-block {
@@ -767,6 +729,61 @@ select:focus {
   font-size: 0.875rem;
 }
 
+/* Professional-polish pass (no Jira task): loading skeletons for the
+   Dashboard's car list and DIY stat tile, replacing plain "Loading..."
+   text with placeholder shapes in the same size/shape as the real
+   content, so the page doesn't visibly jump once data arrives. The
+   skeleton itself is aria-hidden; a separate sr-only status text (in
+   DashboardPage.jsx) is what's announced to assistive tech. */
+.skeleton-bar {
+  border-radius: var(--radius-base);
+  background: linear-gradient(
+    90deg,
+    var(--color-border) 25%,
+    var(--color-input-bg) 50%,
+    var(--color-border) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.dashboard-car-card--skeleton .skeleton-bar--title {
+  width: 55%;
+  height: 1.25rem;
+  margin-bottom: calc(var(--spacing-unit) * 1.5);
+}
+
+.dashboard-car-card--skeleton .skeleton-bar--meta {
+  width: 40%;
+  height: 0.875rem;
+  margin-bottom: calc(var(--spacing-unit) * 2);
+}
+
+.dashboard-car-card--skeleton .skeleton-bar--specs {
+  width: 100%;
+  height: 2.5rem;
+}
+
+.dashboard-stat-tile--skeleton .skeleton-bar--stat-value {
+  width: 4rem;
+  height: 2.25rem;
+  margin-bottom: calc(var(--spacing-unit) * 0.75);
+}
+
+.dashboard-stat-tile--skeleton .skeleton-bar--stat-label {
+  width: 70%;
+  height: 0.875rem;
+}
+
 .dashboard-latest-fix {
   background-color: var(--color-surface);
   border-radius: var(--radius-lg);
@@ -1078,6 +1095,47 @@ select:focus {
   flex-direction: column;
   gap: calc(var(--spacing-unit) * 2);
   text-align: left;
+}
+
+/* Professional-polish pass (no Jira task): "Forgot password?" / "Back to
+   Log In" links styled as plain text so they don't compete with the
+   primary submit button, and the show/hide password toggle next to it. */
+.auth-card__link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.auth-card__password-row {
+  display: flex;
+  align-items: stretch;
+  gap: calc(var(--spacing-unit) * 1);
+}
+
+.auth-card__password-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.auth-card__password-toggle {
+  flex-shrink: 0;
+  padding: 0 calc(var(--spacing-unit) * 1.5);
+  border-radius: var(--radius-base);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-input-bg);
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-card__password-toggle:hover {
+  background-color: var(--color-border);
 }
 
 .auth-card__submit {
@@ -1405,6 +1463,19 @@ select:focus {
   min-width: 220px;
 }
 
+/* Professional-polish pass (no Jira task): the car selector and the "New
+   Conversation" button share a row so they don't fight the title for space. */
+.advisor-header__actions {
+  display: flex;
+  align-items: flex-end;
+  gap: calc(var(--spacing-unit) * 1.5);
+  flex-wrap: wrap;
+}
+
+.advisor-header__new-btn {
+  white-space: nowrap;
+}
+
 .advisor-welcome {
   padding: calc(var(--spacing-unit) * 2.5);
   background-color: var(--color-surface);
@@ -1522,9 +1593,14 @@ select:focus {
   color: var(--color-text);
 }
 
+/* A car-brand theme (theme/carBrandThemes.js) can turn the assistant
+   bubble itself red (e.g. Ferrari); --color-danger is a fixed, non-themed
+   red, so without this border a red badge can visually blend into a red
+   bubble. The white ring keeps it a distinct badge on any bubble color. */
 .advisor-badge--mechanic {
   background-color: var(--color-danger);
   color: #ffffff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
 }
 
 .advisor-steps {
@@ -2162,6 +2238,10 @@ select:focus {
 
 @media (prefers-reduced-motion: reduce) {
   .spec-loading__spinner {
+    animation: none;
+  }
+
+  .skeleton-bar {
     animation: none;
   }
 }
