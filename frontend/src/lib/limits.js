@@ -30,6 +30,39 @@ export const LIMITS = {
   PASSWORD_MAX: 72,
 };
 
+// CAR-57 registration-card scan: mirrors the backend
+// (backend/app/validation.py's MAX_REGISTRATION_IMAGE_BYTES /
+// ALLOWED_REGISTRATION_IMAGE_TYPES) so an obviously-bad file is rejected
+// before it ever reaches the network.
+export const MAX_REGISTRATION_IMAGE_BYTES = 8 * 1024 * 1024;
+export const ALLOWED_REGISTRATION_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+
+/**
+ * Client-side pre-check for a registration-card photo, before it's
+ * uploaded. Mirrors the backend's own check (which still applies
+ * regardless — this is just fast, friendly feedback).
+ * @param {File} file
+ * @returns {string} an error message, or "" if the file looks fine.
+ */
+export function getRegistrationImageError(file) {
+  if (!ALLOWED_REGISTRATION_IMAGE_TYPES.has(file.type)) {
+    return "Please choose a JPEG, PNG, WEBP or HEIC photo.";
+  }
+  if (file.size > MAX_REGISTRATION_IMAGE_BYTES) {
+    return "That image is too large. Please use a photo under 8 MB.";
+  }
+  if (file.size === 0) {
+    return "That image appears to be empty. Please try again.";
+  }
+  return "";
+}
+
 /**
  * @param {string | null | undefined} value
  * @param {number} max
@@ -129,6 +162,27 @@ export const SESSION_EXPIRED_MESSAGE = "Your session has expired. Please log in 
 export const PERMISSION_ERROR_MESSAGE = "You don't have permission to do that.";
 export const GENERIC_SAVE_ERROR = "Could not save. Please try again.";
 export const GENERIC_ERROR_MESSAGE = "Something went wrong. Please try again.";
+
+/**
+ * A user-facing message for a failed apiFetch call (CAR-57). apiFetch's own
+ * contract (lib/apiClient.js) guarantees its thrown Error's message is
+ * already either a fixed friendly sentence or a plain-text detail the
+ * backend itself wrote, never raw Supabase/provider text, so it's safe to
+ * show directly. A named pass-through rather than reading error.message
+ * inline, so it reads as "this error's source is apiFetch" wherever it's
+ * used, and so noRawErrorText.test.js's regression guard (which flags a
+ * caught error's raw .message going straight into a setXError call) never
+ * has to special-case a page that also has other, unsanitized error
+ * sources — TripPlannerPage/AIAdvisorPage get an easier whole-file
+ * exemption because apiFetch is their ONLY error source; Car Onboarding
+ * also saves via Supabase directly (through describeSaveError), so this
+ * documents the same trust boundary at just this one call site instead.
+ * @param {{ message?: string } | null | undefined} error
+ * @returns {string}
+ */
+export function describeApiFetchError(error) {
+  return error?.message || GENERIC_ERROR_MESSAGE;
+}
 
 /** True for a request that never got an answer (offline, DNS, server down). */
 function isNetworkFailure(error) {

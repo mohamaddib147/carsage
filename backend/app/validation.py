@@ -29,6 +29,19 @@ MAX_MESSAGE_TEXT_CHARS = 8000
 # A manual fuel price override, LBP per liter (real prices are ~1.4e5).
 MAX_FUEL_PRICE_LBP = 10_000_000
 
+# CAR-57 registration-card scan: a generous cap for a phone camera photo
+# (a modern phone photo is typically 2-6 MB) without allowing something
+# absurd through to the Gemini vision call. Mirrors the frontend
+# (src/lib/limits.js). HEIC/HEIF covers an iPhone camera's default format.
+MAX_REGISTRATION_IMAGE_BYTES = 8 * 1024 * 1024
+ALLOWED_REGISTRATION_IMAGE_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+}
+
 # A place name: surrounding whitespace is stripped, then it must be 1-300
 # characters — so blank / whitespace-only input is refused too.
 PlaceText = Annotated[

@@ -1,20 +1,30 @@
-// Car Onboarding screen — manual add-a-car form. The "scan registration
-// card" button is a disabled placeholder for MVP (OCR is a stretch goal).
-// Once Make, Model, and a valid Year are all filled in, a debounced
-// background lookup (CAR-34) queries NHTSA vPIC + API Ninjas via the
-// FastAPI backend and fills in Engine Type, Fuel Efficiency, Cylinders,
-// Drivetrain, and Transmission where they're still empty — the user can
-// always override any autofilled value, and a lookup that fails or finds
-// no match never blocks manual entry. Fuel Tank Capacity (L, CAR-44) is
-// filled the same way. No free spec API provides it, so the backend looks
-// it up on auto-data.net, and only if that finds nothing falls back to an
-// AI estimate. Either way a note under the field says where the value
-// came from and to check it (it disappears as soon as the user edits it).
-// Polish pass: the disabled Scan button looks disabled; while the lookup runs a
-// "Looking up specs" status shows, and each field it fills gets an "Auto-filled" tag
-// (until the user edits it); a "* Required" legend sits above "Core Specifications",
-// which is split into Basic Info / Performance / Identification; a required field left
-// empty is outlined in red (and cleared as soon as it is edited); tank capacity and VIN
+// Car Onboarding screen — manual add-a-car form, plus a registration-card
+// scan shortcut (CAR-57): a photo uploaded through the scan card is read
+// by Gemini vision (POST /cars/scan-registration) and fills in whichever
+// of Make/Model/Year/VIN/License Plate are still empty — same "fill only
+// if empty, never block manual entry" behavior as the spec lookup below,
+// tagged "From scanned card" (LabelRow's `source="scan"`) to distinguish
+// it from that lookup's "Auto-filled" tag. An unreadable photo or a failed
+// request shows a plain message and never blocks the rest of the form.
+// The photo itself is never stored anywhere; it's processed for that one
+// request and discarded (see llm_client.py's extract_registration_fields).
+// Once Make, Model, and a valid Year are all filled in (by hand or by the
+// scan), a debounced background lookup (CAR-34) queries NHTSA vPIC + API
+// Ninjas via the FastAPI backend and fills in Engine Type, Fuel
+// Efficiency, Cylinders, Drivetrain, and Transmission where they're still
+// empty — the user can always override any autofilled value, and a lookup
+// that fails or finds no match never blocks manual entry. Fuel Tank
+// Capacity (L, CAR-44) is filled the same way. No free spec API provides
+// it, so the backend looks it up on auto-data.net, and only if that finds
+// nothing falls back to an AI estimate. Either way a note under the field
+// says where the value came from and to check it (it disappears as soon
+// as the user edits it).
+// Polish pass: while a lookup runs a "Looking up specs"/"Reading
+// registration card" status shows, and each field it fills gets its
+// source's tag (until the user edits it); a "* Required" legend sits
+// above "Core Specifications", which is split into Basic Info /
+// Performance / Identification; a required field left empty is outlined
+// in red (and cleared as soon as it is edited); tank capacity and VIN
 // have a one-line caption; and a Cancel link goes back to the Dashboard.
 // Layout matches docs/stitch_carsage_landing_page/carsage_add_your_car
 // for the in-scope parts (scan card row, section divider, 2-column field
@@ -30,8 +40,10 @@ import { apiFetch } from "../lib/apiClient.js";
 import { supabase } from "../lib/supabaseClient.js";
 import {
   LIMITS,
+  describeApiFetchError,
   describeSaveError,
   getCarFieldErrors,
+  getRegistrationImageError,
 } from "../lib/limits.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 
@@ -115,14 +127,18 @@ function validate(form) {
 }
 
 /**
- * Small "✓ Auto-filled" tag shown next to a field's label while its value is the one the
- * spec lookup filled in (it goes away when the user edits the field).
+ * Small tag shown next to a field's label while its value is one the app
+ * filled in for the user (it goes away as soon as the user edits the
+ * field) — "Auto-filled" for the CAR-34 spec lookup, "From scanned card"
+ * for CAR-57's registration-card scan, so the two sources read distinctly.
+ * @param {{ source: "spec" | "scan" }} props
  * @returns {JSX.Element}
  */
-function AutoFilledTag() {
+function AutoFilledTag({ source }) {
+  const label = source === "scan" ? "From scanned card" : "Auto-filled";
   return (
     <span className="autofill-tag" title="Filled in automatically, feel free to edit it">
-      <span aria-hidden="true">✓</span> Auto-filled
+      <span aria-hidden="true">✓</span> {label}
     </span>
   );
 }
@@ -130,14 +146,14 @@ function AutoFilledTag() {
 /**
  * A field's label plus, when it applies, the auto-filled tag. The tag sits BESIDE the
  * <label>, not inside it, so the field's accessible name stays exactly its label text.
- * @param {{ htmlFor: string, autoFilled?: boolean, children: import('react').ReactNode }} props
+ * @param {{ htmlFor: string, source?: "spec" | "scan", children: import('react').ReactNode }} props
  * @returns {JSX.Element}
  */
-function LabelRow({ htmlFor, autoFilled, children }) {
+function LabelRow({ htmlFor, source, children }) {
   return (
     <div className="form-field__label-row">
       <label htmlFor={htmlFor}>{children}</label>
-      {autoFilled && <AutoFilledTag />}
+      {source && <AutoFilledTag source={source} />}
     </div>
   );
 }
@@ -177,6 +193,17 @@ function CarOnboardingPage() {
   const formRef = useRef(form);
   formRef.current = form;
 
+  // CAR-57 registration-card scan: true while the upload/read request is in
+  // flight; a plain error message when the photo couldn't be read or the
+  // request failed; which fields the scan filled in (separate from
+  // `autoFilled` so the tag can say "From scanned card" instead of "Auto-
+  // filled" — see LabelRow). A ref resets the file input's value after
+  // every attempt so selecting the exact same file again still fires onChange.
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanError, setScanError] = useState("");
+  const [scanFilled, setScanFilled] = useState({});
+  const scanFileInputRef = useRef(null);
+
   /** @param {keyof typeof EMPTY_FORM} field */
   function handleChange(field) {
     return (event) => {
@@ -193,7 +220,77 @@ function CarOnboardingPage() {
         const { [field]: _edited, ...rest } = previous;
         return rest;
       });
+      setScanFilled((previous) => {
+        if (!previous[field]) return previous;
+        const { [field]: _edited, ...rest } = previous;
+        return rest;
+      });
     };
+  }
+
+  /**
+   * Handles a registration-card photo picked via the scan card's file
+   * input (CAR-57). Validates client-side first (no network call on an
+   * obviously-bad file); on success, fills only the currently-empty
+   * fields among make/model/year/VIN/license plate and tags exactly
+   * those with the "From scanned card" tag — the exact same merge-if-
+   * empty pattern the spec lookup below uses, just for a different set
+   * of fields and a distinct tag.
+   * @param {import('react').ChangeEvent<HTMLInputElement>} event
+   */
+  async function handleScanFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setScanError("");
+
+    const clientError = getRegistrationImageError(file);
+    if (clientError) {
+      setScanError(clientError);
+      if (scanFileInputRef.current) scanFileInputRef.current.value = "";
+      return;
+    }
+
+    setScanLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const result = await apiFetch("/cars/scan-registration", {
+        method: "POST",
+        body: formData,
+        accessToken: sessionRef.current?.access_token,
+      });
+
+      if (!result.readable) {
+        setScanError(
+          "Couldn't read that as a registration card. Try a clearer photo, or enter the details manually below.",
+        );
+        return;
+      }
+
+      const current = formRef.current;
+      const filled = {};
+      if (!current.make && result.make) filled.make = true;
+      if (!current.model && result.model) filled.model = true;
+      if (!current.year && result.year != null) filled.year = true;
+      if (!current.vin && result.vin) filled.vin = true;
+      if (!current.licensePlate && result.license_plate) filled.licensePlate = true;
+      setScanFilled((previous) => ({ ...previous, ...filled }));
+
+      setForm((previous) => ({
+        ...previous,
+        make: previous.make || result.make || "",
+        model: previous.model || result.model || "",
+        year: previous.year || (result.year != null ? String(result.year) : ""),
+        vin: previous.vin || result.vin || "",
+        licensePlate: previous.licensePlate || result.license_plate || "",
+      }));
+    } catch (error) {
+      setScanError(describeApiFetchError(error));
+    } finally {
+      setScanLoading(false);
+      if (scanFileInputRef.current) scanFileInputRef.current.value = "";
+    }
   }
 
   // CAR-34: once Make/Model/Year are all valid, look up autofill
@@ -352,6 +449,49 @@ function CarOnboardingPage() {
       title="Meet Your Car"
       description="Add your vehicle details to get started."
     >
+      <div className="scan-card">
+        <span className="scan-card__icon" aria-hidden="true">
+          📷
+        </span>
+        <div className="scan-card__text">
+          <p className="scan-card__title">Scan Registration Card</p>
+          <p className="scan-card__desc">
+            Take or upload a photo to fill in Make, Model, Year, VIN and License Plate automatically.
+          </p>
+          {scanLoading && (
+            <p role="status" className="spec-loading">
+              <span className="spec-loading__spinner" aria-hidden="true" />
+              Reading registration card…
+            </p>
+          )}
+          {scanError && (
+            <p role="alert" className="auth-form__error">
+              {scanError}
+            </p>
+          )}
+        </div>
+        <label
+          className={`btn-accent scan-card__button${scanLoading ? " btn-accent--loading" : ""}`}
+          htmlFor="scanFile"
+        >
+          {scanLoading ? "Reading…" : "Scan Document"}
+        </label>
+        <input
+          id="scanFile"
+          ref={scanFileInputRef}
+          className="sr-only"
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+          capture="environment"
+          disabled={scanLoading}
+          onChange={handleScanFile}
+        />
+      </div>
+
+      <div className="form-divider">
+        <span>Or enter manually</span>
+      </div>
+
       <form onSubmit={handleSubmit} noValidate className="car-form">
         <p className="form-legend">* Required</p>
         <p className="form-section-label">Core Specifications</p>
@@ -363,7 +503,9 @@ function CarOnboardingPage() {
           </h3>
           <div className="form-grid">
             <div className="form-field">
-              <label htmlFor="make">Make *</label>
+              <LabelRow htmlFor="make" source={scanFilled.make ? "scan" : undefined}>
+                Make *
+              </LabelRow>
               <input
                 id="make"
                 name="make"
@@ -377,7 +519,9 @@ function CarOnboardingPage() {
             </div>
 
             <div className="form-field">
-              <label htmlFor="model">Model *</label>
+              <LabelRow htmlFor="model" source={scanFilled.model ? "scan" : undefined}>
+                Model *
+              </LabelRow>
               <input
                 id="model"
                 name="model"
@@ -391,7 +535,9 @@ function CarOnboardingPage() {
             </div>
 
             <div className="form-field">
-              <label htmlFor="year">Year *</label>
+              <LabelRow htmlFor="year" source={scanFilled.year ? "scan" : undefined}>
+                Year *
+              </LabelRow>
               <input
                 id="year"
                 name="year"
@@ -437,7 +583,7 @@ function CarOnboardingPage() {
           )}
           <div className="form-grid">
             <div className="form-field">
-              <LabelRow htmlFor="engineType" autoFilled={autoFilled.engineType}>
+              <LabelRow htmlFor="engineType" source={autoFilled.engineType ? "spec" : undefined}>
                 Engine Type
               </LabelRow>
               <input
@@ -453,7 +599,7 @@ function CarOnboardingPage() {
             </div>
 
             <div className="form-field">
-              <LabelRow htmlFor="fuelEfficiency" autoFilled={autoFilled.fuelEfficiency}>
+              <LabelRow htmlFor="fuelEfficiency" source={autoFilled.fuelEfficiency ? "spec" : undefined}>
                 Fuel Efficiency (km/L)
               </LabelRow>
               <input
@@ -470,7 +616,7 @@ function CarOnboardingPage() {
             </div>
 
             <div className="form-field">
-              <LabelRow htmlFor="cylinders" autoFilled={autoFilled.cylinders}>
+              <LabelRow htmlFor="cylinders" source={autoFilled.cylinders ? "spec" : undefined}>
                 Cylinders
               </LabelRow>
               <input
@@ -486,7 +632,7 @@ function CarOnboardingPage() {
             </div>
 
             <div className="form-field">
-              <LabelRow htmlFor="drivetrain" autoFilled={autoFilled.drivetrain}>
+              <LabelRow htmlFor="drivetrain" source={autoFilled.drivetrain ? "spec" : undefined}>
                 Drivetrain
               </LabelRow>
               <input
@@ -502,7 +648,7 @@ function CarOnboardingPage() {
             </div>
 
             <div className="form-field">
-              <LabelRow htmlFor="transmission" autoFilled={autoFilled.transmission}>
+              <LabelRow htmlFor="transmission" source={autoFilled.transmission ? "spec" : undefined}>
                 Transmission
               </LabelRow>
               <input
@@ -518,7 +664,7 @@ function CarOnboardingPage() {
             </div>
 
             <div className="form-field">
-              <LabelRow htmlFor="fuelTankCapacity" autoFilled={autoFilled.fuelTankCapacity}>
+              <LabelRow htmlFor="fuelTankCapacity" source={autoFilled.fuelTankCapacity ? "spec" : undefined}>
                 Fuel Tank Capacity (L)
               </LabelRow>
               <input
@@ -554,7 +700,9 @@ function CarOnboardingPage() {
           </h3>
           <div className="form-grid">
             <div className="form-field">
-              <label htmlFor="licensePlate">License Plate</label>
+              <LabelRow htmlFor="licensePlate" source={scanFilled.licensePlate ? "scan" : undefined}>
+                License Plate
+              </LabelRow>
               <input
                 id="licensePlate"
                 name="licensePlate"
@@ -568,7 +716,9 @@ function CarOnboardingPage() {
             </div>
 
             <div className="form-field">
-              <label htmlFor="vin">VIN</label>
+              <LabelRow htmlFor="vin" source={scanFilled.vin ? "scan" : undefined}>
+                VIN
+              </LabelRow>
               <input
                 id="vin"
                 name="vin"

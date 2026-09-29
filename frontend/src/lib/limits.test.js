@@ -6,10 +6,12 @@ import { describe, expect, it } from "vitest";
 import {
   GENERIC_ERROR_MESSAGE,
   LIMITS,
+  MAX_REGISTRATION_IMAGE_BYTES,
   NETWORK_ERROR_MESSAGE,
   PERMISSION_ERROR_MESSAGE,
   SESSION_EXPIRED_MESSAGE,
   describeActionError,
+  describeApiFetchError,
   describeAuthError,
   describeSaveError,
   getCarFieldErrors,
@@ -17,6 +19,7 @@ import {
   getFuelEfficiencyError,
   getFuelPriceError,
   getLengthError,
+  getRegistrationImageError,
 } from "./limits.js";
 
 describe("getLengthError", () => {
@@ -94,6 +97,59 @@ describe("getCarFieldErrors", () => {
     const errors = getCarFieldErrors({ fuelEfficiency: "500", cylinders: "99" });
 
     expect(Object.keys(errors).sort()).toEqual(["cylinders", "fuelEfficiency"]);
+  });
+});
+
+describe("describeApiFetchError (CAR-57)", () => {
+  it("passes through an apiFetch error's own message (normal case)", () => {
+    expect(describeApiFetchError(new Error("That image is too large. Please use a photo under 8 MB."))).toBe(
+      "That image is too large. Please use a photo under 8 MB.",
+    );
+  });
+
+  it("falls back to the generic sentence for an error with no message (edge case)", () => {
+    expect(describeApiFetchError({})).toBe(GENERIC_ERROR_MESSAGE);
+    expect(describeApiFetchError(null)).toBe(GENERIC_ERROR_MESSAGE);
+  });
+});
+
+describe("getRegistrationImageError (CAR-57)", () => {
+  it("accepts a normal-sized JPEG (normal case)", () => {
+    expect(getRegistrationImageError({ type: "image/jpeg", size: 2_000_000 })).toBe("");
+  });
+
+  it.each(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"])(
+    "accepts every allowed type (%s)",
+    (type) => {
+      expect(getRegistrationImageError({ type, size: 1024 })).toBe("");
+    },
+  );
+
+  it.each(["text/plain", "application/pdf", "video/mp4", ""])(
+    "rejects a non-image type (%s)",
+    (type) => {
+      expect(getRegistrationImageError({ type, size: 1024 })).toBe(
+        "Please choose a JPEG, PNG, WEBP or HEIC photo.",
+      );
+    },
+  );
+
+  it("rejects a file over the 8 MB cap", () => {
+    expect(
+      getRegistrationImageError({ type: "image/jpeg", size: MAX_REGISTRATION_IMAGE_BYTES + 1 }),
+    ).toBe("That image is too large. Please use a photo under 8 MB.");
+  });
+
+  it("accepts a file right at the 8 MB boundary", () => {
+    expect(
+      getRegistrationImageError({ type: "image/jpeg", size: MAX_REGISTRATION_IMAGE_BYTES }),
+    ).toBe("");
+  });
+
+  it("rejects an empty file (edge case)", () => {
+    expect(getRegistrationImageError({ type: "image/jpeg", size: 0 })).toBe(
+      "That image appears to be empty. Please try again.",
+    );
   });
 });
 
