@@ -14,7 +14,11 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
  * @throws {Error} with the backend's `detail` message if the response isn't ok.
  */
 export async function apiFetch(path, { method = "GET", body, accessToken } = {}) {
-  const headers = { "Content-Type": "application/json" };
+  // CAR-57 (registration-card scan): a FormData body (a file upload) is
+  // sent as-is — the browser sets its own multipart Content-Type with the
+  // boundary, which we must not override. Every other call keeps JSON.
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+  const headers = isFormData ? {} : { "Content-Type": "application/json" };
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
   }
@@ -30,7 +34,7 @@ export async function apiFetch(path, { method = "GET", body, accessToken } = {})
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: isFormData ? body : body ? JSON.stringify(body) : undefined,
     });
   } catch {
     // The browser's own wording ("Failed to fetch", "Load failed", ...) is

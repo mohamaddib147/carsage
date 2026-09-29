@@ -221,6 +221,7 @@ The FastAPI service is used by the frontend; it is not meant to be called by han
 | `POST /trip-planner/estimate` | The full trip estimate for one of your cars; saves the trip. |
 | `GET /trip-planner/fuel-prices` | Current fuel prices per fuel type (LBP and USD). |
 | `GET /cars/spec-suggestions` | Best-effort spec autofill for a make, model and year. |
+| `POST /cars/scan-registration` | Reads a photographed registration card and extracts make, model, year, VIN and license plate. |
 | `POST /ai-advisor/classify` | Sends a described problem to the AI Advisor and saves the conversation. |
 
 Errors are always short, plain messages; the service never returns stack traces or internal details.
