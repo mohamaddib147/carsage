@@ -7,8 +7,14 @@
 // a car cascades to its `trips` rows and nulls out any
 // `advisor_conversations.car_id` referencing it (CAR-38) — both handled
 // by the DB's own foreign key rules, not application code.
+// CAR-58: shows the car's photo (a short-lived signed URL from the
+// private `car-photos` Storage bucket, via lib/carPhoto.js — the bucket
+// has no permanent public URL) or a placeholder silhouette when none is
+// set. Replacing a photo uploads the new one, saves its path on the row,
+// THEN deletes the old object (never the other order — a mid-upload
+// failure must never leave the car with no photo at all).
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
@@ -19,9 +25,33 @@ import {
   describeSaveError,
   getCarFieldErrors,
 } from "../lib/limits.js";
+import { deleteCarPhoto, getCarPhotoError, getCarPhotoUrl, uploadCarPhoto } from "../lib/carPhoto.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 import BrandBadge, { hasBrandBadge } from "../theme/BrandBadge.jsx";
+
+/** The car-silhouette placeholder shown when a car has no photo yet. */
+function CarPhotoPlaceholder() {
+  return (
+    <svg
+      className="car-photo__placeholder-icon"
+      viewBox="0 0 64 40"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <path
+        d="M6 28 L10 16 Q12 11 18 11 H46 Q52 11 54 16 L58 28"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M2 28 H62 V32 Q62 34 60 34 H4 Q2 34 2 32 Z" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="16" cy="34" r="4" />
+      <circle cx="48" cy="34" r="4" />
+    </svg>
+  );
+}
 
 const FUEL_TYPE_OPTIONS = [
   "Gasoline",
@@ -180,6 +210,16 @@ function CarProfilePage() {
   const [settingDefault, setSettingDefault] = useState(false);
   const [defaultError, setDefaultError] = useState("");
 
+  // CAR-58: the car's photo, as a short-lived signed URL (the `car-photos`
+  // bucket is private — there is no plain, permanent URL for a photo).
+  // `photoLoading` covers both an upload-in-progress and a remove-in-
+  // progress, so the controls disable either way; `photoError` is a plain
+  // message for any failure (upload, delete, or the row update).
+  const [photoUrl, setPhotoUrl] = useState(null);
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+  const photoFileInputRef = useRef(null);
+
   useEffect(() => {
     // Guards against rendering before the auth session has resolved. In
     // practice ProtectedRoute already guarantees `user` is set before
@@ -244,6 +284,91 @@ function CarProfilePage() {
   useEffect(() => {
     if (car) setActiveCarId(car.id);
   }, [car, setActiveCarId]);
+
+  // CAR-58: (re)loads the signed URL whenever the car's stored photo path
+  // changes (a fresh car, a newly uploaded photo, or one just removed).
+  useEffect(() => {
+    let cancelled = false;
+    getCarPhotoUrl(car?.photo_path).then((url) => {
+      if (!cancelled) setPhotoUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [car?.photo_path]);
+
+  /**
+   * Uploads a newly picked photo, replacing any existing one: the old
+   * object is deleted only after the new one is successfully saved on the
+   * row, so a failure midway never leaves the car with no photo at all.
+   * @param {import('react').ChangeEvent<HTMLInputElement>} event
+   */
+  async function handlePhotoChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setPhotoError("");
+    const clientError = getCarPhotoError(file);
+    if (clientError) {
+      setPhotoError(clientError);
+      if (photoFileInputRef.current) photoFileInputRef.current.value = "";
+      return;
+    }
+
+    setPhotoLoading(true);
+    try {
+      const previousPath = car.photo_path;
+      const { path, error: uploadError } = await uploadCarPhoto(user.id, car.id, file);
+      if (uploadError) {
+        setPhotoError("Could not upload that photo. Please try again.");
+        return;
+      }
+
+      const { data, error: saveError } = await supabase
+        .from("cars")
+        .update({ photo_path: path })
+        .eq("id", car.id)
+        .select()
+        .single();
+
+      if (saveError) {
+        setPhotoError(describeSaveError(saveError));
+        await deleteCarPhoto(path); // don't leave the just-uploaded object orphaned
+        return;
+      }
+
+      setCar(data);
+      await deleteCarPhoto(previousPath); // only after the new photo is safely saved
+    } finally {
+      setPhotoLoading(false);
+      if (photoFileInputRef.current) photoFileInputRef.current.value = "";
+    }
+  }
+
+  /** Clears the car's photo: the row first, then the now-unreferenced storage object. */
+  async function handleRemovePhoto() {
+    setPhotoError("");
+    setPhotoLoading(true);
+    try {
+      const previousPath = car.photo_path;
+      const { data, error } = await supabase
+        .from("cars")
+        .update({ photo_path: null })
+        .eq("id", car.id)
+        .select()
+        .single();
+
+      if (error) {
+        setPhotoError(describeSaveError(error));
+        return;
+      }
+
+      setCar(data);
+      await deleteCarPhoto(previousPath);
+    } finally {
+      setPhotoLoading(false);
+    }
+  }
 
   /** Switching cars navigates to that car's own profile URL. */
   function handleSwitchCar(event) {
@@ -576,6 +701,45 @@ function CarProfilePage() {
           </select>
         </div>
       )}
+
+      <div className="car-photo">
+        {photoUrl ? (
+          <img className="car-photo__image" src={photoUrl} alt={`${car.make} ${car.model}`} />
+        ) : (
+          <div className="car-photo__placeholder" aria-hidden="true">
+            <CarPhotoPlaceholder />
+          </div>
+        )}
+        <div className="car-photo__controls">
+          <label className="btn-secondary car-photo__upload-btn" htmlFor="carPhotoFile">
+            {photoLoading ? "Working..." : photoUrl ? "Change Photo" : "Add Photo"}
+          </label>
+          <input
+            id="carPhotoFile"
+            ref={photoFileInputRef}
+            className="sr-only"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+            disabled={photoLoading}
+            onChange={handlePhotoChange}
+          />
+          {photoUrl && (
+            <button
+              type="button"
+              className="car-photo__remove-btn"
+              onClick={handleRemovePhoto}
+              disabled={photoLoading}
+            >
+              Remove Photo
+            </button>
+          )}
+        </div>
+        {photoError && (
+          <p role="alert" className="auth-form__error">
+            {photoError}
+          </p>
+        )}
+      </div>
 
       <div className="profile-header">
         <span className="profile-header__icon">
