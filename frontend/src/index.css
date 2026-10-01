@@ -535,13 +535,14 @@ select:focus {
   color: var(--color-primary);
 }
 
-/* CAR-58 (restyled): the car photo shown above the profile header — a
-   signed-URL image, or a line-drawn silhouette placeholder matching the
-   logo's own style (not an emoji) when no photo is set. Controls are
-   small round buttons overlaid on the photo itself (bottom-right to add/
-   change, top-right to remove), not a separate row of text buttons below
-   it — keeps the whole thing compact instead of eating extra vertical
-   space, and reads as a standard "edit this photo" pattern. */
+/* CAR-58: Car Onboarding's photo preview frame — a selected file's local
+   preview, or (CAR-59, since reverted) a stock image; small round
+   buttons overlaid on the photo itself (bottom-right to add/change,
+   top-right to remove) rather than a separate row of text buttons below
+   it. Car Profile's own photo (restyled further, no Jira task) no longer
+   uses this big frame at all — it now fills the small round identity
+   icon beside the car's name instead; see `.profile-header__icon`/
+   `.profile-header__photo`/`.profile-header__photo-btn` below. */
 .car-photo {
   margin-top: calc(var(--spacing-unit) * 3);
   display: flex;
@@ -565,21 +566,6 @@ select:focus {
   height: 100%;
   object-fit: cover;
   display: block;
-}
-
-.car-photo__placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--color-input-bg);
-  color: var(--color-text-muted);
-}
-
-.car-photo__placeholder-icon {
-  width: 96px;
-  height: 60px;
 }
 
 .car-photo__overlay-btn {
@@ -620,18 +606,6 @@ select:focus {
 
 .car-photo__overlay-btn--remove:hover:not(:disabled) {
   background-color: rgba(179, 38, 30, 0.92);
-}
-
-.car-photo__loading-badge {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background-color: rgba(20, 20, 20, 0.6);
-  color: #ffffff;
-  font-size: 0.75rem;
-  font-weight: 600;
 }
 
 /* Car Onboarding's smaller, left-aligned variant (vs. Car Profile's
@@ -697,6 +671,61 @@ select:focus {
   border-radius: 999px;
   background-color: var(--color-input-bg);
   font-size: 1.75rem;
+  position: relative;
+}
+
+/* CAR-58 restyle (no Jira task, direct feedback): the car's photo fills
+   this same round identity icon instead of a separate box above the
+   header — round, cropped to fit (`object-fit: cover`), no photo at all
+   shown when none is set (just the usual BrandBadge/🚗 fallback). Small
+   edit buttons sit right on the circle's own edge, like a typical
+   profile-picture editor, rather than a photo box with controls below it. */
+.profile-header__photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 999px;
+  display: block;
+}
+
+.profile-header__photo-btn {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid var(--color-surface);
+  background-color: rgba(20, 20, 20, 0.75);
+  color: #ffffff;
+  padding: 0;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.profile-header__photo-btn:hover:not(:disabled) {
+  background-color: rgba(20, 20, 20, 0.92);
+}
+
+.profile-header__photo-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.profile-header__photo-btn--change {
+  bottom: -2px;
+  right: -2px;
+}
+
+.profile-header__photo-btn--remove {
+  top: -2px;
+  right: -2px;
+  background-color: rgba(179, 38, 30, 0.85);
+}
+
+.profile-header__photo-btn--remove:hover:not(:disabled) {
+  background-color: rgba(179, 38, 30, 0.95);
 }
 
 .profile-header__info {
