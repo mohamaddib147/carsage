@@ -165,6 +165,25 @@ function LabelRow({ htmlFor, source, children }) {
   );
 }
 
+/** Small camera icon for the Photo field's upload well and overlay button (CAR-58 restyle). */
+function CameraIcon({ className }) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M4 8h3l2-2h6l2 2h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="14" r="3.5" />
+    </svg>
+  );
+}
+
+/** Small trash icon for the Photo field's "remove" overlay button. */
+function TrashIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 /**
  * Add Your Car screen: manual entry form for Make, Model, Year, Engine
  * Type, Fuel Type, License Plate, and VIN. On submit, inserts a new row
@@ -806,30 +825,40 @@ function CarOnboardingPage() {
             Photo
           </h3>
           <div className="car-photo car-photo--onboarding">
+            <input
+              id="photoFile"
+              className="sr-only"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+              onChange={handlePhotoFileChange}
+            />
             {photoPreviewUrl ? (
-              <img className="car-photo__image" src={photoPreviewUrl} alt="Selected car preview" />
-            ) : (
-              <div className="car-photo__placeholder car-photo__placeholder--onboarding" aria-hidden="true">
-                No photo selected
-              </div>
-            )}
-            <div className="car-photo__controls">
-              <label className="btn-secondary car-photo__upload-btn" htmlFor="photoFile">
-                {photoFile ? "Change Photo" : "Add a Photo (optional)"}
-              </label>
-              <input
-                id="photoFile"
-                className="sr-only"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                onChange={handlePhotoFileChange}
-              />
-              {photoFile && (
-                <button type="button" className="car-photo__remove-btn" onClick={handleRemovePhotoFile}>
-                  Remove
+              <div className="car-photo__frame">
+                <img className="car-photo__image" src={photoPreviewUrl} alt="Selected car preview" />
+                <label
+                  className="car-photo__overlay-btn car-photo__overlay-btn--change"
+                  htmlFor="photoFile"
+                  aria-label="Change photo"
+                  title="Change photo"
+                >
+                  <CameraIcon />
+                </label>
+                <button
+                  type="button"
+                  className="car-photo__overlay-btn car-photo__overlay-btn--remove"
+                  onClick={handleRemovePhotoFile}
+                  aria-label="Remove photo"
+                  title="Remove photo"
+                >
+                  <TrashIcon />
                 </button>
-              )}
-            </div>
+              </div>
+            ) : (
+              <label className="car-photo__well" htmlFor="photoFile">
+                <CameraIcon className="car-photo__well-icon" />
+                Add a Photo (optional)
+              </label>
+            )}
             {photoFieldError && (
               <p role="alert" className="auth-form__error">
                 {photoFieldError}

@@ -742,9 +742,9 @@ describe("CarProfilePage — car photo (CAR-58)", () => {
 
     renderAt("/cars/mine");
 
-    expect(await screen.findByText("Add Photo")).toBeInTheDocument();
+    expect(await screen.findByTitle("Add photo")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: /Toyota Corolla/ })).not.toBeInTheDocument();
-    expect(screen.queryByText("Remove Photo")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove photo" })).not.toBeInTheDocument();
     expect(supabase.storage.from).not.toHaveBeenCalled();
   });
 
@@ -759,8 +759,8 @@ describe("CarProfilePage — car photo (CAR-58)", () => {
       "https://signed.example/car-456.jpg",
     );
     expect(createSignedUrl).toHaveBeenCalledWith("user-123/car-456-old-uuid.jpg", 3600);
-    expect(screen.getByText("Change Photo")).toBeInTheDocument();
-    expect(screen.getByText("Remove Photo")).toBeInTheDocument();
+    expect(screen.getByTitle("Change photo")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove photo" })).toBeInTheDocument();
   });
 
   it("uploads a new photo and saves it on the row; nothing to delete when there was no previous photo", async () => {
@@ -771,11 +771,11 @@ describe("CarProfilePage — car photo (CAR-58)", () => {
     const { upload, remove } = mockStorage();
 
     renderAt("/cars/mine");
-    await screen.findByText("Add Photo");
+    await screen.findByTitle("Add photo");
 
     fireEvent.change(document.getElementById("carPhotoFile"), { target: { files: [fakeImageFile()] } });
 
-    await waitFor(() => expect(screen.getByText("Change Photo")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTitle("Change photo")).toBeInTheDocument());
     expect(upload).toHaveBeenCalledTimes(1);
     expect(upload.mock.calls[0][0]).toMatch(/^user-123\/car-456-.+\.jpg$/);
     expect(remove).not.toHaveBeenCalled();
@@ -789,7 +789,7 @@ describe("CarProfilePage — car photo (CAR-58)", () => {
     const { remove } = mockStorage();
 
     renderAt("/cars/mine");
-    await screen.findByText("Change Photo");
+    await screen.findByTitle("Change photo");
 
     fireEvent.change(document.getElementById("carPhotoFile"), { target: { files: [fakeImageFile()] } });
 
@@ -801,7 +801,7 @@ describe("CarProfilePage — car photo (CAR-58)", () => {
     mockStorage();
 
     renderAt("/cars/mine");
-    await screen.findByText("Add Photo");
+    await screen.findByTitle("Add photo");
 
     fireEvent.change(document.getElementById("carPhotoFile"), {
       target: { files: [fakeImageFile({ size: 8 * 1024 * 1024 + 1 })] },
@@ -818,7 +818,7 @@ describe("CarProfilePage — car photo (CAR-58)", () => {
     mockStorage({ uploadError: new Error("Storage is down") });
 
     renderAt("/cars/mine");
-    await screen.findByText("Change Photo");
+    await screen.findByTitle("Change photo");
 
     fireEvent.change(document.getElementById("carPhotoFile"), { target: { files: [fakeImageFile()] } });
 
@@ -838,7 +838,7 @@ describe("CarProfilePage — car photo (CAR-58)", () => {
     const { remove } = mockStorage();
 
     renderAt("/cars/mine");
-    await screen.findByText("Add Photo");
+    await screen.findByTitle("Add photo");
 
     fireEvent.change(document.getElementById("carPhotoFile"), { target: { files: [fakeImageFile()] } });
 
@@ -856,11 +856,11 @@ describe("CarProfilePage — car photo (CAR-58)", () => {
     const { remove } = mockStorage();
 
     renderAt("/cars/mine");
-    await user.click(await screen.findByText("Remove Photo"));
+    await user.click(await screen.findByRole("button", { name: "Remove photo" }));
 
-    await waitFor(() => expect(screen.getByText("Add Photo")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTitle("Add photo")).toBeInTheDocument());
     expect(remove).toHaveBeenCalledWith(["user-123/car-456-old-uuid.jpg"]);
-    expect(screen.queryByText("Remove Photo")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove photo" })).not.toBeInTheDocument();
   });
 
   it("shows a plain message when removing a photo fails, and leaves the photo in place", async () => {
@@ -872,11 +872,11 @@ describe("CarProfilePage — car photo (CAR-58)", () => {
     mockStorage();
 
     renderAt("/cars/mine");
-    await user.click(await screen.findByText("Remove Photo"));
+    await user.click(await screen.findByRole("button", { name: "Remove photo" }));
 
     expect(
       await screen.findByText("Could not reach the server. Check your connection and try again."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Remove Photo")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove photo" })).toBeInTheDocument();
   });
 });
