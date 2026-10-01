@@ -53,6 +53,25 @@ function CarPhotoPlaceholder() {
   );
 }
 
+/** Small camera icon for the photo overlay's "add/change" button. */
+function CameraIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M4 8h3l2-2h6l2 2h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="14" r="3.5" />
+    </svg>
+  );
+}
+
+/** Small trash icon for the photo overlay's "remove" button. */
+function TrashIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 const FUEL_TYPE_OPTIONS = [
   "Gasoline",
   "Diesel",
@@ -703,16 +722,26 @@ function CarProfilePage() {
       )}
 
       <div className="car-photo">
-        {photoUrl ? (
-          <img className="car-photo__image" src={photoUrl} alt={`${car.make} ${car.model}`} />
-        ) : (
-          <div className="car-photo__placeholder" aria-hidden="true">
-            <CarPhotoPlaceholder />
-          </div>
-        )}
-        <div className="car-photo__controls">
-          <label className="btn-secondary car-photo__upload-btn" htmlFor="carPhotoFile">
-            {photoLoading ? "Working..." : photoUrl ? "Change Photo" : "Add Photo"}
+        <div className="car-photo__frame">
+          {photoUrl ? (
+            <img className="car-photo__image" src={photoUrl} alt={`${car.make} ${car.model}`} />
+          ) : (
+            <div className="car-photo__placeholder" aria-hidden="true">
+              <CarPhotoPlaceholder />
+            </div>
+          )}
+          {photoLoading && (
+            <span className="car-photo__loading-badge" role="status">
+              Working...
+            </span>
+          )}
+          <label
+            className="car-photo__overlay-btn car-photo__overlay-btn--change"
+            htmlFor="carPhotoFile"
+            aria-label={photoUrl ? "Change photo" : "Add photo"}
+            title={photoUrl ? "Change photo" : "Add photo"}
+          >
+            <CameraIcon />
           </label>
           <input
             id="carPhotoFile"
@@ -726,11 +755,13 @@ function CarProfilePage() {
           {photoUrl && (
             <button
               type="button"
-              className="car-photo__remove-btn"
+              className="car-photo__overlay-btn car-photo__overlay-btn--remove"
               onClick={handleRemovePhoto}
               disabled={photoLoading}
+              aria-label="Remove photo"
+              title="Remove photo"
             >
-              Remove Photo
+              <TrashIcon />
             </button>
           )}
         </div>

@@ -1100,11 +1100,11 @@ describe("CarOnboardingPage — car photo (CAR-58)", () => {
   it("selecting a photo shows a local preview before submitting", async () => {
     renderPage();
 
-    expect(screen.getByText("No photo selected")).toBeInTheDocument();
+    expect(screen.getByText("Add a Photo (optional)")).toBeInTheDocument();
     fireEvent.change(document.getElementById("photoFile"), { target: { files: [fakePhotoFile()] } });
 
     expect(await screen.findByRole("img", { name: "Selected car preview" })).toBeInTheDocument();
-    expect(screen.getByText("Change Photo")).toBeInTheDocument();
+    expect(screen.getByTitle("Change photo")).toBeInTheDocument();
   });
 
   it("creates the car, then uploads the photo and saves its path on that row (normal case)", async () => {
@@ -1137,7 +1137,7 @@ describe("CarOnboardingPage — car photo (CAR-58)", () => {
     expect(
       await screen.findByText("That image is too large. Please use a photo under 8 MB."),
     ).toBeInTheDocument();
-    expect(screen.getByText("No photo selected")).toBeInTheDocument();
+    expect(screen.getByText("Add a Photo (optional)")).toBeInTheDocument();
     expect(supabase.storage.from).not.toHaveBeenCalled();
   });
 
@@ -1158,16 +1158,16 @@ describe("CarOnboardingPage — car photo (CAR-58)", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it("the Remove link clears a selected photo before submitting", async () => {
+  it("the Remove button clears a selected photo before submitting", async () => {
     const user = userEvent.setup();
     renderPage();
 
     fireEvent.change(document.getElementById("photoFile"), { target: { files: [fakePhotoFile()] } });
     await screen.findByRole("img", { name: "Selected car preview" });
 
-    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.click(screen.getByRole("button", { name: "Remove photo" }));
 
-    expect(screen.getByText("No photo selected")).toBeInTheDocument();
     expect(screen.getByText("Add a Photo (optional)")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Selected car preview" })).not.toBeInTheDocument();
   });
 });
