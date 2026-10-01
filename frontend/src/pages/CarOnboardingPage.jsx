@@ -31,6 +31,12 @@
 // grid); its "Designate as Primary Vehicle" telemetry checkbox and
 // multi-step wizard chrome are out of scope (no OBD-II telemetry, no
 // multi-car "primary" concept) and are omitted.
+// CAR-58: an optional Photo field. Held as a plain File (with a local
+// object-URL preview) until Add Car is pressed — the car's id needed for
+// its Storage path doesn't exist yet. Uploaded only after the insert
+// above succeeds; a failure at that point still navigates to the new
+// car's profile (best-effort, same posture as the CAR-34 spec lookup —
+// the car itself is already safely saved either way).
 
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -45,6 +51,7 @@ import {
   getCarFieldErrors,
   getRegistrationImageError,
 } from "../lib/limits.js";
+import { getCarPhotoError, uploadCarPhoto } from "../lib/carPhoto.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 
 // How long to wait after the user stops typing Make/Model/Year before
@@ -203,6 +210,48 @@ function CarOnboardingPage() {
   const [scanError, setScanError] = useState("");
   const [scanFilled, setScanFilled] = useState({});
   const scanFileInputRef = useRef(null);
+
+  // CAR-58 car photo (optional): held as a plain File until submit, since
+  // the car's id (needed for the Storage path) doesn't exist until the
+  // insert below succeeds. `photoPreviewUrl` is a local object URL for the
+  // preview only — never uploaded anywhere until Add Car is actually
+  // pressed. Revoked whenever it's replaced or the component unmounts.
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState(null);
+  const [photoFieldError, setPhotoFieldError] = useState("");
+
+  useEffect(() => {
+    return () => {
+      if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    };
+  }, [photoPreviewUrl]);
+
+  /** @param {import('react').ChangeEvent<HTMLInputElement>} event */
+  function handlePhotoFileChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const clientError = getCarPhotoError(file);
+    if (clientError) {
+      setPhotoFieldError(clientError);
+      setPhotoFile(null);
+      if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+      setPhotoPreviewUrl(null);
+      return;
+    }
+
+    setPhotoFieldError("");
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    setPhotoFile(file);
+    setPhotoPreviewUrl(URL.createObjectURL(file));
+  }
+
+  function handleRemovePhotoFile() {
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    setPhotoFile(null);
+    setPhotoPreviewUrl(null);
+    setPhotoFieldError("");
+  }
 
   /** @param {keyof typeof EMPTY_FORM} field */
   function handleChange(field) {
@@ -426,6 +475,21 @@ function CarOnboardingPage() {
       if (error) {
         setSubmitError(describeSaveError(error));
         return;
+      }
+
+      // CAR-58: best-effort, same posture as the CAR-34 spec lookup above —
+      // the car itself is already saved at this point, so a photo upload
+      // failure must never stop the user from reaching their new car's
+      // profile (they can add a photo from there instead).
+      if (photoFile) {
+        try {
+          const { path, error: uploadError } = await uploadCarPhoto(user.id, data.id, photoFile);
+          if (!uploadError) {
+            await supabase.from("cars").update({ photo_path: path }).eq("id", data.id);
+          }
+        } catch {
+          // Silently falls back to no photo, same as a failed spec lookup.
+        }
       }
 
       navigate(`/cars/${data.id}`, { replace: true });
@@ -734,6 +798,43 @@ function CarOnboardingPage() {
               </p>
               {fieldError("vin")}
             </div>
+          </div>
+        </section>
+
+        <section className="form-subsection" aria-labelledby="photo-title">
+          <h3 id="photo-title" className="form-subsection__title">
+            Photo
+          </h3>
+          <div className="car-photo car-photo--onboarding">
+            {photoPreviewUrl ? (
+              <img className="car-photo__image" src={photoPreviewUrl} alt="Selected car preview" />
+            ) : (
+              <div className="car-photo__placeholder car-photo__placeholder--onboarding" aria-hidden="true">
+                No photo selected
+              </div>
+            )}
+            <div className="car-photo__controls">
+              <label className="btn-secondary car-photo__upload-btn" htmlFor="photoFile">
+                {photoFile ? "Change Photo" : "Add a Photo (optional)"}
+              </label>
+              <input
+                id="photoFile"
+                className="sr-only"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                onChange={handlePhotoFileChange}
+              />
+              {photoFile && (
+                <button type="button" className="car-photo__remove-btn" onClick={handleRemovePhotoFile}>
+                  Remove
+                </button>
+              )}
+            </div>
+            {photoFieldError && (
+              <p role="alert" className="auth-form__error">
+                {photoFieldError}
+              </p>
+            )}
           </div>
         </section>
 
