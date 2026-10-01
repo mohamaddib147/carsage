@@ -535,6 +535,87 @@ select:focus {
   color: var(--color-primary);
 }
 
+/* CAR-58: the car photo shown above the profile header — a signed-URL
+   image, or a line-drawn silhouette placeholder matching the logo's own
+   style (not an emoji) when no photo is set. */
+.car-photo {
+  margin-top: calc(var(--spacing-unit) * 3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1.5);
+}
+
+.car-photo__image {
+  width: 100%;
+  max-width: 480px;
+  height: 260px;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.08);
+}
+
+.car-photo__placeholder {
+  width: 100%;
+  max-width: 480px;
+  height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-input-bg);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+}
+
+.car-photo__placeholder-icon {
+  width: 96px;
+  height: 60px;
+}
+
+.car-photo__controls {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1.5);
+}
+
+.car-photo__upload-btn {
+  cursor: pointer;
+}
+
+.car-photo__remove-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-danger);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.car-photo__remove-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Car Onboarding's smaller, left-aligned variant (vs. Car Profile's
+   centered, full-width one). */
+.car-photo--onboarding {
+  align-items: flex-start;
+  margin-top: 0;
+}
+
+.car-photo--onboarding .car-photo__image,
+.car-photo--onboarding .car-photo__placeholder {
+  max-width: 320px;
+  height: 180px;
+}
+
+.car-photo__placeholder--onboarding {
+  font-size: 0.875rem;
+}
+
 .profile-header {
   display: flex;
   align-items: center;

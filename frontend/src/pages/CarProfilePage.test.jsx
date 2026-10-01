@@ -40,6 +40,7 @@ vi.mock("../lib/supabaseClient.js", () => ({
       })),
     },
     from: vi.fn(),
+    storage: { from: vi.fn() },
   },
 }));
 
@@ -712,5 +713,170 @@ describe("CarProfilePage — example placeholders", () => {
     for (const field of fields) {
       expect(field, `field #${field.id}`).toHaveAttribute("placeholder", expect.stringMatching(/^e\.g\. /));
     }
+  });
+});
+
+// --- CAR-58: car photo ------------------------------------------------------
+
+/** Wires supabase.storage.from("car-photos") for upload/createSignedUrl/remove. */
+function mockStorage({ uploadError = null, signedUrl = "https://signed.example/photo.jpg", removeError = null } = {}) {
+  const upload = vi.fn().mockResolvedValue({ error: uploadError });
+  const createSignedUrl = vi.fn().mockResolvedValue(
+    signedUrl ? { data: { signedUrl }, error: null } : { data: null, error: new Error("not found") },
+  );
+  const remove = vi.fn().mockResolvedValue({ error: removeError });
+  supabase.storage.from.mockReturnValue({ upload, createSignedUrl, remove });
+  return { upload, createSignedUrl, remove };
+}
+
+function fakeImageFile({ name = "car.jpg", type = "image/jpeg", size = 1024 } = {}) {
+  return new File([new Uint8Array(size)], name, { type });
+}
+
+const CAR_WITH_PHOTO = { ...SAMPLE_CAR, photo_path: "user-123/car-456-old-uuid.jpg" };
+
+describe("CarProfilePage — car photo (CAR-58)", () => {
+  it("shows a placeholder and no Remove Photo button when the car has no photo (normal case)", async () => {
+    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+    mockStorage();
+
+    renderAt("/cars/mine");
+
+    expect(await screen.findByText("Add Photo")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /Toyota Corolla/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("Remove Photo")).not.toBeInTheDocument();
+    expect(supabase.storage.from).not.toHaveBeenCalled();
+  });
+
+  it("shows the photo via a signed URL when the car has one (normal case)", async () => {
+    mockCarsTable({ selectResult: { data: CAR_WITH_PHOTO, error: null } });
+    const { createSignedUrl } = mockStorage({ signedUrl: "https://signed.example/car-456.jpg" });
+
+    renderAt("/cars/mine");
+
+    expect(await screen.findByRole("img", { name: "Toyota Corolla" })).toHaveAttribute(
+      "src",
+      "https://signed.example/car-456.jpg",
+    );
+    expect(createSignedUrl).toHaveBeenCalledWith("user-123/car-456-old-uuid.jpg", 3600);
+    expect(screen.getByText("Change Photo")).toBeInTheDocument();
+    expect(screen.getByText("Remove Photo")).toBeInTheDocument();
+  });
+
+  it("uploads a new photo and saves it on the row; nothing to delete when there was no previous photo", async () => {
+    mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      updateResult: { data: { ...SAMPLE_CAR, photo_path: "user-123/car-456-new-uuid.jpg" }, error: null },
+    });
+    const { upload, remove } = mockStorage();
+
+    renderAt("/cars/mine");
+    await screen.findByText("Add Photo");
+
+    fireEvent.change(document.getElementById("carPhotoFile"), { target: { files: [fakeImageFile()] } });
+
+    await waitFor(() => expect(screen.getByText("Change Photo")).toBeInTheDocument());
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(upload.mock.calls[0][0]).toMatch(/^user-123\/car-456-.+\.jpg$/);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("replacing an existing photo deletes the OLD object only after the new one is saved", async () => {
+    mockCarsTable({
+      selectResult: { data: CAR_WITH_PHOTO, error: null },
+      updateResult: { data: { ...CAR_WITH_PHOTO, photo_path: "user-123/car-456-new-uuid.jpg" }, error: null },
+    });
+    const { remove } = mockStorage();
+
+    renderAt("/cars/mine");
+    await screen.findByText("Change Photo");
+
+    fireEvent.change(document.getElementById("carPhotoFile"), { target: { files: [fakeImageFile()] } });
+
+    await waitFor(() => expect(remove).toHaveBeenCalledWith(["user-123/car-456-old-uuid.jpg"]));
+  });
+
+  it("rejects an oversized file client-side, without touching Storage (edge case)", async () => {
+    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+    mockStorage();
+
+    renderAt("/cars/mine");
+    await screen.findByText("Add Photo");
+
+    fireEvent.change(document.getElementById("carPhotoFile"), {
+      target: { files: [fakeImageFile({ size: 8 * 1024 * 1024 + 1 })] },
+    });
+
+    expect(
+      await screen.findByText("That image is too large. Please use a photo under 8 MB."),
+    ).toBeInTheDocument();
+    expect(supabase.storage.from).not.toHaveBeenCalled();
+  });
+
+  it("shows a plain message when the upload itself fails, leaving the existing photo in place", async () => {
+    mockCarsTable({ selectResult: { data: CAR_WITH_PHOTO, error: null } });
+    mockStorage({ uploadError: new Error("Storage is down") });
+
+    renderAt("/cars/mine");
+    await screen.findByText("Change Photo");
+
+    fireEvent.change(document.getElementById("carPhotoFile"), { target: { files: [fakeImageFile()] } });
+
+    expect(await screen.findByText("Could not upload that photo. Please try again.")).toBeInTheDocument();
+    // The photo shown is still the original one - nothing was swapped out.
+    expect(screen.getByRole("img", { name: "Toyota Corolla" })).toHaveAttribute(
+      "src",
+      "https://signed.example/photo.jpg",
+    );
+  });
+
+  it("cleans up the just-uploaded object if saving the row afterward fails (never leaves an orphan silently)", async () => {
+    mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      updateResult: { data: null, error: { code: "42501", message: "permission denied" } },
+    });
+    const { remove } = mockStorage();
+
+    renderAt("/cars/mine");
+    await screen.findByText("Add Photo");
+
+    fireEvent.change(document.getElementById("carPhotoFile"), { target: { files: [fakeImageFile()] } });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("You don't have permission to do that.");
+    await waitFor(() => expect(remove).toHaveBeenCalledTimes(1));
+    expect(remove.mock.calls[0][0][0]).toMatch(/^user-123\/car-456-.+\.jpg$/);
+  });
+
+  it("removes a photo: clears the row, then deletes the storage object (normal case)", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({
+      selectResult: { data: CAR_WITH_PHOTO, error: null },
+      updateResult: { data: { ...CAR_WITH_PHOTO, photo_path: null }, error: null },
+    });
+    const { remove } = mockStorage();
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByText("Remove Photo"));
+
+    await waitFor(() => expect(screen.getByText("Add Photo")).toBeInTheDocument());
+    expect(remove).toHaveBeenCalledWith(["user-123/car-456-old-uuid.jpg"]);
+    expect(screen.queryByText("Remove Photo")).not.toBeInTheDocument();
+  });
+
+  it("shows a plain message when removing a photo fails, and leaves the photo in place", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({
+      selectResult: { data: CAR_WITH_PHOTO, error: null },
+      updateResult: { data: null, error: { message: "Failed to fetch" } },
+    });
+    mockStorage();
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByText("Remove Photo"));
+
+    expect(
+      await screen.findByText("Could not reach the server. Check your connection and try again."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Remove Photo")).toBeInTheDocument();
   });
 });

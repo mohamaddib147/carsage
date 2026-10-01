@@ -31,6 +31,7 @@ vi.mock("../lib/supabaseClient.js", () => ({
       })),
     },
     from: vi.fn(),
+    storage: { from: vi.fn() },
   },
 }));
 
@@ -759,11 +760,11 @@ describe("CarOnboardingPage polish — '* Required' legend and sub-sections", ()
     expect(legend.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("splits the fields into Basic Info, Performance and Identification, in that order", () => {
+  it("splits the fields into Basic Info, Performance, Identification and Photo, in that order", () => {
     renderPage();
 
     const titles = screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
-    expect(titles).toEqual(["Basic Info", "Performance", "Identification"]);
+    expect(titles).toEqual(["Basic Info", "Performance", "Identification", "Photo"]);
   });
 
   it.each([
@@ -1064,5 +1065,109 @@ describe("CarOnboardingPage — registration card scan (CAR-57)", () => {
       readable: true, make: "Toyota", model: null, year: null, vin: null, license_plate: null,
     });
     await waitFor(() => expect(screen.getByLabelText("Make *")).toHaveValue("Toyota"));
+  });
+});
+
+// --- CAR-58: car photo on Car Onboarding -------------------------------------------------
+
+function fakePhotoFile({ name = "car.jpg", type = "image/jpeg", size = 1024 } = {}) {
+  return new File([new Uint8Array(size)], name, { type });
+}
+
+/** Wires supabase.from("cars") for an insert that succeeds, plus an update chain for the photo_path follow-up. */
+function mockInsertAndUpdate({ insertId = "car-456", updateResult = { data: null, error: null } } = {}) {
+  const single = vi.fn().mockResolvedValue({ data: { id: insertId }, error: null });
+  const insert = vi.fn(() => ({ select: vi.fn(() => ({ single })) }));
+  const updateEq = vi.fn().mockResolvedValue(updateResult);
+  const update = vi.fn(() => ({ eq: updateEq }));
+  supabase.from.mockReturnValue({ insert, update });
+  return { insert, update, updateEq };
+}
+
+describe("CarOnboardingPage — car photo (CAR-58)", () => {
+  it("submitting with no photo selected makes no Storage calls at all (normal case)", async () => {
+    const user = userEvent.setup();
+    mockInsertAndUpdate();
+
+    renderPage();
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+    await screen.findByText("Car profile placeholder");
+    expect(supabase.storage.from).not.toHaveBeenCalled();
+  });
+
+  it("selecting a photo shows a local preview before submitting", async () => {
+    renderPage();
+
+    expect(screen.getByText("No photo selected")).toBeInTheDocument();
+    fireEvent.change(document.getElementById("photoFile"), { target: { files: [fakePhotoFile()] } });
+
+    expect(await screen.findByRole("img", { name: "Selected car preview" })).toBeInTheDocument();
+    expect(screen.getByText("Change Photo")).toBeInTheDocument();
+  });
+
+  it("creates the car, then uploads the photo and saves its path on that row (normal case)", async () => {
+    const user = userEvent.setup();
+    const { update, updateEq } = mockInsertAndUpdate();
+    const upload = vi.fn().mockResolvedValue({ error: null });
+    supabase.storage.from.mockReturnValue({ upload });
+
+    renderPage();
+    await fillRequiredFields(user);
+    fireEvent.change(document.getElementById("photoFile"), { target: { files: [fakePhotoFile()] } });
+    await screen.findByRole("img", { name: "Selected car preview" });
+
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+    await screen.findByText("Car profile placeholder");
+    expect(supabase.storage.from).toHaveBeenCalledWith("car-photos");
+    expect(upload.mock.calls[0][0]).toMatch(/^user-123\/car-456-.+\.jpg$/);
+    expect(update).toHaveBeenCalledWith({ photo_path: expect.stringMatching(/^user-123\/car-456-/) });
+    expect(updateEq).toHaveBeenCalledWith("id", "car-456");
+  });
+
+  it("rejects an oversized file client-side, without touching Storage (edge case)", async () => {
+    renderPage();
+
+    fireEvent.change(document.getElementById("photoFile"), {
+      target: { files: [fakePhotoFile({ size: 8 * 1024 * 1024 + 1 })] },
+    });
+
+    expect(
+      await screen.findByText("That image is too large. Please use a photo under 8 MB."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No photo selected")).toBeInTheDocument();
+    expect(supabase.storage.from).not.toHaveBeenCalled();
+  });
+
+  it("still navigates to the new car's profile when the photo upload fails (never blocks car creation)", async () => {
+    const user = userEvent.setup();
+    const { update } = mockInsertAndUpdate();
+    supabase.storage.from.mockReturnValue({
+      upload: vi.fn().mockResolvedValue({ error: new Error("Storage is down") }),
+    });
+
+    renderPage();
+    await fillRequiredFields(user);
+    fireEvent.change(document.getElementById("photoFile"), { target: { files: [fakePhotoFile()] } });
+    await screen.findByRole("img", { name: "Selected car preview" });
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+    await screen.findByText("Car profile placeholder");
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("the Remove link clears a selected photo before submitting", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    fireEvent.change(document.getElementById("photoFile"), { target: { files: [fakePhotoFile()] } });
+    await screen.findByRole("img", { name: "Selected car preview" });
+
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+
+    expect(screen.getByText("No photo selected")).toBeInTheDocument();
+    expect(screen.getByText("Add a Photo (optional)")).toBeInTheDocument();
   });
 });
