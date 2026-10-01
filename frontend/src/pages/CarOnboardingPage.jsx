@@ -37,12 +37,6 @@
 // above succeeds; a failure at that point still navigates to the new
 // car's profile (best-effort, same posture as the CAR-34 spec lookup —
 // the car itself is already safely saved either way).
-// CAR-59: before any file is picked, shows a real IMAGIN.studio stock
-// photo of the typed Make/Model (updates live as the user types) instead
-// of the plain upload well, when VITE_IMAGIN_STUDIO_KEY is configured —
-// same fallback-to-placeholder-on-failure behavior as Car Profile's own
-// version (lib/stockCarImage.js). Never uploaded or saved; purely a
-// preview until a real file is actually picked.
 
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -58,7 +52,6 @@ import {
   getRegistrationImageError,
 } from "../lib/limits.js";
 import { getCarPhotoError, uploadCarPhoto } from "../lib/carPhoto.js";
-import { getStockCarImageUrl } from "../lib/stockCarImage.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 
 // How long to wait after the user stops typing Make/Model/Year before
@@ -245,21 +238,12 @@ function CarOnboardingPage() {
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState(null);
   const [photoFieldError, setPhotoFieldError] = useState("");
-  // CAR-59: true once a stock-photo <img> has failed to load for the
-  // CURRENTLY typed make/model, so the plain upload well takes over
-  // instead of a broken-image icon. Reset whenever make/model change, so
-  // a different typed car gets its own chance at a stock photo.
-  const [stockImageFailed, setStockImageFailed] = useState(false);
 
   useEffect(() => {
     return () => {
       if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
     };
   }, [photoPreviewUrl]);
-
-  useEffect(() => {
-    setStockImageFailed(false);
-  }, [form.make, form.model]);
 
   /** @param {import('react').ChangeEvent<HTMLInputElement>} event */
   function handlePhotoFileChange(event) {
@@ -542,9 +526,6 @@ function CarOnboardingPage() {
     ) : null;
   /** aria-invalid for a field with an error — also what the red outline is styled from. */
   const invalid = (field) => (fieldErrors[field] ? "true" : undefined);
-  // CAR-59: null (never shown) unless VITE_IMAGIN_STUDIO_KEY is configured
-  // and Make/Model are at least typed; updates live as the user types.
-  const stockImageUrl = getStockCarImageUrl(form.make, form.model, form.year);
 
   return (
     <PageShell
@@ -871,24 +852,6 @@ function CarOnboardingPage() {
                 >
                   <TrashIcon />
                 </button>
-              </div>
-            ) : stockImageUrl && !stockImageFailed ? (
-              <div className="car-photo__frame">
-                <img
-                  className="car-photo__image"
-                  src={stockImageUrl}
-                  alt={`${form.make} ${form.model} (stock photo)`}
-                  onError={() => setStockImageFailed(true)}
-                />
-                <span className="car-photo__stock-badge">Stock photo</span>
-                <label
-                  className="car-photo__overlay-btn car-photo__overlay-btn--change"
-                  htmlFor="photoFile"
-                  aria-label="Add photo"
-                  title="Add photo"
-                >
-                  <CameraIcon />
-                </label>
               </div>
             ) : (
               <label className="car-photo__well" htmlFor="photoFile">
