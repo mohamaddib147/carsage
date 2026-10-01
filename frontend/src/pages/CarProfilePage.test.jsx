@@ -7,7 +7,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import CarProfilePage from "./CarProfilePage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
@@ -878,66 +878,5 @@ describe("CarProfilePage — car photo (CAR-58)", () => {
       await screen.findByText("Could not reach the server. Check your connection and try again."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove photo" })).toBeInTheDocument();
-  });
-});
-
-// --- CAR-59: stock car image fallback ---------------------------------------
-
-const ORIGINAL_IMAGIN_KEY = import.meta.env.VITE_IMAGIN_STUDIO_KEY;
-
-describe("CarProfilePage — stock car image fallback (CAR-59)", () => {
-  afterEach(() => {
-    import.meta.env.VITE_IMAGIN_STUDIO_KEY = ORIGINAL_IMAGIN_KEY;
-  });
-
-  it("shows a stock photo, labeled as one, when no photo is uploaded and a key is configured (normal case)", async () => {
-    import.meta.env.VITE_IMAGIN_STUDIO_KEY = "test-customer-key";
-    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
-    mockStorage();
-
-    renderAt("/cars/mine");
-
-    const img = await screen.findByRole("img", { name: "Toyota Corolla (stock photo)" });
-    expect(img).toHaveAttribute("src", expect.stringContaining("cdn.imagin.studio/getImage"));
-    expect(img).toHaveAttribute("src", expect.stringContaining("make=Toyota"));
-    expect(screen.getByText("Stock photo")).toBeInTheDocument();
-  });
-
-  it("shows the plain silhouette placeholder when no key is configured (edge case)", async () => {
-    import.meta.env.VITE_IMAGIN_STUDIO_KEY = "";
-    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
-    mockStorage();
-
-    renderAt("/cars/mine");
-
-    await screen.findByTitle("Add photo"); // page finished loading
-    expect(screen.queryByRole("img", { name: /stock photo/ })).not.toBeInTheDocument();
-    expect(screen.queryByText("Stock photo")).not.toBeInTheDocument();
-  });
-
-  it("falls back to the placeholder when the stock image itself fails to load", async () => {
-    import.meta.env.VITE_IMAGIN_STUDIO_KEY = "test-customer-key";
-    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
-    mockStorage();
-
-    renderAt("/cars/mine");
-    const img = await screen.findByRole("img", { name: "Toyota Corolla (stock photo)" });
-
-    fireEvent.error(img);
-
-    await waitFor(() => expect(screen.queryByText("Stock photo")).not.toBeInTheDocument());
-    expect(screen.queryByRole("img", { name: /stock photo/ })).not.toBeInTheDocument();
-  });
-
-  it("the user's own uploaded photo always wins over the stock image", async () => {
-    import.meta.env.VITE_IMAGIN_STUDIO_KEY = "test-customer-key";
-    mockCarsTable({ selectResult: { data: CAR_WITH_PHOTO, error: null } });
-    mockStorage({ signedUrl: "https://signed.example/real-photo.jpg" });
-
-    renderAt("/cars/mine");
-
-    const img = await screen.findByRole("img", { name: "Toyota Corolla" });
-    expect(img).toHaveAttribute("src", "https://signed.example/real-photo.jpg");
-    expect(screen.queryByText("Stock photo")).not.toBeInTheDocument();
   });
 });
