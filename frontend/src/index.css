@@ -568,10 +568,15 @@ select:focus {
   display: block;
 }
 
-.car-photo__overlay-btn {
+/* Design-unification pass (no Jira task): this was duplicated almost
+   identically as `.car-photo__overlay-btn` here and `.profile-header__photo-btn`
+   below (same round-button-on-a-photo pattern, just two different sizes/
+   contexts) — merged into one shared `.overlay-icon-btn` base below, with
+   `--lg`/`--sm` size modifiers and shared `--change`/`--remove` placement
+   and `--remove`'s red styling, so future photo-style edit controls reuse
+   this instead of growing a third near-copy. */
+.overlay-icon-btn {
   position: absolute;
-  width: 36px;
-  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -579,33 +584,68 @@ select:focus {
   border: none;
   background-color: rgba(20, 20, 20, 0.6);
   color: #ffffff;
+  padding: 0;
   cursor: pointer;
   transition: background-color 0.15s ease, transform 0.15s ease;
 }
 
-.car-photo__overlay-btn:hover:not(:disabled) {
+.overlay-icon-btn:hover:not(:disabled) {
   background-color: rgba(20, 20, 20, 0.8);
-  transform: scale(1.06);
 }
 
-.car-photo__overlay-btn:disabled {
+.overlay-icon-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.car-photo__overlay-btn--change {
+.overlay-icon-btn--remove {
+  background-color: rgba(179, 38, 30, 0.75);
+}
+
+.overlay-icon-btn--remove:hover:not(:disabled) {
+  background-color: rgba(179, 38, 30, 0.92);
+}
+
+/* Large variant: Car Onboarding's photo frame — sits just inside the
+   frame's own rounded corners, no border needed since the frame's edge
+   already separates it from the surrounding page. */
+.overlay-icon-btn--lg {
+  width: 36px;
+  height: 36px;
+}
+
+.overlay-icon-btn--lg:hover:not(:disabled) {
+  transform: scale(1.06);
+}
+
+.overlay-icon-btn--lg.overlay-icon-btn--change {
   bottom: 10px;
   right: 10px;
 }
 
-.car-photo__overlay-btn--remove {
+.overlay-icon-btn--lg.overlay-icon-btn--remove {
   top: 10px;
   right: 10px;
-  background-color: rgba(179, 38, 30, 0.75);
 }
 
-.car-photo__overlay-btn--remove:hover:not(:disabled) {
-  background-color: rgba(179, 38, 30, 0.92);
+/* Small variant: Car Profile's round identity icon — a visible border in
+   the surface color is needed here so the button reads as separate from
+   the photo it's sitting on, since it sits right on the circle's edge
+   rather than inside a larger frame. */
+.overlay-icon-btn--sm {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--color-surface);
+}
+
+.overlay-icon-btn--sm.overlay-icon-btn--change {
+  bottom: -2px;
+  right: -2px;
+}
+
+.overlay-icon-btn--sm.overlay-icon-btn--remove {
+  top: -2px;
+  right: -2px;
 }
 
 /* Car Onboarding's smaller, left-aligned variant (vs. Car Profile's
@@ -678,54 +718,16 @@ select:focus {
    this same round identity icon instead of a separate box above the
    header — round, cropped to fit (`object-fit: cover`), no photo at all
    shown when none is set (just the usual BrandBadge/🚗 fallback). Small
-   edit buttons sit right on the circle's own edge, like a typical
-   profile-picture editor, rather than a photo box with controls below it. */
+   edit buttons (`.overlay-icon-btn--sm`, shared with Car Onboarding's
+   larger frame — see the comment above `.overlay-icon-btn`) sit right on
+   the circle's own edge, like a typical profile-picture editor, rather
+   than a photo box with controls below it. */
 .profile-header__photo {
   width: 100%;
   height: 100%;
   object-fit: cover;
   border-radius: 999px;
   display: block;
-}
-
-.profile-header__photo-btn {
-  position: absolute;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  border: 2px solid var(--color-surface);
-  background-color: rgba(20, 20, 20, 0.75);
-  color: #ffffff;
-  padding: 0;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.profile-header__photo-btn:hover:not(:disabled) {
-  background-color: rgba(20, 20, 20, 0.92);
-}
-
-.profile-header__photo-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.profile-header__photo-btn--change {
-  bottom: -2px;
-  right: -2px;
-}
-
-.profile-header__photo-btn--remove {
-  top: -2px;
-  right: -2px;
-  background-color: rgba(179, 38, 30, 0.85);
-}
-
-.profile-header__photo-btn--remove:hover:not(:disabled) {
-  background-color: rgba(179, 38, 30, 0.95);
 }
 
 .profile-header__info {
@@ -1040,6 +1042,49 @@ select:focus {
 .dashboard-stat-tile--skeleton .skeleton-bar--stat-label {
   width: 70%;
   height: 0.875rem;
+}
+
+/* Design-unification pass (no Jira task): Dashboard's skeleton above was
+   the only page with a loading skeleton — Car Profile, Trip Planner,
+   Fuel Log and AI Advisor all still showed a plain "Loading..." sentence
+   via PageShell. Rather than hand-rolling another one-off set of
+   page-specific selectors per page (as Dashboard's own skeleton-bar--title/
+   --meta/--specs did), this is a generic, reusable set any page can
+   compose from: `.skeleton-stack` lays bars out with consistent spacing,
+   and the `--w-*`/`--h-*` modifiers below size individual `.skeleton-bar`s
+   to roughly match the real content they stand in for. */
+.skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 1.25);
+}
+
+.skeleton-stack--section {
+  margin-top: calc(var(--spacing-unit) * 3);
+}
+
+.skeleton-bar--w-25 { width: 25%; }
+.skeleton-bar--w-40 { width: 40%; }
+.skeleton-bar--w-55 { width: 55%; }
+.skeleton-bar--w-70 { width: 70%; }
+.skeleton-bar--w-100 { width: 100%; }
+
+.skeleton-bar--h-sm { height: 0.875rem; }
+.skeleton-bar--h-md { height: 1.25rem; }
+.skeleton-bar--h-lg { height: 2.25rem; }
+.skeleton-bar--h-xl { height: 2.5rem; }
+
+.skeleton-bar--avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.skeleton-bar--card {
+  width: 100%;
+  height: 9rem;
+  border-radius: var(--radius-lg);
 }
 
 .dashboard-latest-fix {

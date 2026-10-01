@@ -306,7 +306,15 @@ function AIAdvisorPage() {
   }
 
   if (loadingCars) {
-    return <PageShell title="AI Advisor" description="Loading your car..." />;
+    return (
+      <PageShell title="AI Advisor" description="">
+        <p role="status" className="sr-only">Loading your car...</p>
+        <div className="skeleton-stack" aria-hidden="true">
+          <div className="skeleton-bar skeleton-bar--w-40 skeleton-bar--h-md" />
+          <div className="skeleton-bar skeleton-bar--card" />
+        </div>
+      </PageShell>
+    );
   }
 
   if (cars.length === 0) {

@@ -227,7 +227,15 @@ function FuelLogPage() {
   }
 
   if (loadingCars) {
-    return <PageShell title="Fuel Log" description="Loading your cars..." />;
+    return (
+      <PageShell title="Fuel Log" description="">
+        <p role="status" className="sr-only">Loading your cars...</p>
+        <div className="skeleton-stack" aria-hidden="true">
+          <div className="skeleton-bar skeleton-bar--w-40 skeleton-bar--h-md" />
+          <div className="skeleton-bar skeleton-bar--card" />
+        </div>
+      </PageShell>
+    );
   }
 
   if (cars.length === 0) {

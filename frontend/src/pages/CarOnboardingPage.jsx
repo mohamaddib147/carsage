@@ -836,7 +836,7 @@ function CarOnboardingPage() {
               <div className="car-photo__frame">
                 <img className="car-photo__image" src={photoPreviewUrl} alt="Selected car preview" />
                 <label
-                  className="car-photo__overlay-btn car-photo__overlay-btn--change"
+                  className="overlay-icon-btn overlay-icon-btn--lg overlay-icon-btn--change"
                   htmlFor="photoFile"
                   aria-label="Change photo"
                   title="Change photo"
@@ -845,7 +845,7 @@ function CarOnboardingPage() {
                 </label>
                 <button
                   type="button"
-                  className="car-photo__overlay-btn car-photo__overlay-btn--remove"
+                  className="overlay-icon-btn overlay-icon-btn--lg overlay-icon-btn--remove"
                   onClick={handleRemovePhotoFile}
                   aria-label="Remove photo"
                   title="Remove photo"

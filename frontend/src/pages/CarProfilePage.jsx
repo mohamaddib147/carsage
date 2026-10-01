@@ -481,7 +481,21 @@ function CarProfilePage() {
   }
 
   if (loading) {
-    return <PageShell title="Car Profile" description="Loading your car..." />;
+    return (
+      <PageShell title="Car Profile" description="">
+        <p role="status" className="sr-only">Loading your car...</p>
+        <div className="profile-header" aria-hidden="true">
+          <span className="skeleton-bar skeleton-bar--avatar" />
+          <div className="profile-header__info skeleton-stack">
+            <div className="skeleton-bar skeleton-bar--w-40 skeleton-bar--h-lg" />
+            <div className="skeleton-bar skeleton-bar--w-25 skeleton-bar--h-sm" />
+          </div>
+        </div>
+        <div className="skeleton-stack skeleton-stack--section" aria-hidden="true">
+          <div className="skeleton-bar skeleton-bar--card" />
+        </div>
+      </PageShell>
+    );
   }
 
   if (notFound) {
@@ -719,7 +733,7 @@ function CarProfilePage() {
             <span aria-hidden="true">🚗</span>
           )}
           <label
-            className="profile-header__photo-btn profile-header__photo-btn--change"
+            className="overlay-icon-btn overlay-icon-btn--sm overlay-icon-btn--change"
             htmlFor="carPhotoFile"
             aria-label={photoUrl ? "Change photo" : "Add photo"}
             title={photoUrl ? "Change photo" : "Add photo"}
@@ -738,7 +752,7 @@ function CarProfilePage() {
           {photoUrl && (
             <button
               type="button"
-              className="profile-header__photo-btn profile-header__photo-btn--remove"
+              className="overlay-icon-btn overlay-icon-btn--sm overlay-icon-btn--remove"
               onClick={handleRemovePhoto}
               disabled={photoLoading}
               aria-label="Remove photo"
