@@ -142,6 +142,7 @@ These are baked into the page at build time and are visible to anyone who opens 
 | `VITE_SUPABASE_ANON_KEY` | Yes | The Supabase **anon** (public) key. Never the service role key. |
 | `VITE_API_BASE_URL` | Yes | Where the FastAPI service is running, for example `http://localhost:8000`. |
 | `VITE_GOOGLE_MAPS_API_KEY` | No | A separate, browser-only Google key with **Places API (New)** and **Maps Static API** enabled. Without it, address suggestions and the route map are simply hidden. Restrict this key to your site's address (HTTP referrer) in Google Cloud Console, because anyone can read it. |
+| `VITE_IMAGIN_STUDIO_KEY` | No | An [IMAGIN.studio](https://www.imaginstudio.com) customer key. Without it, Car Profile/Car Onboarding just show a placeholder icon for a car with no uploaded photo; with it, they show a real stock photo of that make/model instead. Also visible in the page source. |
 
 Use two separate Google keys: the backend one (Directions, kept secret) and the browser one (restricted by referrer).
 
