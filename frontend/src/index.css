@@ -634,21 +634,6 @@ select:focus {
   font-weight: 600;
 }
 
-/* CAR-59: marks a stock (not user-uploaded) photo so it's never mistaken
-   for the car's own real photo. Bottom-left, clear of the loading badge
-   (top-left) and the overlay buttons (top/bottom-right). */
-.car-photo__stock-badge {
-  position: absolute;
-  bottom: 10px;
-  left: 10px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background-color: rgba(20, 20, 20, 0.6);
-  color: #ffffff;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
 /* Car Onboarding's smaller, left-aligned variant (vs. Car Profile's
    centered, full-width one). Before a file is picked, a compact clickable
    "well" (its own label, not a separate button underneath) replaces the
