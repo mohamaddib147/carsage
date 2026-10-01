@@ -7,12 +7,17 @@
 // a car cascades to its `trips` rows and nulls out any
 // `advisor_conversations.car_id` referencing it (CAR-38) — both handled
 // by the DB's own foreign key rules, not application code.
-// CAR-58: shows the car's photo (a short-lived signed URL from the
-// private `car-photos` Storage bucket, via lib/carPhoto.js — the bucket
-// has no permanent public URL) or a placeholder silhouette when none is
-// set. Replacing a photo uploads the new one, saves its path on the row,
-// THEN deletes the old object (never the other order — a mid-upload
-// failure must never leave the car with no photo at all).
+// CAR-58: the car's photo (a short-lived signed URL from the private
+// `car-photos` Storage bucket, via lib/carPhoto.js — the bucket has no
+// permanent public URL) fills the round identity icon beside the car's
+// name when one is set; with none, that same circle just shows the usual
+// `BrandBadge`/🚗 fallback, same as before this feature existed — no
+// separate photo box is shown at all with no photo. A small camera-icon
+// button on the circle (always present) adds/changes it; a trash-icon
+// button (once a photo exists) removes it. Replacing a photo uploads the
+// new one, saves its path on the row, THEN deletes the old object (never
+// the other order — a mid-upload failure must never leave the car with
+// no photo at all).
 
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -30,33 +35,10 @@ import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 import BrandBadge, { hasBrandBadge } from "../theme/BrandBadge.jsx";
 
-/** The car-silhouette placeholder shown when a car has no photo yet. */
-function CarPhotoPlaceholder() {
-  return (
-    <svg
-      className="car-photo__placeholder-icon"
-      viewBox="0 0 64 40"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-    >
-      <path
-        d="M6 28 L10 16 Q12 11 18 11 H46 Q52 11 54 16 L58 28"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path d="M2 28 H62 V32 Q62 34 60 34 H4 Q2 34 2 32 Z" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="16" cy="34" r="4" />
-      <circle cx="48" cy="34" r="4" />
-    </svg>
-  );
-}
-
 /** Small camera icon for the photo overlay's "add/change" button. */
-function CameraIcon() {
+function CameraIcon({ size = 16 }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
       <path d="M4 8h3l2-2h6l2 2h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx="12" cy="14" r="3.5" />
     </svg>
@@ -64,9 +46,9 @@ function CameraIcon() {
 }
 
 /** Small trash icon for the photo overlay's "remove" button. */
-function TrashIcon() {
+function TrashIcon({ size = 16 }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
       <path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -721,27 +703,28 @@ function CarProfilePage() {
         </div>
       )}
 
-      <div className="car-photo">
-        <div className="car-photo__frame">
+      {photoError && (
+        <p role="alert" className="auth-form__error">
+          {photoError}
+        </p>
+      )}
+
+      <div className="profile-header">
+        <span className="profile-header__icon">
           {photoUrl ? (
-            <img className="car-photo__image" src={photoUrl} alt={`${car.make} ${car.model}`} />
+            <img className="profile-header__photo" src={photoUrl} alt={`${car.make} ${car.model}`} />
+          ) : hasBrandBadge(car.make) ? (
+            <BrandBadge make={car.make} size={32} />
           ) : (
-            <div className="car-photo__placeholder" aria-hidden="true">
-              <CarPhotoPlaceholder />
-            </div>
-          )}
-          {photoLoading && (
-            <span className="car-photo__loading-badge" role="status">
-              Working...
-            </span>
+            <span aria-hidden="true">🚗</span>
           )}
           <label
-            className="car-photo__overlay-btn car-photo__overlay-btn--change"
+            className="profile-header__photo-btn profile-header__photo-btn--change"
             htmlFor="carPhotoFile"
             aria-label={photoUrl ? "Change photo" : "Add photo"}
             title={photoUrl ? "Change photo" : "Add photo"}
           >
-            <CameraIcon />
+            <CameraIcon size={11} />
           </label>
           <input
             id="carPhotoFile"
@@ -755,29 +738,14 @@ function CarProfilePage() {
           {photoUrl && (
             <button
               type="button"
-              className="car-photo__overlay-btn car-photo__overlay-btn--remove"
+              className="profile-header__photo-btn profile-header__photo-btn--remove"
               onClick={handleRemovePhoto}
               disabled={photoLoading}
               aria-label="Remove photo"
               title="Remove photo"
             >
-              <TrashIcon />
+              <TrashIcon size={11} />
             </button>
-          )}
-        </div>
-        {photoError && (
-          <p role="alert" className="auth-form__error">
-            {photoError}
-          </p>
-        )}
-      </div>
-
-      <div className="profile-header">
-        <span className="profile-header__icon">
-          {hasBrandBadge(car.make) ? (
-            <BrandBadge make={car.make} size={32} />
-          ) : (
-            <span aria-hidden="true">🚗</span>
           )}
         </span>
         <div className="profile-header__info">
