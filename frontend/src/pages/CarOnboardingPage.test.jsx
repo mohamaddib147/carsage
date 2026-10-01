@@ -9,7 +9,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CarOnboardingPage from "./CarOnboardingPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
@@ -1169,5 +1169,73 @@ describe("CarOnboardingPage — car photo (CAR-58)", () => {
 
     expect(screen.getByText("Add a Photo (optional)")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "Selected car preview" })).not.toBeInTheDocument();
+  });
+});
+
+// --- CAR-59: stock car image fallback ---------------------------------------
+
+const ORIGINAL_IMAGIN_KEY = import.meta.env.VITE_IMAGIN_STUDIO_KEY;
+
+describe("CarOnboardingPage — stock car image fallback (CAR-59)", () => {
+  afterEach(() => {
+    import.meta.env.VITE_IMAGIN_STUDIO_KEY = ORIGINAL_IMAGIN_KEY;
+  });
+
+  it("shows a stock photo, labeled as one, once Make and Model are typed and a key is configured (normal case)", async () => {
+    import.meta.env.VITE_IMAGIN_STUDIO_KEY = "test-customer-key";
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(screen.getByText("Add a Photo (optional)")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Make *"), "Toyota");
+    await user.type(screen.getByLabelText("Model *"), "Corolla");
+
+    const img = await screen.findByRole("img", { name: "Toyota Corolla (stock photo)" });
+    expect(img).toHaveAttribute("src", expect.stringContaining("cdn.imagin.studio/getImage"));
+    expect(screen.getByText("Stock photo")).toBeInTheDocument();
+    expect(screen.queryByText("Add a Photo (optional)")).not.toBeInTheDocument();
+  });
+
+  it("shows the plain upload well when no key is configured, even with Make/Model typed (edge case)", async () => {
+    import.meta.env.VITE_IMAGIN_STUDIO_KEY = "";
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText("Make *"), "Toyota");
+    await user.type(screen.getByLabelText("Model *"), "Corolla");
+
+    expect(screen.getByText("Add a Photo (optional)")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /stock photo/ })).not.toBeInTheDocument();
+  });
+
+  it("falls back to the plain upload well when the stock image itself fails to load", async () => {
+    import.meta.env.VITE_IMAGIN_STUDIO_KEY = "test-customer-key";
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText("Make *"), "Toyota");
+    await user.type(screen.getByLabelText("Model *"), "Corolla");
+    const img = await screen.findByRole("img", { name: "Toyota Corolla (stock photo)" });
+
+    fireEvent.error(img);
+
+    await waitFor(() => expect(screen.getByText("Add a Photo (optional)")).toBeInTheDocument());
+    expect(screen.queryByRole("img", { name: /stock photo/ })).not.toBeInTheDocument();
+  });
+
+  it("picking a real photo always replaces the stock preview", async () => {
+    import.meta.env.VITE_IMAGIN_STUDIO_KEY = "test-customer-key";
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText("Make *"), "Toyota");
+    await user.type(screen.getByLabelText("Model *"), "Corolla");
+    await screen.findByRole("img", { name: "Toyota Corolla (stock photo)" });
+
+    fireEvent.change(document.getElementById("photoFile"), { target: { files: [fakePhotoFile()] } });
+
+    expect(await screen.findByRole("img", { name: "Selected car preview" })).toBeInTheDocument();
+    expect(screen.queryByText("Stock photo")).not.toBeInTheDocument();
   });
 });

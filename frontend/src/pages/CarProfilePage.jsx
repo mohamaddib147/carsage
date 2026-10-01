@@ -13,6 +13,13 @@
 // set. Replacing a photo uploads the new one, saves its path on the row,
 // THEN deletes the old object (never the other order — a mid-upload
 // failure must never leave the car with no photo at all).
+// CAR-59: with no uploaded photo, tries a real IMAGIN.studio stock photo
+// of the car's make/model (lib/stockCarImage.js) before falling back to
+// the silhouette — null (and so the silhouette) unless
+// VITE_IMAGIN_STUDIO_KEY is configured, or if the stock image itself
+// fails to load (e.g. no coverage for that make/model). Never stored;
+// recomputed at render time, and the user's own uploaded photo always
+// takes priority over it.
 
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -26,6 +33,7 @@ import {
   getCarFieldErrors,
 } from "../lib/limits.js";
 import { deleteCarPhoto, getCarPhotoError, getCarPhotoUrl, uploadCarPhoto } from "../lib/carPhoto.js";
+import { getStockCarImageUrl } from "../lib/stockCarImage.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 import BrandBadge, { hasBrandBadge } from "../theme/BrandBadge.jsx";
@@ -238,6 +246,12 @@ function CarProfilePage() {
   const [photoLoading, setPhotoLoading] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const photoFileInputRef = useRef(null);
+  // CAR-59: true once a stock-photo <img> has failed to load for the
+  // CURRENT car (e.g. IMAGIN.studio has no coverage for that make/model),
+  // so the silhouette placeholder takes over instead of a broken-image
+  // icon. Reset whenever the viewed car changes, so switching to a
+  // different car gets its own chance at a stock photo.
+  const [stockImageFailed, setStockImageFailed] = useState(false);
 
   useEffect(() => {
     // Guards against rendering before the auth session has resolved. In
@@ -303,6 +317,12 @@ function CarProfilePage() {
   useEffect(() => {
     if (car) setActiveCarId(car.id);
   }, [car, setActiveCarId]);
+
+  // CAR-59: a different car gets its own chance at a stock photo (the
+  // previous car's "no coverage" result shouldn't carry over).
+  useEffect(() => {
+    setStockImageFailed(false);
+  }, [car?.id]);
 
   // CAR-58: (re)loads the signed URL whenever the car's stored photo path
   // changes (a fresh car, a newly uploaded photo, or one just removed).
@@ -704,6 +724,8 @@ function CarProfilePage() {
 
   const headerMeta = [car.year, car.fuel_type].filter(Boolean).join(" · ");
   const isDefault = defaultCarId === car.id;
+  // CAR-59: null (never shown) unless VITE_IMAGIN_STUDIO_KEY is configured.
+  const stockImageUrl = getStockCarImageUrl(car.make, car.model, car.year);
 
   return (
     <div className="profile-page">
@@ -725,6 +747,16 @@ function CarProfilePage() {
         <div className="car-photo__frame">
           {photoUrl ? (
             <img className="car-photo__image" src={photoUrl} alt={`${car.make} ${car.model}`} />
+          ) : stockImageUrl && !stockImageFailed ? (
+            <>
+              <img
+                className="car-photo__image"
+                src={stockImageUrl}
+                alt={`${car.make} ${car.model} (stock photo)`}
+                onError={() => setStockImageFailed(true)}
+              />
+              <span className="car-photo__stock-badge">Stock photo</span>
+            </>
           ) : (
             <div className="car-photo__placeholder" aria-hidden="true">
               <CarPhotoPlaceholder />
