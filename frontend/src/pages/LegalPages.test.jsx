@@ -9,6 +9,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
+import { CurrencyProvider } from "../currency/CurrencyContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 
 // A minimal, endlessly-chainable stub for supabase.from(...) — every method
@@ -43,11 +44,15 @@ beforeEach(() => {
   supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
 });
 
+// Wrapped like main.jsx: since CAR-64 the Dashboard shows the USD | LBP switch,
+// which needs the currency provider.
 function renderAt(path) {
   render(
     <MemoryRouter initialEntries={[path]}>
       <AuthProvider>
-        <App />
+        <CurrencyProvider>
+          <App />
+        </CurrencyProvider>
       </AuthProvider>
     </MemoryRouter>,
   );
