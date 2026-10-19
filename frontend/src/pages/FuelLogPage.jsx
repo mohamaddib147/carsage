@@ -16,10 +16,14 @@
 // toggle until they pick one here themselves; every figure in the list is shown
 // through <Price>, so the toggle changes them all.
 //
-// CAR-61: an optional Odometer (km) field. A reading must be higher than the car's
-// previous reading and lower than any later one (checked against this car's own
-// loaded fill-ups before saving, since a saved fill-up can't be edited), and the
-// form shows the distance since the last reading so a typo stands out. The table
+// CAR-61: an optional Odometer (km) field. Its shape and range (whole km, 1 to
+// 2,000,000) are hard checks, mirroring the database. Reading ORDER is checked in
+// this form only (the database doesn't enforce it): a reading that isn't higher
+// than the car's previous one, or isn't lower than a later one, shows a warning
+// with a "Save anyway" button rather than being blocked, because an earlier saved
+// typo would otherwise block every correct reading after it and fill-ups can't be
+// edited. The form also shows the distance since the last reading so a typo
+// stands out. The table
 // gains Odometer and km/L columns, and the chart section a "real average" line
 // (lib/odometer.js). km/L assumes every fill-up fills the tank to full; that
 // assumption is stated to the user under the table.
@@ -59,6 +63,7 @@ import {
   formatKm,
   formatKmPerLiter,
   getOdometerError,
+  getOdometerOrderWarning,
   MIN_INTERVALS_FOR_TRIP_PLANNER,
   readingOf,
   realEfficiency,
@@ -140,6 +145,10 @@ function FuelLogPage() {
   const [cost, setCost] = useState("");
   // CAR-61: raw digits from FormattedNumberInput; "" = not given (optional).
   const [odometer, setOdometer] = useState("");
+  // CAR-61: an out-of-order reading's warning, shown with a "Save anyway" button.
+  // Cleared whenever the reading, the date or the car changes, so a confirmation
+  // only ever applies to the exact reading it was shown for.
+  const [orderWarning, setOrderWarning] = useState("");
   const { currency: primaryCurrency } = useCurrency();
   // null = the user hasn't chosen here, so the form follows the header toggle.
   const [chosenCurrency, setChosenCurrency] = useState(null);
@@ -228,12 +237,23 @@ function FuelLogPage() {
     setFieldErrors({});
     setSaveError("");
     setSaved(false);
+    setOrderWarning("");
     setActiveCarId(carId);
   }
 
   /** @param {import('react').FormEvent} event */
   async function handleSubmit(event) {
     event.preventDefault();
+    await save({ confirmedOrder: false });
+  }
+
+  /**
+   * Validates and saves the fill-up. A reading out of order (not higher than the
+   * previous one, or not lower than a later one) first shows a warning with a
+   * "Save anyway" button, which calls this again with `confirmedOrder: true`.
+   * @param {{ confirmedOrder: boolean }} options
+   */
+  async function save({ confirmedOrder }) {
     setSaveError("");
     setSaved(false);
 
@@ -244,11 +264,23 @@ function FuelLogPage() {
       const odometerError =
         entries === null
           ? "Still loading this car's fill-ups. Try again in a moment."
-          : getOdometerError(odometer, date, entries);
+          : getOdometerError(odometer);
       if (odometerError) errors.odometer = odometerError;
     }
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      setOrderWarning("");
+      return;
+    }
+
+    if (odometer !== "" && !confirmedOrder) {
+      const warning = getOdometerOrderWarning(odometer, date, entries);
+      if (warning) {
+        setOrderWarning(warning);
+        return;
+      }
+    }
+    setOrderWarning("");
 
     const carId = selectedCarId;
     const row = {
@@ -356,7 +388,10 @@ function FuelLogPage() {
               min={LIMITS.MIN_FILL_DATE}
               value={date}
               aria-invalid={fieldErrors.date ? "true" : undefined}
-              onChange={(event) => setDate(event.target.value)}
+              onChange={(event) => {
+                setDate(event.target.value);
+                setOrderWarning("");
+              }}
             />
             {fieldErrors.date && (
               <p role="alert" className="auth-form__error">{fieldErrors.date}</p>
@@ -421,10 +456,25 @@ function FuelLogPage() {
               value={odometer}
               aria-invalid={fieldErrors.odometer ? "true" : undefined}
               aria-describedby="fillOdometerHint"
-              onChange={setOdometer}
+              onChange={(raw) => {
+                setOdometer(raw);
+                setOrderWarning("");
+              }}
             />
             {fieldErrors.odometer ? (
               <p role="alert" className="auth-form__error">{fieldErrors.odometer}</p>
+            ) : orderWarning ? (
+              <div role="alert" className="fuel-log-order-warning">
+                <p>{orderWarning}</p>
+                <button
+                  type="button"
+                  className="fuel-log-order-warning__btn"
+                  disabled={saving}
+                  onClick={() => save({ confirmedOrder: true })}
+                >
+                  Save anyway
+                </button>
+              </div>
             ) : sinceLast ? (
               <p
                 id="fillOdometerHint"

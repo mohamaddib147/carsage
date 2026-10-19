@@ -12,6 +12,7 @@ import {
   formatKm,
   formatKmPerLiter,
   getOdometerError,
+  getOdometerOrderWarning,
   latestOdometer,
   readingOf,
   realEfficiency,
@@ -33,59 +34,69 @@ describe("readingOf", () => {
   });
 });
 
-describe("getOdometerError", () => {
-  // 750 km on 60 L = 12.5 km/L: a realistic interval, so both readings count.
-  const log = [entry("a", 1, 84250), entry("b", 20, 85000, 60)];
-
+describe("getOdometerError (hard checks: what the database itself refuses)", () => {
   it("is optional: a blank field is fine", () => {
-    expect(getOdometerError("", "2026-09-10", log)).toBeUndefined();
-  });
-
-  it("accepts a reading between the previous and the next one (normal case)", () => {
-    expect(getOdometerError("84610", "2026-09-10", log)).toBeUndefined();
+    expect(getOdometerError("")).toBeUndefined();
   });
 
   it("refuses anything that isn't a whole number of km", () => {
     for (const text of ["84250.5", "84k", "-100"]) {
-      expect(getOdometerError(text, "2026-09-10", [])).toBe("Enter the odometer as a whole number of km.");
+      expect(getOdometerError(text)).toBe("Enter the odometer as a whole number of km.");
     }
   });
 
   it("refuses 0 and anything above the 2,000,000 km database limit", () => {
-    expect(getOdometerError("0", "2026-09-10", [])).toBe("The odometer reading must be greater than 0.");
-    expect(getOdometerError("2000001", "2026-09-10", [])).toMatch(/too large .*2,000,000 km.*extra digit/);
-    expect(getOdometerError("2000000", "2026-09-10", [])).toBeUndefined();
+    expect(getOdometerError("0")).toBe("The odometer reading must be greater than 0.");
+    expect(getOdometerError("2000001")).toMatch(/too large .*2,000,000 km.*extra digit/);
+    expect(getOdometerError("2000000")).toBeUndefined();
   });
 
-  it("refuses a reading lower than OR equal to the previous one, naming it", () => {
-    expect(getOdometerError("84000", "2026-09-10", log)).toBe(
-      "Must be higher than your previous reading of 84,250 km (1 Sep 2026). Odometers only go up.",
+  it("does NOT judge reading order (that is only a warning, see below)", () => {
+    expect(getOdometerError("1")).toBeUndefined();
+  });
+});
+
+describe("getOdometerOrderWarning (soft check, overridable with Save anyway)", () => {
+  // 750 km on 60 L = 12.5 km/L: a realistic interval, so both readings count.
+  const log = [entry("a", 1, 84250), entry("b", 20, 85000, 60)];
+
+  it("says nothing for a reading between the previous and the next one (normal case)", () => {
+    expect(getOdometerOrderWarning("84610", "2026-09-10", log)).toBeUndefined();
+  });
+
+  it("says nothing for a blank or invalid reading (the hard check reports that)", () => {
+    expect(getOdometerOrderWarning("", "2026-09-10", log)).toBeUndefined();
+    expect(getOdometerOrderWarning("0", "2026-09-10", log)).toBeUndefined();
+  });
+
+  it("warns about a reading lower than OR equal to the previous one, naming it", () => {
+    expect(getOdometerOrderWarning("84000", "2026-09-10", log)).toBe(
+      "This isn't higher than your previous reading of 84,250 km (1 Sep 2026). Odometers only go up, so check it for a typo.",
     );
-    expect(getOdometerError("84250", "2026-09-10", log)).toMatch(/^Must be higher than your previous reading of 84,250 km/);
+    expect(getOdometerOrderWarning("84250", "2026-09-10", log)).toMatch(/^This isn't higher than your previous reading of 84,250 km/);
   });
 
-  it("refuses a backdated reading that isn't below a LATER reading", () => {
-    expect(getOdometerError("85000", "2026-09-10", log)).toBe(
-      "Must be lower than your later reading of 85,000 km (20 Sep 2026).",
+  it("warns about a backdated reading that isn't below a LATER reading", () => {
+    expect(getOdometerOrderWarning("85000", "2026-09-10", log)).toBe(
+      "This isn't lower than your later reading of 85,000 km (20 Sep 2026). Check the reading and the date.",
     );
   });
 
   it("treats an existing same-day fill-up as earlier than the one being added", () => {
-    expect(getOdometerError("84250", "2026-09-01", log)).toMatch(/^Must be higher/);
-    expect(getOdometerError("84300", "2026-09-01", log)).toBeUndefined();
+    expect(getOdometerOrderWarning("84250", "2026-09-01", log)).toMatch(/^This isn't higher/);
+    expect(getOdometerOrderWarning("84300", "2026-09-01", log)).toBeUndefined();
   });
 
-  it("doesn't let a saved typo block every correct reading after it", () => {
-    // 84,250 -> 846,100 (an extra digit, already flagged) -> the real 84,900 must be accepted.
+  it("doesn't use an already-flagged (saved typo) reading as the previous one", () => {
+    // 84,250 -> 846,100 (an extra digit, already flagged) -> the real 84,900 needs no warning.
     const withTypo = [entry("a", 1, 84250, 35), entry("b", 9, 846100, 40)];
-    expect(getOdometerError("84900", "2026-09-15", withTypo)).toBeUndefined();
-    // ...but it must still be higher than the last trustworthy reading.
-    expect(getOdometerError("84000", "2026-09-15", withTypo)).toMatch(/previous reading of 84,250 km/);
+    expect(getOdometerOrderWarning("84900", "2026-09-15", withTypo)).toBeUndefined();
+    expect(getOdometerOrderWarning("84000", "2026-09-15", withTypo)).toMatch(/previous reading of 84,250 km/);
   });
 
   it("ignores fill-ups without a reading when looking for the previous one", () => {
     const withLegacy = [entry("a", 1, 84250), entry("b", 5, null)];
-    expect(getOdometerError("84200", "2026-09-10", withLegacy)).toMatch(/84,250 km/);
+    expect(getOdometerOrderWarning("84200", "2026-09-10", withLegacy)).toMatch(/84,250 km/);
   });
 });
 
@@ -147,6 +158,20 @@ describe("fillUpEfficiencies", () => {
 
     expect(result.get("b").kmPerLiter).toBe(9);
     expect(result.get("c").kmPerLiter).toBe(9);
+  });
+
+  it("orders same-day fill-ups by when they were logged (filled_at, then created_at)", () => {
+    // Two fill-ups on day 2: logged 08:00 (1,090 km) and 18:00 (1,180 km).
+    // Ordered by created_at they are both 90 km intervals; reversed, the 18:00
+    // one would come first and both intervals would be wrong.
+    const result = fillUpEfficiencies([
+      entry("late", 2, 1180, 10, "18:00"),
+      entry("first", 1, 1000),
+      entry("early", 2, 1090, 10, "08:00"),
+    ]);
+
+    expect(result.get("early")).toEqual({ distanceKm: 90, kmPerLiter: 9, plausible: true });
+    expect(result.get("late")).toEqual({ distanceKm: 90, kmPerLiter: 9, plausible: true });
   });
 });
 

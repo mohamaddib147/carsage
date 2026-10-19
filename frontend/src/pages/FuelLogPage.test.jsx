@@ -969,11 +969,9 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
   });
 
   it.each([
-    ["lower than the previous reading", "84000", /^Must be higher than your previous reading of 84,250 km \(1 Oct 2026\)/],
-    ["equal to the previous reading", "84250", /^Must be higher than your previous reading of 84,250 km/],
     ["above the 2,000,000 km limit", "2000001", /too large/],
     ["zero", "0", /must be greater than 0/],
-  ])("refuses a reading %s, without saving", async (_label, reading, message) => {
+  ])("refuses a reading %s outright, without saving (the database would reject it)", async (_label, reading, message) => {
     const user = userEvent.setup();
     const calls = mockDatabase({ logsByCar: { "car-1": { data: [ODO_1], error: null } } });
 
@@ -985,10 +983,51 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
     expect(screen.getByLabelText("Odometer (km)")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.queryByRole("button", { name: "Save anyway" })).not.toBeInTheDocument();
     expect(calls.inserts).toEqual([]);
   });
 
-  it("refuses a backdated reading that isn't below a later one", async () => {
+  it.each([
+    ["lower than the previous reading", "84000", /^This isn't higher than your previous reading of 84,250 km \(1 Oct 2026\)/],
+    ["equal to the previous reading", "84250", /^This isn't higher than your previous reading of 84,250 km/],
+  ])("warns about a reading %s, and only saves it after 'Save anyway'", async (_label, reading, message) => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "40", cost: "57" });
+    await typeOdometer(user, reading);
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(screen.getByLabelText("Odometer (km)")).not.toHaveAttribute("aria-invalid");
+    expect(calls.inserts).toEqual([]); // nothing saved until the user confirms
+
+    await user.click(screen.getByRole("button", { name: "Save anyway" }));
+
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(calls.inserts[0]).toMatchObject({ odometer_km: Number(reading) });
+    expect(await screen.findByRole("status")).toHaveTextContent("Fill-up added.");
+  });
+
+  it("drops the warning (and its Save anyway) as soon as the reading is changed", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "40", cost: "57" });
+    await typeOdometer(user, "8400"); // missing a digit
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await screen.findByRole("button", { name: "Save anyway" });
+
+    await typeOdometer(user, "0"); // now 84,000... still lower, but a NEW reading: confirm again
+    expect(screen.queryByRole("button", { name: "Save anyway" })).not.toBeInTheDocument();
+    expect(calls.inserts).toEqual([]);
+  });
+
+  it("warns about a backdated reading that isn't below a later one, and saves it after 'Save anyway'", async () => {
     const user = userEvent.setup();
     const calls = mockDatabase({ logsByCar: { "car-1": { data: [ODO_2, ODO_1], error: null } } });
 
@@ -1000,9 +1039,31 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Must be lower than your later reading of 84,610 km (9 Oct 2026).",
+      "This isn't lower than your later reading of 84,610 km (9 Oct 2026). Check the reading and the date.",
     );
     expect(calls.inserts).toEqual([]);
+    await user.click(screen.getByRole("button", { name: "Save anyway" }));
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(calls.inserts[0]).toMatchObject({ filled_at: "2026-10-05", odometer_km: 84700 });
+  });
+
+  it("covers a typo in the very FIRST reading: the correct one after it can still be saved", async () => {
+    const user = userEvent.setup();
+    // The car's only reading is a typo (an extra digit); it has no earlier
+    // reading, so nothing can flag it. The real mileage must still be savable.
+    const firstTypo = { ...ODO_1, odometer_km: 842500 };
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [firstTypo], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "40", cost: "57" });
+    await typeOdometer(user, "84610");
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/previous reading of 842,500 km/);
+    await user.click(screen.getByRole("button", { name: "Save anyway" }));
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(calls.inserts[0]).toMatchObject({ odometer_km: 84610 });
   });
 
   it("lets the user carry on with correct readings after a saved typo (fill-ups can't be edited)", async () => {

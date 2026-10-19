@@ -88,13 +88,12 @@ function neighbourReadings(date, entries) {
 }
 
 /**
- * Validates the optional Odometer field of the add-a-fill-up form.
+ * Hard checks on the optional Odometer field: the shape and range the database
+ * itself enforces (whole km, 1 to 2,000,000). A reading failing these can't be saved.
  * @param {string} text - the raw field text (digits only from FormattedNumberInput).
- * @param {string} date - the fill-up's date (YYYY-MM-DD).
- * @param {object[]} entries - the SAME car's existing fill-ups.
  * @returns {string | undefined} a message, or undefined when blank or valid.
  */
-export function getOdometerError(text, date, entries) {
+export function getOdometerError(text) {
   const raw = String(text ?? "").replace(/,/g, "").trim();
   if (raw === "") return undefined;
   if (!/^\d+$/.test(raw)) return "Enter the odometer as a whole number of km.";
@@ -103,13 +102,35 @@ export function getOdometerError(text, date, entries) {
   if (km > LIMITS.MAX_ODOMETER_KM) {
     return `That reading is too large (the limit is ${formatKm(LIMITS.MAX_ODOMETER_KM)}). Check for an extra digit.`;
   }
+  return undefined;
+}
+
+/**
+ * Soft check: a reading that isn't higher than the car's previous reading, or
+ * isn't lower than a later one. Odometers only go up, so this is usually a typo,
+ * but it is a WARNING the user can override ("Save anyway"), not a block: if an
+ * earlier saved reading is itself the typo (e.g. the very first one), blocking
+ * would make every correct reading after it impossible to save, and fill-ups
+ * can't be edited. This rule lives in the form only; the database does not
+ * enforce reading order.
+ * @param {string} text - the raw field text.
+ * @param {string} date - the fill-up's date (YYYY-MM-DD).
+ * @param {object[]} entries - the SAME car's existing fill-ups.
+ * @returns {string | undefined} a warning, or undefined when blank, invalid
+ *   (see getOdometerError) or in order.
+ */
+export function getOdometerOrderWarning(text, date, entries) {
+  if (getOdometerError(text)) return undefined;
+  const raw = String(text ?? "").replace(/,/g, "").trim();
+  if (raw === "") return undefined;
+  const km = Number(raw);
 
   const { previous, next } = neighbourReadings(date, entries);
   if (previous && km <= previous.km) {
-    return `Must be higher than your previous reading of ${formatKm(previous.km)} (${formatFillDate(previous.date)}). Odometers only go up.`;
+    return `This isn't higher than your previous reading of ${formatKm(previous.km)} (${formatFillDate(previous.date)}). Odometers only go up, so check it for a typo.`;
   }
   if (next && km >= next.km) {
-    return `Must be lower than your later reading of ${formatKm(next.km)} (${formatFillDate(next.date)}).`;
+    return `This isn't lower than your later reading of ${formatKm(next.km)} (${formatFillDate(next.date)}). Check the reading and the date.`;
   }
   return undefined;
 }
@@ -122,15 +143,16 @@ export function getOdometerError(text, date, entries) {
  * @param {object[]} entries - the same car's fill-ups.
  * @param {string} [litersText] - liters typed so far; used to flag an implausible km/L.
  * @returns {{ distanceKm: number, previousKm: number, implausible: boolean } | null}
- *   null when the reading is blank/invalid or there's no earlier reading.
+ *   null when the reading is blank/invalid, out of order, or there's no earlier reading.
  */
 export function distanceSincePrevious(text, date, entries, litersText = "") {
-  if (getOdometerError(text, date, entries)) return null;
+  if (getOdometerError(text)) return null;
   const raw = String(text ?? "").replace(/,/g, "").trim();
   if (raw === "") return null;
   const { previous } = neighbourReadings(date, entries);
   if (!previous) return null;
   const distanceKm = Number(raw) - previous.km;
+  if (distanceKm <= 0) return null; // out of order: getOdometerOrderWarning explains it instead
   const liters = Number(litersText);
   const implausible = Number.isFinite(liters) && liters > 0 && !isPlausible(distanceKm / liters);
   return { distanceKm, previousKm: previous.km, implausible };

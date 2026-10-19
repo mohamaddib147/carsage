@@ -698,3 +698,86 @@ class TestEstimateRealVsRatedEfficiency:
         body = response.json()
         assert body["efficiency_source"] == "real"
         assert body["estimated_cost_current_traffic_lbp"] == round(90 / (9 / 1.3) * 100000, 0)
+
+
+class TestEstimateCannotReachAnotherUsersFuelLog:
+    """CAR-61 authorization: the real-average lookup can never use another
+    user's fill-ups. These go through the REAL get_current_user_id (the JWT is
+    checked by supabase.auth.get_user, mocked to say the token belongs to user
+    B), not the test-only dependency override, so user_id provably comes from
+    the verified token and nothing else."""
+
+    A_CAR = "00000000-0000-4000-8000-0000000000aa"
+    B_CAR = "00000000-0000-4000-8000-0000000000bb"
+
+    def setup_method(self):
+        app.dependency_overrides.pop(get_current_user_id, None)
+
+    def teardown_method(self):
+        app.dependency_overrides[get_current_user_id] = lambda: "user-123"
+
+    def _post_as_user_b(self, mock_supabase, body):
+        auth_supabase = MagicMock()
+        auth_supabase.auth.get_user.return_value = MagicMock(user=MagicMock(id="user-B"))
+        with patch("app.auth.supabase", auth_supabase), patch(
+            "app.routers.trip_planner.supabase", mock_supabase
+        ), patch("app.routers.trip_planner.get_route_summary") as mock_route:
+            mock_route.return_value = {"distance_km": 90.0, "duration_min": 60, "duration_in_traffic_min": 60}
+            response = client.post(
+                "/trip-planner/estimate",
+                json=body,
+                headers={"Authorization": "Bearer token-of-user-B"},
+            )
+        auth_supabase.auth.get_user.assert_called_once_with("token-of-user-B")
+        return response
+
+    def test_user_b_asking_for_user_a_car_gets_404_and_a_fuel_log_is_never_read(self):
+        # The cars lookup is filtered by the caller's id, so A's car isn't found
+        # for B (what the real query returns: nothing).
+        mock_supabase, captured = _mock_supabase_for_estimate(None, fuel_logs=_fill_ups(5))
+        response = self._post_as_user_b(
+            mock_supabase,
+            {"car_id": self.A_CAR, "origin": "Beirut", "destination": "Byblos", "fuel_price_per_liter_lbp": 100000},
+        )
+
+        assert response.status_code == 404
+        assert "fuel_logs_filters" not in captured  # A's fill-ups were never queried
+        assert "row" not in captured  # no trip saved
+        body = response.json()
+        assert "efficiency_km_per_l" not in body and "real_interval_count" not in body
+        cars_query = mock_supabase.table("cars").select.return_value
+        assert cars_query.eq.call_args.args == ("id", self.A_CAR)
+        assert cars_query.eq.return_value.eq.call_args.args == ("user_id", "user-B")
+
+    def test_a_user_id_in_the_request_body_is_ignored_the_token_decides(self):
+        # B's own car, but the body claims to be user A: every query must still
+        # use B (from the verified token), never the body's value.
+        mock_supabase, captured = _mock_supabase_for_estimate(RATED, fuel_logs=[])
+        response = self._post_as_user_b(
+            mock_supabase,
+            {"car_id": self.B_CAR, "user_id": "user-A", "origin": "Beirut", "destination": "Byblos", "fuel_price_per_liter_lbp": 100000},
+        )
+
+        assert response.status_code == 200
+        assert ("user_id", "user-B") in captured["fuel_logs_filters"]
+        assert ("user_id", "user-A") not in captured["fuel_logs_filters"]
+        assert ("car_id", self.B_CAR) in captured["fuel_logs_filters"]
+        assert captured["row"]["user_id"] == "user-B"
+        assert response.json()["efficiency_source"] == "rated"  # B has no fill-ups of his own
+
+    def test_without_a_valid_token_nothing_is_looked_up_at_all(self):
+        mock_supabase, captured = _mock_supabase_for_estimate(RATED, fuel_logs=_fill_ups(5))
+        with patch("app.routers.trip_planner.supabase", mock_supabase):
+            response = client.post(
+                "/trip-planner/estimate",
+                json={"car_id": self.A_CAR, "user_id": "user-A", "origin": "Beirut", "destination": "Byblos"},
+            )
+
+        assert response.status_code == 401
+        mock_supabase.table.assert_not_called()
+        assert captured == {}
+
+    def test_the_request_model_has_no_user_id_field(self):
+        from app.routers.trip_planner import EstimateTripRequest
+
+        assert "user_id" not in EstimateTripRequest.model_fields
