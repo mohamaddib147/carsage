@@ -790,3 +790,113 @@ describe("AIAdvisorPage — DIY fix feedback (mentor feedback, no Jira task)", (
     expect(screen.getByText("Did this fix it?")).toBeInTheDocument(); // still unanswered, can retry
   });
 });
+
+describe("AIAdvisorPage — Find a mechanic near me (CAR-65)", () => {
+  const MECHANIC_LINK = "Find a mechanic near me";
+  const EXPECTED_URL =
+    "https://www.google.com/maps/search/?api=1&query=car%20mechanic%20near%20me";
+
+  it("shows the link under a live mechanic reply, opening Google Maps safely in a new tab (normal case)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      recommendation: "mechanic",
+      guidance: "This needs a professional inspection right away.",
+    });
+
+    renderPage();
+    await user.type(
+      await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"),
+      "Brakes are grinding",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    const link = await screen.findByRole("link", { name: MECHANIC_LINK });
+    expect(link).toHaveAttribute("href", EXPECTED_URL);
+    expect(link).toHaveAttribute("target", "_blank");
+    const rel = link.getAttribute("rel").split(/\s+/);
+    expect(rel).toContain("noopener");
+    expect(rel).toContain("noreferrer");
+  });
+
+  it("does not show the link on a DIY reply (edge case)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      recommendation: "diy",
+      guidance: "Top up the washer fluid. Close the cap firmly.",
+    });
+
+    renderPage();
+    await user.type(
+      await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"),
+      "Washer fluid light is on",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("DIY Fixable")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: MECHANIC_LINK })).not.toBeInTheDocument();
+  });
+
+  it("is present on a mechanic reply reloaded from history, and absent on a reloaded DIY reply", async () => {
+    mockSupabaseTables({
+      cars: [{ id: "car-1" }],
+      conversation: { id: "conv-1" },
+      messages: [
+        { sender: "user", message_text: "Washer fluid light is on", recommendation: null },
+        { sender: "ai", message_text: "Top it up.", recommendation: "diy" },
+        { sender: "user", message_text: "Now the brakes grind", recommendation: null },
+        { sender: "ai", message_text: "Get this checked soon.", recommendation: "mechanic" },
+      ],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Get this checked soon.")).toBeInTheDocument();
+    // Exactly one: the DIY reply above it has none.
+    const links = screen.getAllByRole("link", { name: MECHANIC_LINK });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", EXPECTED_URL);
+  });
+
+  it("shows the link on every mechanic reply, not just the latest one", async () => {
+    mockSupabaseTables({
+      cars: [{ id: "car-1" }],
+      conversation: { id: "conv-1" },
+      messages: [
+        { sender: "user", message_text: "Grinding brakes", recommendation: null },
+        { sender: "ai", message_text: "See a mechanic about the brakes.", recommendation: "mechanic" },
+        { sender: "user", message_text: "Engine knocking", recommendation: null },
+        { sender: "ai", message_text: "See a mechanic about the engine.", recommendation: "mechanic" },
+      ],
+    });
+
+    renderPage();
+
+    await screen.findByText("See a mechanic about the engine.");
+    expect(screen.getAllByRole("link", { name: MECHANIC_LINK })).toHaveLength(2);
+  });
+
+  it("builds the URL from a fixed query only: nothing the user or the AI wrote ends up in it (security)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      recommendation: "mechanic",
+      guidance: "Try https://evil.example/steal?x=1 and javascript:alert(1) instead.",
+    });
+
+    renderPage();
+    await user.type(
+      await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"),
+      "my Toyota Corolla at 12 Hamra Street leaks oil",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    const link = await screen.findByRole("link", { name: MECHANIC_LINK });
+    const href = link.getAttribute("href");
+    expect(href).toBe(EXPECTED_URL);
+    for (const leaked of ["Toyota", "Corolla", "Hamra", "oil", "evil", "javascript"]) {
+      expect(href).not.toContain(leaked);
+    }
+  });
+});

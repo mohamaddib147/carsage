@@ -24,6 +24,13 @@
 // The thumbnail URL is derived from the video id in video_url (YouTube's
 // predictable img.youtube.com pattern) rather than stored, since only
 // video_title/video_url are persisted columns.
+// Find a mechanic (CAR-65): a 'mechanic' reply (live or reloaded from
+// history) ends with a "Find a mechanic near me" link that opens a Google
+// Maps search in a new tab, so the advice has a next step. It is a plain
+// public Maps URL built from one fixed query (no API key, no billing, no
+// location permission asked by CarSage; Maps uses the visitor's own
+// location), never from user or AI text. A search link, not a booking or
+// marketplace feature.
 // Layout matches docs/stitch_carsage_landing_page/carsage_ai_advisor for
 // the in-scope parts (chat bubbles, quick-start prompt chips, badge +
 // numbered steps on a DIY response); its left sidebar nav, "telemetry"
@@ -53,6 +60,35 @@ function guidanceSteps(guidance) {
     .split(/(?<=[.!?])\s+/)
     .map((sentence) => sentence.trim())
     .filter(Boolean);
+}
+
+// The whole URL is fixed at build time: nothing the user typed or the AI
+// returned is ever put into it (CAR-65), so it can't be steered elsewhere.
+const FIND_MECHANIC_URL = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+  "car mechanic near me",
+)}`;
+
+/**
+ * Small map-pin icon for the "Find a mechanic near me" link (decorative).
+ * @returns {JSX.Element}
+ */
+function PinIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11z" />
+      <circle cx="12" cy="10" r="2.5" />
+    </svg>
+  );
 }
 
 const YOUTUBE_HOSTS = new Set(["www.youtube.com", "youtube.com", "m.youtube.com"]);
@@ -426,7 +462,18 @@ function AIAdvisorPage() {
                   ))}
                 </ol>
               ) : (
-                <p className="advisor-guidance-text">{message.guidance}</p>
+                <>
+                  <p className="advisor-guidance-text">{message.guidance}</p>
+                  <a
+                    className="advisor-mechanic-link"
+                    href={FIND_MECHANIC_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <PinIcon />
+                    Find a mechanic near me
+                  </a>
+                </>
               )}
               {youtubeVideoId(message.videoUrl) && (
                 <a
