@@ -805,7 +805,8 @@ describe("CarOnboardingPage polish — red styling on invalid fields", () => {
   });
 
   it("has a real red style for the invalid state, on inputs and on the dropdown", () => {
-    const rule = cssRule('input[aria-invalid="true"],\nselect[aria-invalid="true"]');
+    // CAR-62 added textarea (Maintenance notes) to the same shared rule.
+    const rule = cssRule('input[aria-invalid="true"],\nselect[aria-invalid="true"],\ntextarea[aria-invalid="true"]');
     expect(rule).toContain("var(--color-danger)");
     expect(rule).toContain("outline");
   });
