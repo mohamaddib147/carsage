@@ -7,7 +7,7 @@
 // mocked so getSession() and the auth-state listener are driven by the
 // tests — no real network calls.
 
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -130,7 +130,10 @@ describe("SiteNav auth control", () => {
 });
 
 describe("SiteNav center links", () => {
-  const APP_LINKS = ["Dashboard", "Car Onboarding", "Car Profile", "Trip Planner", "AI Advisor", "Fuel Log"];
+  // CAR-62: the top level is Dashboard, the "My Car" menu, Trip Planner, AI Advisor;
+  // Car Profile, Fuel Log, Maintenance and "Add a car" sit inside "My Car".
+  const APP_LINKS = ["Dashboard", "Trip Planner", "AI Advisor"];
+  const MY_CAR_LINKS = ["Car Profile", "Fuel Log", "Maintenance", "Add a car"];
 
   it("logged out: shows only 'Features' and 'How it works' anchors, no app routes", async () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
@@ -142,9 +145,10 @@ describe("SiteNav center links", () => {
       "href",
       "/#how-it-works",
     );
-    for (const label of APP_LINKS) {
+    for (const label of [...APP_LINKS, ...MY_CAR_LINKS]) {
       expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
     }
+    expect(screen.queryByRole("button", { name: "My Car" })).not.toBeInTheDocument();
   });
 
   it("logged in: shows the full app menu and no marketing anchors", async () => {
@@ -155,6 +159,10 @@ describe("SiteNav center links", () => {
     await screen.findByRole("button", { name: "Log Out" });
 
     for (const label of APP_LINKS) {
+      expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
+    }
+    await userEvent.setup().click(screen.getByRole("button", { name: "My Car" }));
+    for (const label of MY_CAR_LINKS) {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
     }
     expect(screen.queryByRole("link", { name: "Features" })).not.toBeInTheDocument();
@@ -267,6 +275,7 @@ describe("SiteNav currency toggle (CAR-54)", () => {
     await screen.findByRole("button", { name: "Log Out" });
     expect(toggle()).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "My Car" })); // CAR-62: Fuel Log is in this menu
     await user.click(screen.getByRole("link", { name: "Fuel Log" }));
     expect(await screen.findByRole("group", { name: "Show prices in" })).toBeInTheDocument();
 
@@ -303,5 +312,106 @@ describe("SiteNav brand logo (CAR-51)", () => {
 
     const brandLink = await screen.findByRole("link", { name: "CarSage" });
     expect(brandLink.querySelector("img").src).toMatch(/on-dark/);
+  });
+});
+
+describe("SiteNav 'My Car' menu (CAR-62)", () => {
+  function renderAt(path) {
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <AuthProvider><CurrencyProvider>
+          <SiteNav />
+          <Routes>
+            <Route path="*" element={<p>Some screen</p>} />
+          </Routes>
+        </CurrencyProvider></AuthProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  beforeEach(() => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+  });
+
+  const menuButton = () => screen.getByRole("button", { name: "My Car" });
+
+  it("is closed until clicked, then lists Car Profile, Fuel Log, Maintenance and Add a car", async () => {
+    const user = userEvent.setup();
+    renderAt("/dashboard");
+    await screen.findByRole("button", { name: "Log Out" });
+
+    expect(menuButton()).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("link", { name: "Maintenance" })).not.toBeInTheDocument();
+
+    await user.click(menuButton());
+
+    expect(menuButton()).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "Car Profile" })).toHaveAttribute("href", "/cars/mine");
+    expect(screen.getByRole("link", { name: "Fuel Log" })).toHaveAttribute("href", "/fuel-log");
+    expect(screen.getByRole("link", { name: "Maintenance" })).toHaveAttribute("href", "/maintenance");
+    expect(screen.getByRole("link", { name: "Add a car" })).toHaveAttribute("href", "/cars/new");
+  });
+
+  it("closes when a link is followed (and on any navigation)", async () => {
+    const user = userEvent.setup();
+    renderAt("/dashboard");
+    await screen.findByRole("button", { name: "Log Out" });
+
+    await user.click(menuButton());
+    await user.click(screen.getByRole("link", { name: "Maintenance" }));
+
+    expect(menuButton()).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("link", { name: "Fuel Log" })).not.toBeInTheDocument();
+  });
+
+  it("works from the keyboard: ArrowDown opens and focuses the first link, arrows move, Escape closes and returns focus", async () => {
+    const user = userEvent.setup();
+    renderAt("/dashboard");
+    await screen.findByRole("button", { name: "Log Out" });
+
+    menuButton().focus();
+    await user.keyboard("{ArrowDown}");
+    await waitFor(() => expect(screen.getByRole("link", { name: "Car Profile" })).toHaveFocus());
+
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("link", { name: "Fuel Log" })).toHaveFocus();
+    await user.keyboard("{End}");
+    expect(screen.getByRole("link", { name: "Add a car" })).toHaveFocus();
+    await user.keyboard("{ArrowDown}"); // wraps around
+    expect(screen.getByRole("link", { name: "Car Profile" })).toHaveFocus();
+    await user.keyboard("{ArrowUp}");
+    expect(screen.getByRole("link", { name: "Add a car" })).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("link", { name: "Car Profile" })).not.toBeInTheDocument();
+    expect(menuButton()).toHaveFocus();
+  });
+
+  it("closes on a click outside it", async () => {
+    const user = userEvent.setup();
+    renderAt("/dashboard");
+    await screen.findByRole("button", { name: "Log Out" });
+
+    await user.click(menuButton());
+    await user.click(screen.getByText("Some screen"));
+
+    expect(menuButton()).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it.each(["/maintenance", "/fuel-log", "/cars/mine", "/cars/abc-123", "/cars/new"])(
+    "shows the menu as the current section on %s",
+    async (path) => {
+      renderAt(path);
+      await screen.findByRole("button", { name: "Log Out" });
+
+      expect(menuButton()).toHaveClass("active");
+    },
+  );
+
+  it("doesn't show it as current elsewhere", async () => {
+    renderAt("/trip-planner");
+    await screen.findByRole("button", { name: "Log Out" });
+
+    expect(menuButton()).not.toHaveClass("active");
   });
 });

@@ -175,10 +175,11 @@ CarSage uses a Supabase project (PostgreSQL + Auth). The database is described b
 | 18 | `2026-10-01_car_photos_storage_rls.sql` | Row Level Security policies on the `car-photos` Storage bucket: a user may only read, add, replace or delete objects inside their own `{user_id}/` folder. (No `bucket_id` foreign key exists, so this runs cleanly before file 19 creates that bucket.) |
 | 19 | `2026-10-01_create_car_photos_bucket.sql` | Creates the private `car-photos` Storage bucket (8 MB limit, JPEG/PNG/WEBP/HEIC/HEIF only). |
 | 20 | `2026-10-19_car61_fuel_logs_odometer_km.sql` | Adds an optional `odometer_km` (whole km, 1 to 2,000,000) to `fuel_logs`, used to work out real km/L between fill-ups. |
+| 21 | `2026-10-19_car62_maintenance_tracking.sql` | `maintenance_items` (a car's recurring service items, due by km and/or months) and `maintenance_records` (each time one was done; no edits, the owner may undo one), both owner-only, an item may only belong to the caller's own car, and a completion only to the caller's own item. |
 
-   The file names sort in the order they must be run. Files 1 to 11 are verbatim copies of the migration history; files 12 to 20 were checked against what is applied to the project.
+   The file names sort in the order they must be run. Files 1 to 11 are verbatim copies of the migration history; files 12 to 21 were checked against what is applied to the project.
 4. **Copy your keys** (Project Settings → API): the project URL, the `anon` key (frontend) and the `service_role` key (backend only) into the two `.env` files.
-5. **Check it worked.** In the Table Editor you should see `profiles`, `cars`, `trips`, `advisor_conversations`, `advisor_messages`, `fuel_prices` and `fuel_logs`, each with Row Level Security **enabled**. In the Storage section you should see a private `car-photos` bucket. To be thorough, run the access-control check (it creates and deletes two throwaway users):
+5. **Check it worked.** In the Table Editor you should see `profiles`, `cars`, `trips`, `advisor_conversations`, `advisor_messages`, `fuel_prices`, `fuel_logs`, `maintenance_items` and `maintenance_records`, each with Row Level Security **enabled**. In the Storage section you should see a private `car-photos` bucket. To be thorough, run the access-control check (it creates and deletes two throwaway users):
 
    ```bash
    cd backend

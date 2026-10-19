@@ -4,7 +4,7 @@
 
 import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DashboardPage from "./DashboardPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
@@ -32,7 +32,25 @@ vi.mock("../lib/supabaseClient.js", () => ({
  * .maybeSingle(), resolving to `issueRow`. Callers that don't pass either just
  * get "no feedback yet" (the common case for the pre-existing car-list tests).
  */
-function mockCarsList(carsResult, { diyMessages = { data: [], error: null }, issueRow = { data: null, error: null } } = {}) {
+function mockCarsList(
+  carsResult,
+  {
+    diyMessages = { data: [], error: null },
+    issueRow = { data: null, error: null },
+    maintenanceItems = { data: [], error: null },
+    readings = { data: [], error: null },
+  } = {},
+) {
+  // CAR-62: the Maintenance card's two reads, each filtered by the caller's user_id.
+  const maintenanceFilters = [];
+  const userScoped = (table, result) => ({
+    select: vi.fn(() => ({
+      eq: vi.fn((column, value) => {
+        maintenanceFilters.push([table, column, value]);
+        return Promise.resolve(result);
+      }),
+    })),
+  });
   const order = vi.fn().mockResolvedValue(carsResult);
   const eq = vi.fn(() => ({ order }));
   const select = vi.fn(() => ({ eq }));
@@ -50,10 +68,12 @@ function mockCarsList(carsResult, { diyMessages = { data: [], error: null }, iss
   supabase.from.mockImplementation((table) => {
     if (table === "cars") return { select };
     if (table === "advisor_messages") return advisorBuilder;
+    if (table === "maintenance_items") return userScoped(table, maintenanceItems);
+    if (table === "fuel_logs") return userScoped(table, readings);
     throw new Error(`mockCarsList: unexpected table "${table}"`);
   });
 
-  return { select, eq, order, advisorBuilder };
+  return { select, eq, order, advisorBuilder, maintenanceFilters };
 }
 
 function renderDashboard() {
@@ -348,5 +368,109 @@ describe("DashboardPage — DIY fix-rate stat (mentor feedback, no Jira task)", 
     renderDashboard();
 
     expect(await screen.findByText(/No feedback yet/)).toBeInTheDocument();
+  });
+});
+
+describe("DashboardPage — Maintenance card (CAR-62)", () => {
+  const CAR_A = { id: "car-a", make: "Mercedes-Benz", model: "C230", year: 2005, user_id: "user-123" };
+  const CAR_B = { id: "car-b", make: "Toyota", model: "Corolla", year: 2020, user_id: "user-123" };
+  const dateItem = (id, carId, name, baselineDate) => ({
+    id, car_id: carId, name, interval_km: null, interval_months: 12, baseline_date: baselineDate, baseline_km: null, created_at: "x", maintenance_records: [],
+  });
+  const kmItem = (id, carId, name, baselineKm) => ({
+    id, car_id: carId, name, interval_km: 5000, interval_months: null, baseline_date: "2026-05-01", baseline_km: baselineKm, created_at: "x", maintenance_records: [],
+  });
+  const reading = (carId, km) => ({ id: `f-${carId}`, car_id: carId, filled_at: "2026-10-10", created_at: "2026-10-10T09:00:00Z", liters: 40, odometer_km: km });
+  const card = () => screen.getByRole("region", { name: "Maintenance due" });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-19T09:00:00Z")); // 19 Oct in Beirut
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("asks only for the caller's own items and readings", async () => {
+    const { maintenanceFilters } = mockCarsList({ data: [CAR_A], error: null });
+    renderDashboard();
+    await within(await screen.findByRole("region", { name: "Maintenance due" })).findByText(/Nothing tracked yet/);
+
+    expect(maintenanceFilters).toEqual(
+      expect.arrayContaining([["maintenance_items", "user_id", "user-123"], ["fuel_logs", "user_id", "user-123"]]),
+    );
+  });
+
+  it("has a friendly empty state when nothing is tracked yet", async () => {
+    mockCarsList({ data: [CAR_A], error: null });
+    renderDashboard();
+
+    const empty = await within(await screen.findByRole("region", { name: "Maintenance due" })).findByText(/Nothing tracked yet/);
+    expect(within(empty).getByRole("link", { name: "Maintenance" })).toHaveAttribute("href", "/maintenance");
+  });
+
+  it("says 'All caught up' when items exist but none is due", async () => {
+    mockCarsList({ data: [CAR_A], error: null }, { maintenanceItems: { data: [dateItem("i1", "car-a", "Brake check", "2026-09-01")], error: null } });
+    renderDashboard();
+
+    expect(await within(await screen.findByRole("region", { name: "Maintenance due" })).findByText("All caught up: nothing is overdue or due soon.")).toBeInTheDocument();
+  });
+
+  it("lists what's overdue or due soon across cars, most urgent first, each linking to its item, with OK items left out", async () => {
+    mockCarsList(
+      { data: [CAR_A, CAR_B], error: null },
+      {
+        maintenanceItems: {
+          data: [
+            dateItem("ok", "car-a", "Brake check", "2026-09-01"),
+            kmItem("soon", "car-b", "Toyota oil", 10000), // due at 15,000; car B is at 14,800
+            dateItem("late", "car-a", "Mécanique inspection", "2025-10-01"), // due 1 Oct: overdue
+          ],
+          error: null,
+        },
+        readings: { data: [reading("car-a", 88000), reading("car-b", 14800)], error: null },
+      },
+    );
+    renderDashboard();
+
+    await within(await screen.findByRole("region", { name: "Maintenance due" })).findByText("Mécanique inspection");
+    const links = within(card()).getAllByRole("link").filter((link) => link.classList.contains("dashboard-maintenance__item"));
+    expect(links.map((link) => link.textContent)).toEqual([
+      "OverdueMécanique inspection2005 Mercedes-Benz C23018 days overdue",
+      "Due soonToyota oil2020 Toyota Corolla200 km left",
+    ]);
+    expect(links[0]).toHaveAttribute("href", "/maintenance?car=car-a#maintenance-item-late");
+    expect(links[1]).toHaveAttribute("href", "/maintenance?car=car-b#maintenance-item-soon");
+    expect(within(card()).queryByText("Brake check")).not.toBeInTheDocument();
+  });
+
+  it("never uses one car's reading for another car's item", async () => {
+    // The km item is on car B, which has NO reading; car A's 88,000 km must not be used.
+    mockCarsList(
+      { data: [CAR_A, CAR_B], error: null },
+      { maintenanceItems: { data: [kmItem("b1", "car-b", "Toyota oil", 84000)], error: null }, readings: { data: [reading("car-a", 88900)], error: null } },
+    );
+    renderDashboard();
+
+    expect(await within(await screen.findByRole("region", { name: "Maintenance due" })).findByText(/1 item needs an odometer reading/)).toBeInTheDocument();
+    expect(within(card()).queryByText("Toyota oil")).not.toBeInTheDocument();
+  });
+
+  it("shows at most five, with a count of the rest", async () => {
+    const items = Array.from({ length: 7 }, (_, index) => dateItem(`d${index}`, "car-a", `Item ${index}`, "2025-09-01"));
+    mockCarsList({ data: [CAR_A], error: null }, { maintenanceItems: { data: items, error: null } });
+    renderDashboard();
+
+    expect(await within(await screen.findByRole("region", { name: "Maintenance due" })).findByText(/And 2 more in/)).toBeInTheDocument();
+    expect(within(card()).getAllByRole("link").filter((link) => link.classList.contains("dashboard-maintenance__item"))).toHaveLength(5);
+  });
+
+  it("shows a plain message if maintenance can't be loaded", async () => {
+    mockCarsList({ data: [CAR_A], error: null }, { maintenanceItems: { data: null, error: { message: 'relation "maintenance_items" does not exist' } } });
+    renderDashboard();
+
+    const message = await within(await screen.findByRole("region", { name: "Maintenance due" })).findByText(/Couldn't load your maintenance/);
+    expect(message).not.toHaveTextContent(/relation/);
   });
 });

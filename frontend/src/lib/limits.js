@@ -27,6 +27,15 @@ export const LIMITS = {
   // CAR-61: fuel_logs.odometer_km is whole km, 1 to 2,000,000 (the CHECK
   // fuel_logs_odometer_km_range_check, docs/db_migrations/2026-10-19_car61_*).
   MAX_ODOMETER_KM: 2_000_000,
+  // CAR-62: maintenance_items / maintenance_records CHECK constraints
+  // (docs/db_migrations/2026-10-19_car62_maintenance_tracking.sql).
+  MAINTENANCE_NAME: 60,
+  MAINTENANCE_NOTES: 500,
+  MIN_INTERVAL_KM: 100,
+  MAX_INTERVAL_KM: 200_000,
+  MIN_INTERVAL_MONTHS: 1,
+  MAX_INTERVAL_MONTHS: 120,
+  MIN_MAINTENANCE_DATE: "2000-01-01",
   // sign up (Supabase Auth enforces 6+; bcrypt only uses the first 72 bytes)
   EMAIL: 254,
   PASSWORD_MIN: 6,

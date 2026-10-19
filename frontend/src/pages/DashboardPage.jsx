@@ -10,14 +10,33 @@
 // Each car card also summarises the specs saved on the car (efficiency,
 // cylinders, drivetrain, transmission, tank size) from the row the page
 // already fetches, so the cards aren't just a name and a meta line.
+// CAR-62: a Maintenance card lists every item that is Overdue or Due soon across all
+// the user's cars (each linking to that item on the Maintenance page), says how many
+// need an odometer reading, and has friendly "nothing tracked" / "all caught up" states.
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { diyFixRate, latestFixedMessage, timeAgo } from "../lib/diySuccess.js";
+import {
+  dashboardMaintenance,
+  describeRemaining,
+  itemAnchorId,
+  STATUS_LABELS,
+  todayInBeirut,
+} from "../lib/maintenance.js";
 import { supabase } from "../lib/supabaseClient.js";
 import BrandBadge from "../theme/BrandBadge.jsx";
+
+// CAR-62: the Maintenance card reads every item (with its history) and every fill-up
+// reading of the user, then works out each item's status per car, with that car's
+// own latest reading only (lib/maintenance.js has the thresholds).
+const DASHBOARD_ITEM_COLUMNS =
+  "id, car_id, name, interval_km, interval_months, baseline_date, baseline_km, created_at, " +
+  "maintenance_records(id, done_on, odometer_km, created_at)";
+const MAX_DUE_SHOWN = 5;
+
 
 /** Builds the "Engine Type • Fuel Type • Plate" meta line, skipping any fields the car doesn't have set. */
 function carMetaLine(car) {
@@ -61,6 +80,33 @@ function DashboardPage() {
   // fixRate: null while loading OR once loaded, null means "no feedback given
   // anywhere yet" (the empty state) rather than a real 0%.
   const [diyStats, setDiyStats] = useState({ loading: true, fixRate: null, latestFix: null });
+  // CAR-62: null while loading; { due, needsReading, total } once loaded.
+  const [maintenance, setMaintenance] = useState(null);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let cancelled = false;
+
+    async function loadMaintenance() {
+      const [itemsReply, readingsReply] = await Promise.all([
+        supabase.from("maintenance_items").select(DASHBOARD_ITEM_COLUMNS).eq("user_id", user.id),
+        supabase.from("fuel_logs").select("id, car_id, filled_at, created_at, liters, odometer_km").eq("user_id", user.id),
+      ]);
+      if (cancelled) return;
+      if (itemsReply.error || !itemsReply.data) {
+        setMaintenance({ due: [], needsReading: 0, total: 0, failed: true });
+        return;
+      }
+      setMaintenance(
+        dashboardMaintenance(itemsReply.data, readingsReply.error ? [] : (readingsReply.data ?? []), todayInBeirut()),
+      );
+    }
+
+    loadMaintenance();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -216,6 +262,73 @@ function DashboardPage() {
               );
             })}
           </ul>
+        )}
+      </section>
+
+      <section className="dashboard-section" aria-label="Maintenance due">
+        <h2>Maintenance</h2>
+        {maintenance === null ? (
+          <>
+            <p role="status" className="sr-only">Loading maintenance...</p>
+            <div className="dashboard-stat-tile dashboard-stat-tile--skeleton" aria-hidden="true">
+              <div className="skeleton-bar skeleton-bar--stat-label" />
+              <div className="skeleton-bar skeleton-bar--stat-label" />
+            </div>
+          </>
+        ) : maintenance.failed ? (
+          <p className="dashboard-diy-empty">
+            Couldn&apos;t load your maintenance right now. See <Link to="/maintenance">Maintenance</Link>.
+          </p>
+        ) : maintenance.total === 0 ? (
+          <p className="dashboard-diy-empty">
+            Nothing tracked yet. Set up reminders for oil changes, the mécanique and more in{" "}
+            <Link to="/maintenance">Maintenance</Link>.
+          </p>
+        ) : (
+          <div className="dashboard-maintenance">
+            {maintenance.due.length === 0 ? (
+              <p className="dashboard-maintenance__clear">All caught up: nothing is overdue or due soon.</p>
+            ) : (
+              <ul className="dashboard-maintenance__list">
+                {maintenance.due.slice(0, MAX_DUE_SHOWN).map(({ item, status }) => {
+                  const car = cars.find((candidate) => candidate.id === item.car_id);
+                  return (
+                    <li key={item.id}>
+                      <Link
+                        className="dashboard-maintenance__item"
+                        to={`/maintenance?car=${encodeURIComponent(item.car_id)}#${itemAnchorId(item.id)}`}
+                      >
+                        <span className={`maintenance-badge maintenance-badge--${status.status}`}>
+                          {STATUS_LABELS[status.status]}
+                        </span>
+                        <span className="dashboard-maintenance__name">{item.name}</span>
+                        {car && (
+                          <span className="dashboard-maintenance__car">
+                            {[car.year, car.make, car.model].filter(Boolean).join(" ")}
+                          </span>
+                        )}
+                        <span className="dashboard-maintenance__when">{describeRemaining(status)}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {maintenance.due.length > MAX_DUE_SHOWN && (
+              <p className="dashboard-maintenance__more">
+                And {maintenance.due.length - MAX_DUE_SHOWN} more in <Link to="/maintenance">Maintenance</Link>.
+              </p>
+            )}
+            {maintenance.needsReading > 0 && (
+              <p className="dashboard-maintenance__more">
+                {maintenance.needsReading} {maintenance.needsReading === 1 ? "item needs" : "items need"} an odometer
+                reading (add one with your next fill-up in the <Link to="/fuel-log">Fuel Log</Link>).
+              </p>
+            )}
+            <Link className="dashboard-maintenance__all" to="/maintenance">
+              See all maintenance <span aria-hidden="true">→</span>
+            </Link>
+          </div>
         )}
       </section>
 

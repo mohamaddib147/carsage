@@ -14,6 +14,11 @@ uses — that:
      edit/delete, nothing for anonymous visitors, and the database's own input limits.
      CAR-61 adds the optional odometer_km column: null still accepted, 1-2,000,000
      whole km only, and the same owner-only / no-edit rules apply to it.
+ 11. maintenance_items / maintenance_records (CAR-62): owner-only read; an item only
+     on the caller's own car, a completion only on the caller's own item; items can
+     be edited (only name/intervals/baseline/notes, never owner or car) and deleted
+     by their owner; completions can be deleted (undo) but never edited, by anyone;
+     nothing for anonymous visitors; and the database's own input limits.
 It also asserts the key shipped to the browser is the `anon` key.
 Everything it creates is deleted at the end. Exit code is 1 on any gap.
 
@@ -302,11 +307,110 @@ try:
     check("B changes A's odometer reading", affected(r) in (0, None), f"-> {r.status_code}")
     still = svc("GET", f"fuel_logs?id=eq.{odo_row}&select=odometer_km").json()
     check("A's odometer reading is unchanged after both attempts (service role)", still == [{"odometer_km": 84250}], str(still))
+
+    print("\n== 11. maintenance_items / maintenance_records (CAR-62) ==")
+    item_body = {"name": "Oil change", "interval_km": 5000, "interval_months": 6, "baseline_date": "2026-09-01", "baseline_km": 84000}
+    for u in (A, B):
+        u["item"] = svc("POST", "maintenance_items", json={"user_id": u["id"], "car_id": u["car"], **item_body}).json()[0]["id"]
+        u["record"] = svc("POST", "maintenance_records", json={"user_id": u["id"], "item_id": u["item"], "done_on": "2026-09-15", "odometer_km": 85000}).json()[0]["id"]
+
+    print("    -- positive controls: the owner can do everything the page needs --")
+    r = as_(A, "POST", "maintenance_items", json={"user_id": A["id"], "car_id": A["car"], "name": "Mecanique", "interval_months": 12, "baseline_date": "2026-01-10"})
+    works("A adds a date-only item to HIS car", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+    tmp_item = r.json()[0]["id"] if r.status_code == 201 else None
+    r = as_(A, "PATCH", f"maintenance_items?id=eq.{tmp_item}", json={"name": "Mecanique inspection", "interval_months": 11, "notes": "Bring the papers"})
+    works("A edits HIS item's name, interval and notes", affected(r) == 1, f"-> {r.status_code} {r.text[:70]}")
+    r = as_(A, "POST", "maintenance_records", json={"user_id": A["id"], "item_id": tmp_item, "done_on": "2026-10-01", "note": "All good"})
+    works("A marks HIS item as done (a completion with no odometer)", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+    tmp_record = r.json()[0]["id"] if r.status_code == 201 else None
+    r = as_(A, "GET", f"maintenance_items?select=id,maintenance_records(id)&id=eq.{A['item']}")
+    works("A reads HIS item with its history (embedded)", affected(r) == 1 and len(r.json()[0]["maintenance_records"]) == 1, f"-> {r.status_code} {r.text[:70]}")
+    r = as_(A, "DELETE", f"maintenance_records?id=eq.{tmp_record}")
+    works("A deletes (undoes) HIS OWN completion", affected(r) == 1, f"-> {r.status_code}")
+    r = as_(A, "DELETE", f"maintenance_items?id=eq.{tmp_item}")
+    works("A deletes HIS item", affected(r) == 1, f"-> {r.status_code}")
+
+    print("    -- user B against user A's maintenance data --")
+    r = as_(B, "GET", f"maintenance_items?select=*&id=eq.{A['item']}")
+    check("B reads A's maintenance item by id", affected(r) == 0, f"-> {r.status_code} {r.text[:60]}")
+    r = as_(B, "GET", f"maintenance_items?select=*&car_id=eq.{A['car']}")
+    check("B lists maintenance items filtered by A's car_id", affected(r) == 0, f"-> {r.status_code}")
+    r = as_(B, "GET", f"maintenance_records?select=*&id=eq.{A['record']}")
+    check("B reads A's completion by id", affected(r) == 0, f"-> {r.status_code}")
+    for table in ("maintenance_items", "maintenance_records"):
+        r = as_(B, "GET", f"{table}?select=*")
+        rows = r.json() if r.status_code == 200 else []
+        check(f"B's full {table} listing contains none of A's data ({len(rows)} rows visible, all B's)", not [x for x in rows if A["id"] in json.dumps(x)])
+    r = as_(B, "GET", f"cars?select=id,maintenance_items(id,maintenance_records(id))&id=eq.{A['car']}")
+    check("B reads A's items/history through an embedded join (cars -> items -> records)", affected(r) == 0)
+    r = as_(B, "POST", "maintenance_items", json={"user_id": A["id"], "car_id": A["car"], **item_body})
+    check("B inserts an item owned by A", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "POST", "maintenance_items", json={"user_id": B["id"], "car_id": A["car"], **item_body})
+    check("B attaches HIS item to A's car (cross-user reference)", r.status_code >= 400, f"-> {r.status_code} (row created!)" if r.status_code < 300 else "")
+    r = as_(B, "PATCH", f"maintenance_items?id=eq.{A['item']}", json={"name": "HACKED"})
+    check("B edits A's item", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(B, "PATCH", f"maintenance_items?id=eq.{B['item']}", json={"car_id": A["car"]})
+    check("B moves HIS item onto A's car", affected(r) in (0, None) or r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "PATCH", f"maintenance_items?id=eq.{B['item']}", json={"user_id": A["id"]})
+    check("B hands HIS item to A", affected(r) in (0, None) or r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "DELETE", f"maintenance_items?id=eq.{A['item']}")
+    check("B deletes A's item", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(B, "POST", "maintenance_records", json={"user_id": B["id"], "item_id": A["item"], "done_on": "2026-10-01"})
+    check("B records a completion on A's item", r.status_code >= 400, f"-> {r.status_code} (row created!)" if r.status_code < 300 else "")
+    r = as_(B, "POST", "maintenance_records", json={"user_id": A["id"], "item_id": A["item"], "done_on": "2026-10-01"})
+    check("B inserts a completion owned by A", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "DELETE", f"maintenance_records?id=eq.{A['record']}")
+    check("B deletes A's completion", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(B, "PATCH", f"maintenance_records?id=eq.{A['record']}", json={"done_on": "2020-01-01"})
+    check("B edits A's completion", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(A, "PATCH", f"maintenance_records?id=eq.{A['record']}", json={"done_on": "2020-01-01", "odometer_km": 1})
+    check("even the OWNER cannot edit a completion (undo = delete, never rewrite)", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(A, "PATCH", f"maintenance_records?id=eq.{A['record']}", json={"item_id": B["item"]})
+    check("the owner cannot move a completion onto another item", affected(r) in (0, None), f"-> {r.status_code}")
+    item_now = svc("GET", f"maintenance_items?id=eq.{A['item']}&select=name,car_id,user_id").json()
+    check("A's item is unchanged after B's attempts (service role)", item_now == [{"name": "Oil change", "car_id": A["car"], "user_id": A["id"]}], str(item_now))
+    rec_now = svc("GET", f"maintenance_records?id=eq.{A['record']}&select=done_on,odometer_km,item_id").json()
+    check("A's completion is unchanged after every edit attempt (service role)", rec_now == [{"done_on": "2026-09-15", "odometer_km": 85000, "item_id": A["item"]}], str(rec_now))
+    for table, body in [("maintenance_items", {"user_id": A["id"], "car_id": A["car"], **item_body}),
+                        ("maintenance_records", {"user_id": A["id"], "item_id": A["item"], "done_on": "2026-10-01"})]:
+        r = as_(None, "GET", f"{table}?select=*")
+        check(f"anon reads {table}", affected(r) in (0, None), f"-> {r.status_code}")
+        r = as_(None, "POST", table, json=body)
+        check(f"anon inserts into {table}", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(None, "DELETE", f"maintenance_records?id=eq.{A['record']}")
+    check("anon deletes a completion", affected(r) in (0, None), f"-> {r.status_code}")
+
+    print("    -- the database's own input limits --")
+    good_item = {"user_id": A["id"], "car_id": A["car"], **item_body}
+    for label, patch in [
+        ("a blank name", {"name": "   "}), ("a 61-character name", {"name": "x" * 61}),
+        ("no interval at all", {"interval_km": None, "interval_months": None}),
+        ("interval_km 99", {"interval_km": 99}), ("interval_km 200,001", {"interval_km": 200001}),
+        ("interval_months 0", {"interval_months": 0}), ("interval_months 121", {"interval_months": 121}),
+        ("a km interval with no baseline km", {"baseline_km": None}),
+        ("baseline km 0", {"baseline_km": 0}), ("baseline km 2,000,001", {"baseline_km": 2000001}),
+        ("a baseline date before 2000", {"baseline_date": "1999-12-31"}), ("no baseline date", {"baseline_date": None}),
+        ("501-character notes", {"notes": "x" * 501}),
+    ]:
+        r = as_(A, "POST", "maintenance_items", json={**good_item, **patch})
+        check(f"the database rejects an item with {label}", r.status_code in (400, 409), f"-> {r.status_code} {r.text[:70]}")
+    for label, patch in [("name at 60 characters", {"name": "x" * 60}), ("interval_km 100", {"interval_km": 100}),
+                         ("interval_km 200,000", {"interval_km": 200000}), ("interval_months 1", {"interval_months": 1}), ("interval_months 120", {"interval_months": 120}),
+                         ("a date-only item with no baseline km", {"interval_km": None, "baseline_km": None})]:
+        r = as_(A, "POST", "maintenance_items", json={**good_item, **patch})
+        works(f"boundary accepted: {label}", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+    good_record = {"user_id": A["id"], "item_id": A["item"], "done_on": "2026-10-01"}
+    for label, patch in [("a date before 2000", {"done_on": "1999-12-31"}), ("no date", {"done_on": None}),
+                         ("odometer 0", {"odometer_km": 0}), ("odometer 2,000,001", {"odometer_km": 2000001}),
+                         ("a 501-character note", {"note": "x" * 501}),
+                         ("a cost (costs belong to CAR-64)", {"cost_amount": 10})]:
+        r = as_(A, "POST", "maintenance_records", json={**good_record, **patch})
+        check(f"the database rejects a completion with {label}", r.status_code in (400, 409), f"-> {r.status_code} {r.text[:70]}")
 finally:
     for u in (A, B):
         if not u:
             continue
-        for table in ("fuel_logs", "advisor_conversations", "trips", "cars"):
+        for table in ("maintenance_records", "maintenance_items", "fuel_logs", "advisor_conversations", "trips", "cars"):
             svc("DELETE", f"{table}?user_id=eq.{u['id']}")
         svc("DELETE", f"profiles?id=eq.{u['id']}")
         httpx.delete(f"{URL}/auth/v1/admin/users/{u['id']}", headers=ADMIN, timeout=30)

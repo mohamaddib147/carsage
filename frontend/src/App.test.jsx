@@ -3,6 +3,7 @@
 // screens, and renders the 404 fallback for unknown routes.
 
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import appSource from "./App.jsx?raw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -84,7 +85,7 @@ describe("App routing — public screens", () => {
     ]);
   });
 
-  it("logged in: the nav shows the full app menu (brand + 6 screens) and a Log Out button", async () => {
+  it("logged in: the nav shows the full app menu (brand, 3 top-level screens, the My Car menu) and a Log Out button", async () => {
     supabase.auth.getSession.mockResolvedValue({
       data: { session: { user: { id: "user-123", email: "driver@example.com" } } },
     });
@@ -92,14 +93,19 @@ describe("App routing — public screens", () => {
     await screen.findByRole("button", { name: "Log Out" });
     const nav = screen.getByRole("navigation");
 
+    // CAR-62: Car Profile, Fuel Log, Maintenance and Add a car sit in the "My Car" menu.
     expect([...nav.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
       "/",
       "/dashboard",
-      "/cars/new",
-      "/cars/mine",
       "/trip-planner",
       "/advisor",
+    ]);
+    await userEvent.setup().click(screen.getByRole("button", { name: "My Car" }));
+    expect([...nav.querySelectorAll(".site-nav__menu-list a")].map((a) => a.getAttribute("href"))).toEqual([
+      "/cars/mine",
       "/fuel-log",
+      "/maintenance",
+      "/cars/new",
     ]);
   });
 });
@@ -151,9 +157,9 @@ describe("App routing — every route is either protected or deliberately public
 
   const protectedPaths = declaredRoutes.filter((route) => route.protectedRoute).map((route) => route.path);
 
-  it("protects the app screens (incl. the CAR-53 Fuel Log) and the car profile routes", () => {
+  it("protects the app screens (incl. the CAR-53 Fuel Log and CAR-62 Maintenance) and the car profile routes", () => {
     expect([...protectedPaths].sort()).toEqual(
-      ["/advisor", "/cars/:carId", "/cars/mine", "/cars/new", "/dashboard", "/fuel-log", "/trip-planner"].sort(),
+      ["/advisor", "/cars/:carId", "/cars/mine", "/cars/new", "/dashboard", "/fuel-log", "/maintenance", "/trip-planner"].sort(),
     );
   });
 

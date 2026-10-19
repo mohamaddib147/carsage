@@ -151,6 +151,87 @@ button {
   text-underline-offset: 6px;
 }
 
+/* CAR-62: the "My Car" disclosure menu in the header (Car Profile, Fuel Log,
+   Maintenance, Add a car). The button looks like the other header links; the
+   list drops down on a light panel, so its links use the normal dark text. */
+.site-nav__menu {
+  position: relative;
+}
+
+.site-nav__menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #ffffff;
+  opacity: 0.85;
+  font: inherit;
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.site-nav__menu-btn:hover,
+.site-nav__menu-btn.active,
+.site-nav__menu-btn[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.site-nav__menu-btn.active {
+  text-decoration: underline;
+  text-decoration-color: var(--color-accent);
+  text-underline-offset: 6px;
+}
+
+.site-nav__menu-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 4px;
+}
+
+.site-nav__menu-caret {
+  font-size: 0.75rem;
+}
+
+.site-nav__menu-list {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  min-width: 190px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  text-align: left;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(43, 43, 43, 0.18);
+}
+
+.site-nav__links .site-nav__menu-list a {
+  display: block;
+  padding: 8px 12px;
+  border-radius: var(--radius-base);
+  color: var(--color-text);
+  opacity: 1;
+  text-decoration: none;
+}
+
+.site-nav__links .site-nav__menu-list a:hover,
+.site-nav__links .site-nav__menu-list a:focus-visible {
+  background-color: var(--color-input-bg);
+  outline: none;
+  text-decoration: none;
+}
+
+.site-nav__links .site-nav__menu-list a.active {
+  font-weight: 700;
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
 .site-nav__actions {
   grid-column: 3;
   justify-self: end;
@@ -314,7 +395,8 @@ input[type="email"],
 input[type="password"],
 input[type="number"],
 input[type="date"],
-select {
+select,
+textarea {
   font-family: inherit;
   font-size: 1rem;
   padding: calc(var(--spacing-unit) * 1.5) calc(var(--spacing-unit) * 1.5);
@@ -326,7 +408,8 @@ select {
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: 2px solid var(--color-primary);
   outline-offset: 1px;
 }
@@ -2426,6 +2509,347 @@ select:focus {
   font-weight: 600;
 }
 
+/* CAR-62: Maintenance page. Status badges: Overdue (danger red), Due soon
+   (accent), OK (primary), "Add an odometer reading" (neutral outline). Badge
+   text colors are fixed (white or the page's text color), not themed, so they
+   stay readable whatever car-brand palette is active. */
+.maintenance-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.maintenance-badge--overdue {
+  background-color: var(--color-danger);
+  color: #ffffff;
+}
+
+.maintenance-badge--due_soon {
+  background-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.maintenance-badge--ok {
+  background-color: var(--color-primary);
+  color: #ffffff;
+}
+
+.maintenance-badge--needs_reading {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px dashed var(--color-text-muted);
+}
+
+.maintenance-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin-bottom: calc(var(--spacing-unit) * 2);
+}
+
+.maintenance-toolbar__car {
+  min-width: 240px;
+  margin: 0;
+}
+
+.maintenance-toolbar__reading {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.maintenance-notice {
+  margin: 0 0 calc(var(--spacing-unit) * 2);
+  padding: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 1.5);
+  border-left: 3px solid var(--color-accent);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-base);
+  font-size: 0.875rem;
+}
+
+.maintenance-add {
+  margin-bottom: calc(var(--spacing-unit) * 3);
+}
+
+.maintenance-add__hint {
+  margin: 0 0 calc(var(--spacing-unit) * 1.5);
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.maintenance-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--spacing-unit) * 1);
+}
+
+.maintenance-preset {
+  padding: 6px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background-color: var(--color-input-bg);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.maintenance-preset:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.maintenance-preset--custom {
+  background-color: var(--color-surface);
+  border-style: dashed;
+}
+
+.maintenance-interval {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.maintenance-interval legend {
+  margin-bottom: calc(var(--spacing-unit) * 0.75);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.maintenance-interval__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--spacing-unit) * 1.5);
+}
+
+.maintenance-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin-top: calc(var(--spacing-unit) * 1);
+}
+
+.maintenance-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin: calc(var(--spacing-unit) * 2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.maintenance-card {
+  padding: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 2.5);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+  scroll-margin-top: 96px;
+}
+
+.maintenance-card:target {
+  outline: 2px solid var(--color-accent);
+}
+
+.maintenance-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-unit);
+}
+
+.maintenance-card__header h3 {
+  margin: 0;
+  font-size: 1.0625rem;
+}
+
+.maintenance-card__due {
+  margin: calc(var(--spacing-unit) * 1) 0 0;
+  font-weight: 600;
+}
+
+.maintenance-card__remaining {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.maintenance-card__last,
+.maintenance-card__note,
+.maintenance-card__notes {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.maintenance-card__notes {
+  font-style: italic;
+}
+
+.maintenance-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin-top: calc(var(--spacing-unit) * 1.5);
+}
+
+.maintenance-card__done {
+  padding: 6px 16px;
+  font-size: 0.875rem;
+}
+
+.maintenance-link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.maintenance-link-btn--danger {
+  color: var(--color-danger);
+}
+
+.maintenance-danger-btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-danger);
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.maintenance-danger-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.maintenance-panel,
+.maintenance-confirm {
+  margin-top: calc(var(--spacing-unit) * 1.5);
+  padding-top: calc(var(--spacing-unit) * 1.5);
+  border-top: 1px solid var(--color-border);
+}
+
+.maintenance-confirm p {
+  margin: 0;
+}
+
+.maintenance-history {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+}
+
+.maintenance-history__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-unit);
+}
+
+.maintenance-history__note,
+.maintenance-history__empty {
+  color: var(--color-text-muted);
+}
+
+.maintenance-history__empty {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.maintenance-history__confirm {
+  font-weight: 600;
+}
+
+@media (max-width: 520px) {
+  .maintenance-interval__row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* CAR-62: the Dashboard's Maintenance card. */
+.dashboard-maintenance {
+  max-width: 640px;
+  padding: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 2.5);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+}
+
+.dashboard-maintenance__clear {
+  margin: 0 0 var(--spacing-unit);
+}
+
+.dashboard-maintenance__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 var(--spacing-unit);
+  padding: 0;
+  list-style: none;
+}
+
+.dashboard-maintenance__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px calc(var(--spacing-unit) * 1);
+  padding: 8px 10px;
+  border-radius: var(--radius-base);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.dashboard-maintenance__item:hover,
+.dashboard-maintenance__item:focus-visible {
+  background-color: var(--color-input-bg);
+}
+
+.dashboard-maintenance__name {
+  font-weight: 600;
+}
+
+.dashboard-maintenance__car,
+.dashboard-maintenance__when {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.dashboard-maintenance__when {
+  margin-left: auto;
+}
+
+.dashboard-maintenance__more {
+  margin: 0 0 var(--spacing-unit);
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.dashboard-maintenance__all {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
 /* CAR-61: an out-of-order odometer reading: a warning (not a block) with a
    "Save anyway" button, in the accent color rather than the error red. */
 .fuel-log-order-warning {
@@ -2664,7 +3088,8 @@ select:focus {
 
 /* A field with an error (a required field left empty on submit, or an invalid value) */
 input[aria-invalid="true"],
-select[aria-invalid="true"] {
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
   outline: 2px solid var(--color-danger);
   outline-offset: 1px;
   background-color: rgba(179, 38, 30, 0.06);
