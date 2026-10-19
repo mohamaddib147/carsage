@@ -230,7 +230,7 @@ export function sortByUrgency(rows) {
 }
 
 /**
- * "Due 1 Mar 2027 or at 89,000 km" (whichever comes first).
+ * "Due 1 Mar 2027 or at 95,000 km" (whichever comes first).
  * @param {{ dueDate: string | null, dueKm: number | null }} status
  * @returns {string}
  */
