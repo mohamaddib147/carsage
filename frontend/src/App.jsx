@@ -1,5 +1,5 @@
 // Root component — defines client-side routing for all CarSage screens (the 7
-// original ones plus the Fuel Log, CAR-53, and Maintenance, CAR-62) and the
+// original ones plus the Fuel Log, CAR-53, Maintenance, CAR-62, and Expenses, CAR-64) and the
 // placeholder Terms / Privacy pages linked from the footer.
 
 import { Route, Routes } from "react-router-dom";
@@ -18,6 +18,7 @@ import TripPlannerPage from "./pages/TripPlannerPage.jsx";
 import AIAdvisorPage from "./pages/AIAdvisorPage.jsx";
 import FuelLogPage from "./pages/FuelLogPage.jsx";
 import MaintenancePage from "./pages/MaintenancePage.jsx";
+import ExpensesPage from "./pages/ExpensesPage.jsx";
 import { PrivacyPage, TermsPage } from "./pages/LegalPages.jsx";
 import NotFoundPage from "./pages/NotFoundPage.jsx";
 
@@ -112,6 +113,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <MaintenancePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/expenses"
+            element={
+              <ProtectedRoute>
+                <ExpensesPage />
               </ProtectedRoute>
             }
           />

@@ -19,6 +19,9 @@ uses — that:
      be edited (only name/intervals/baseline/notes, never owner or car) and deleted
      by their owner; completions can be deleted (undo) but never edited, by anyone;
      nothing for anonymous visitors; and the database's own input limits.
+ 12. car_expenses (CAR-64): owner-only read; an expense only on the caller's own car;
+     the owner may delete one but nobody can edit one; nothing for anonymous visitors;
+     the database's own limits, including the fixed category list.
 It also asserts the key shipped to the browser is the `anon` key.
 Everything it creates is deleted at the end. Exit code is 1 on any gap.
 
@@ -406,11 +409,75 @@ try:
                          ("a cost (costs belong to CAR-64)", {"cost_amount": 10})]:
         r = as_(A, "POST", "maintenance_records", json={**good_record, **patch})
         check(f"the database rejects a completion with {label}", r.status_code in (400, 409), f"-> {r.status_code} {r.text[:70]}")
+
+    print("\n== 12. car_expenses (CAR-64) ==")
+    expense_body = {"spent_on": "2026-10-05", "category": "parking", "amount": 5, "currency": "USD"}
+    for u in (A, B):
+        u["expense"] = svc("POST", "car_expenses", json={"user_id": u["id"], "car_id": u["car"], **expense_body}).json()[0]["id"]
+
+    print("    -- positive controls --")
+    r = as_(A, "POST", "car_expenses", json={"user_id": A["id"], "car_id": A["car"], "spent_on": "2026-10-10", "category": "insurance", "amount": 450000, "currency": "LBP", "note": "Yearly"})
+    works("A adds an expense (in LBP) to HIS car", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+    tmp_expense = r.json()[0]["id"] if r.status_code == 201 else None
+    r = as_(A, "GET", f"car_expenses?select=id&car_id=eq.{A['car']}")
+    works("A reads HIS car's expenses (2 = one seeded + one just added)", affected(r) == 2, f"-> {r.status_code} rows={affected(r)}")
+    r = as_(A, "DELETE", f"car_expenses?id=eq.{tmp_expense}")
+    works("A deletes HIS OWN expense", affected(r) == 1, f"-> {r.status_code}")
+
+    print("    -- user B against user A's expenses --")
+    r = as_(B, "GET", f"car_expenses?select=*&id=eq.{A['expense']}")
+    check("B reads A's expense by id", affected(r) == 0, f"-> {r.status_code} {r.text[:60]}")
+    r = as_(B, "GET", f"car_expenses?select=*&car_id=eq.{A['car']}")
+    check("B lists expenses filtered by A's car_id", affected(r) == 0, f"-> {r.status_code}")
+    r = as_(B, "GET", "car_expenses?select=*")
+    rows = r.json() if r.status_code == 200 else []
+    check(f"B's full car_expenses listing contains none of A's data ({len(rows)} rows visible, all B's)", not [x for x in rows if A["id"] in json.dumps(x)])
+    r = as_(B, "GET", f"cars?select=id,car_expenses(id,amount)&id=eq.{A['car']}")
+    check("B reads A's expenses through an embedded join (cars -> car_expenses)", affected(r) == 0)
+    r = as_(B, "POST", "car_expenses", json={"user_id": A["id"], "car_id": A["car"], **expense_body})
+    check("B inserts an expense owned by A", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "POST", "car_expenses", json={"user_id": B["id"], "car_id": A["car"], **expense_body})
+    check("B adds HIS expense to A's car (cross-user reference)", r.status_code >= 400, f"-> {r.status_code} (row created!)" if r.status_code < 300 else "")
+    r = as_(B, "DELETE", f"car_expenses?id=eq.{A['expense']}")
+    check("B deletes A's expense", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(B, "PATCH", f"car_expenses?id=eq.{A['expense']}", json={"amount": 1})
+    check("B edits A's expense", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(B, "PATCH", f"car_expenses?id=eq.{B['expense']}", json={"car_id": A["car"]})
+    check("B moves HIS expense onto A's car", affected(r) in (0, None) or r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(A, "PATCH", f"car_expenses?id=eq.{A['expense']}", json={"amount": 1, "category": "other"})
+    check("even the OWNER cannot edit an expense (delete and re-add instead)", affected(r) in (0, None), f"-> {r.status_code}")
+    still = svc("GET", f"car_expenses?id=eq.{A['expense']}&select=amount,category,car_id").json()
+    check("A's expense is unchanged after every edit/delete attempt (service role)",
+          len(still) == 1 and float(still[0]["amount"]) == 5 and still[0]["category"] == "parking" and still[0]["car_id"] == A["car"], str(still))
+    r = as_(None, "GET", "car_expenses?select=*")
+    check("anon reads car_expenses", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(None, "POST", "car_expenses", json={"user_id": A["id"], "car_id": A["car"], **expense_body})
+    check("anon inserts into car_expenses", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(None, "DELETE", f"car_expenses?id=eq.{A['expense']}")
+    check("anon deletes an expense", affected(r) in (0, None), f"-> {r.status_code}")
+
+    print("    -- the database's own input limits --")
+    good_expense = {"user_id": A["id"], "car_id": A["car"], **expense_body}
+    for label, patch in [
+        ("an unknown category", {"category": "snacks"}), ("a category in the wrong case", {"category": "Parking"}),
+        ("a label instead of a key", {"category": "Car wash"}), ("no category", {"category": None}),
+        ("amount 0", {"amount": 0}), ("a negative amount", {"amount": -5}), ("an absurd amount", {"amount": 10**13}),
+        ("no amount", {"amount": None}), ("an unknown currency", {"currency": "EUR"}), ("no currency", {"currency": None}),
+        ("a date before 2000", {"spent_on": "1999-12-31"}), ("no date", {"spent_on": None}),
+        ("a timestamp-looking value with a bad date", {"spent_on": "2026-13-01"}), ("a 301-character note", {"note": "x" * 301}),
+    ]:
+        r = as_(A, "POST", "car_expenses", json={**good_expense, **patch})
+        check(f"the database rejects an expense with {label}", r.status_code in (400, 409), f"-> {r.status_code} {r.text[:70]}")
+    for category in ("repair", "maintenance", "insurance", "registration", "parking", "car_wash", "tolls", "fines", "other"):
+        r = as_(A, "POST", "car_expenses", json={**good_expense, "category": category})
+        works(f"category '{category}' is accepted", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+    r = as_(A, "POST", "car_expenses", json={**good_expense, "amount": 0.01, "note": "x" * 300})
+    works("boundaries accepted (0.01, a 300-character note)", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
 finally:
     for u in (A, B):
         if not u:
             continue
-        for table in ("maintenance_records", "maintenance_items", "fuel_logs", "advisor_conversations", "trips", "cars"):
+        for table in ("car_expenses", "maintenance_records", "maintenance_items", "fuel_logs", "advisor_conversations", "trips", "cars"):
             svc("DELETE", f"{table}?user_id=eq.{u['id']}")
         svc("DELETE", f"profiles?id=eq.{u['id']}")
         httpx.delete(f"{URL}/auth/v1/admin/users/{u['id']}", headers=ADMIN, timeout=30)

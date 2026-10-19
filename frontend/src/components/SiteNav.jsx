@@ -4,7 +4,7 @@
 // signed-out visitors get a simple marketing nav (Features / How it works,
 // anchors on the Landing page — no internal app routes), signed-in users
 // get the full app menu (CAR-62: Dashboard, a "My Car" menu holding Car Profile,
-// Fuel Log, Maintenance and Add a car, Trip Planner, AI Advisor). The auth control — "Sign Up / Log In" when
+// Fuel Log, Maintenance, Expenses (CAR-64) and Add a car, Trip Planner, AI Advisor). The auth control — "Sign Up / Log In" when
 // signed out, "Log Out" when signed in, never both (and neither while the
 // session is still being restored, so nothing flashes the wrong state).
 
@@ -23,6 +23,7 @@ const MY_CAR_LINKS = [
   { to: "/cars/mine", label: "Car Profile" },
   { to: "/fuel-log", label: "Fuel Log" },
   { to: "/maintenance", label: "Maintenance" },
+  { to: "/expenses", label: "Expenses" },
   { to: "/cars/new", label: "Add a car" },
 ];
 
@@ -35,7 +36,7 @@ const CENTER_LINKS = [
 
 /** True when the current path is one of the My Car screens (any car's profile included). */
 function isMyCarPath(pathname) {
-  return pathname.startsWith("/cars/") || pathname.startsWith("/fuel-log") || pathname.startsWith("/maintenance");
+  return ["/cars/", "/fuel-log", "/maintenance", "/expenses"].some((prefix) => pathname.startsWith(prefix));
 }
 
 /**

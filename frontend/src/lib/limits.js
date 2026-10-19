@@ -36,6 +36,9 @@ export const LIMITS = {
   MIN_INTERVAL_MONTHS: 1,
   MAX_INTERVAL_MONTHS: 120,
   MIN_MAINTENANCE_DATE: "2000-01-01",
+  // CAR-64: car_expenses.note (car_expenses_note_length_check). The amount shares
+  // MAX_FILL_COST with fuel_logs (the same 1e12 CHECK).
+  EXPENSE_NOTE: 300,
   // sign up (Supabase Auth enforces 6+; bcrypt only uses the first 72 bytes)
   EMAIL: 254,
   PASSWORD_MIN: 6,

@@ -3,10 +3,13 @@
 // Onboarding, and the two Trip Planner / AI Advisor module cards.
 
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DashboardPage from "./DashboardPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
+import CurrencyToggle from "../components/CurrencyToggle.jsx";
+import { CurrencyProvider } from "../currency/CurrencyContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 
 const LOGGED_IN_USER = { id: "user-123", email: "driver@example.com" };
@@ -39,6 +42,7 @@ function mockCarsList(
     issueRow = { data: null, error: null },
     maintenanceItems = { data: [], error: null },
     readings = { data: [], error: null },
+    expenses = { data: [], error: null },
   } = {},
 ) {
   // CAR-62: the Maintenance card's two reads, each filtered by the caller's user_id.
@@ -70,6 +74,7 @@ function mockCarsList(
     if (table === "advisor_messages") return advisorBuilder;
     if (table === "maintenance_items") return userScoped(table, maintenanceItems);
     if (table === "fuel_logs") return userScoped(table, readings);
+    if (table === "car_expenses") return userScoped(table, expenses);
     throw new Error(`mockCarsList: unexpected table "${table}"`);
   });
 
@@ -80,6 +85,7 @@ function renderDashboard() {
   render(
     <MemoryRouter initialEntries={["/dashboard"]}>
       <AuthProvider>
+        <CurrencyProvider>
         <Routes>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/cars/new" element={<p>Car onboarding placeholder</p>} />
@@ -87,6 +93,7 @@ function renderDashboard() {
           <Route path="/trip-planner" element={<p>Trip planner placeholder</p>} />
           <Route path="/advisor" element={<p>AI advisor placeholder</p>} />
         </Routes>
+        </CurrencyProvider>
       </AuthProvider>
     </MemoryRouter>,
   );
@@ -471,6 +478,95 @@ describe("DashboardPage — Maintenance card (CAR-62)", () => {
     renderDashboard();
 
     const message = await within(await screen.findByRole("region", { name: "Maintenance due" })).findByText(/Couldn't load your maintenance/);
+    expect(message).not.toHaveTextContent(/relation/);
+  });
+});
+
+describe("DashboardPage — All cars, this month (CAR-64)", () => {
+  const CAR_A = { id: "car-a", make: "Mercedes-Benz", model: "C230", year: 2005, user_id: "user-123" };
+  const CAR_B = { id: "car-b", make: "Toyota", model: "Corolla", year: 2020, user_id: "user-123" };
+  const fill = (carId, date, amount, currency = "USD") => ({ id: `f-${carId}-${date}`, car_id: carId, filled_at: date, created_at: `${date}T09:00:00Z`, liters: 30, odometer_km: null, cost_amount: String(amount), cost_currency: currency });
+  const expense = (carId, date, amount, currency = "USD") => ({ id: `e-${carId}-${date}`, car_id: carId, spent_on: date, category: "parking", amount: String(amount), currency });
+  const tile = () => screen.getByRole("region", { name: "All cars, this month" });
+
+  function renderWithSwitch() {
+    window.localStorage.clear();
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <AuthProvider>
+          <CurrencyProvider>
+            <CurrencyToggle />
+            <Routes>
+              <Route path="/dashboard" element={<DashboardPage />} />
+            </Routes>
+          </CurrencyProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-20T09:00:00Z")); // October 2026 in Beirut
+    window.localStorage.clear(); // the saved USD | LBP choice must not leak between tests
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("sums fuel and other costs across ALL cars for this month, mixed currencies, and follows the switch", async () => {
+    mockCarsList(
+      { data: [CAR_A, CAR_B], error: null },
+      {
+        // car A fuel $30, car B fuel 2,691,000 LBP ($30), September fuel ignored;
+        // car A parking $5, car B parking 448,500 LBP ($5) => $70.00 across both cars.
+        readings: { data: [fill("car-a", "2026-10-02", 30), fill("car-b", "2026-10-31", 2_691_000, "LBP"), fill("car-a", "2026-09-30", 500)], error: null },
+        expenses: { data: [expense("car-a", "2026-10-01", 5), expense("car-b", "2026-10-09", 448_500, "LBP")], error: null },
+      },
+    );
+    renderWithSwitch();
+
+    await within(await screen.findByRole("region", { name: "All cars, this month" })).findByText("spent on all your cars this month");
+    expect(within(tile()).getByRole("heading")).toHaveTextContent("All cars, this month (October 2026)");
+    const total = () => tile().querySelector(".dashboard-stat-tile__value").textContent;
+    expect(total()).toBe("$70.00 (6,279,000 LBP)");
+    expect(tile().querySelector(".dashboard-costs__split").textContent).toBe("Fuel$60.00 (5,382,000 LBP)Other costs$10.00 (897,000 LBP)");
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "LBP" }));
+    expect(total()).toBe("6,279,000 LBP ($70.00)");
+  });
+
+  it("asks only for the caller's own fill-ups and expenses", async () => {
+    const { maintenanceFilters } = mockCarsList({ data: [CAR_A], error: null });
+    renderDashboard();
+    await within(await screen.findByRole("region", { name: "All cars, this month" })).findByText(/Nothing logged for October 2026 yet/);
+
+    expect(maintenanceFilters).toEqual(expect.arrayContaining([["car_expenses", "user_id", "user-123"], ["fuel_logs", "user_id", "user-123"]]));
+  });
+
+  it("has a friendly empty state (no fake $0.00) when nothing was logged this month", async () => {
+    mockCarsList({ data: [CAR_A], error: null }, { readings: { data: [fill("car-a", "2026-09-30", 40)], error: null } });
+    renderDashboard();
+
+    const empty = await within(await screen.findByRole("region", { name: "All cars, this month" })).findByText(/Nothing logged for October 2026 yet/);
+    expect(within(empty).getByRole("link", { name: "Expenses" })).toHaveAttribute("href", "/expenses");
+    expect(within(tile()).queryByText(/\$0\.00|NaN/)).not.toBeInTheDocument();
+  });
+
+  it("says 'none logged' for the side that has nothing, not a zero", async () => {
+    mockCarsList({ data: [CAR_A], error: null }, { expenses: { data: [expense("car-a", "2026-10-03", 12)], error: null } });
+    renderDashboard();
+
+    await within(await screen.findByRole("region", { name: "All cars, this month" })).findByText("spent on all your cars this month");
+    expect(tile().querySelector(".dashboard-costs__split").textContent).toBe("Fuelnone loggedOther costs$12.00 (1,076,400 LBP)");
+  });
+
+  it("shows a plain message if the costs can't be loaded", async () => {
+    mockCarsList({ data: [CAR_A], error: null }, { expenses: { data: null, error: { message: 'relation "car_expenses" does not exist' } } });
+    renderDashboard();
+
+    const message = await within(await screen.findByRole("region", { name: "All cars, this month" })).findByText(/Couldn't load this month's costs/);
     expect(message).not.toHaveTextContent(/relation/);
   });
 });

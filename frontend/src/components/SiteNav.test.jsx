@@ -133,7 +133,7 @@ describe("SiteNav center links", () => {
   // CAR-62: the top level is Dashboard, the "My Car" menu, Trip Planner, AI Advisor;
   // Car Profile, Fuel Log, Maintenance and "Add a car" sit inside "My Car".
   const APP_LINKS = ["Dashboard", "Trip Planner", "AI Advisor"];
-  const MY_CAR_LINKS = ["Car Profile", "Fuel Log", "Maintenance", "Add a car"];
+  const MY_CAR_LINKS = ["Car Profile", "Fuel Log", "Maintenance", "Expenses", "Add a car"];
 
   it("logged out: shows only 'Features' and 'How it works' anchors, no app routes", async () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
@@ -247,7 +247,7 @@ describe("SiteNav currency toggle (CAR-54)", () => {
   });
 
   // Item 7 of the Car Onboarding polish: only screens that display prices get the switch.
-  it.each(["/trip-planner", "/fuel-log", "/fuel-log/", "/trip-planner/"])(
+  it.each(["/trip-planner", "/fuel-log", "/fuel-log/", "/trip-planner/", "/expenses", "/dashboard"])(
     "logged in on %s (a screen that shows prices): the switch is shown",
     async (path) => {
       supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
@@ -257,7 +257,7 @@ describe("SiteNav currency toggle (CAR-54)", () => {
     },
   );
 
-  it.each(["/dashboard", "/cars/new", "/cars/mine", "/cars/car-1", "/advisor", "/"])(
+  it.each(["/cars/new", "/cars/mine", "/cars/car-1", "/advisor", "/maintenance", "/"])(
     "logged in on %s (no prices here): the switch is hidden but Log Out is still there",
     async (path) => {
       supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
@@ -271,7 +271,7 @@ describe("SiteNav currency toggle (CAR-54)", () => {
   it("appears when the user navigates to a price screen and goes away again when they leave it", async () => {
     const user = userEvent.setup();
     supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
-    renderNavWithCurrency("/dashboard");
+    renderNavWithCurrency("/advisor"); // CAR-64: the Dashboard shows prices now, so start from AI Advisor
     await screen.findByRole("button", { name: "Log Out" });
     expect(toggle()).not.toBeInTheDocument();
 
@@ -279,7 +279,7 @@ describe("SiteNav currency toggle (CAR-54)", () => {
     await user.click(screen.getByRole("link", { name: "Fuel Log" }));
     expect(await screen.findByRole("group", { name: "Show prices in" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("link", { name: "Dashboard" }));
+    await user.click(screen.getByRole("link", { name: "AI Advisor" }));
     expect(toggle()).not.toBeInTheDocument();
   });
 
@@ -289,7 +289,7 @@ describe("SiteNav currency toggle (CAR-54)", () => {
     renderNavWithCurrency("/fuel-log");
     await user.click(await screen.findByRole("button", { name: "LBP" }));
 
-    await user.click(screen.getByRole("link", { name: "Dashboard" })); // hidden here
+    await user.click(screen.getByRole("link", { name: "AI Advisor" })); // hidden here
     await user.click(screen.getByRole("link", { name: "Trip Planner" })); // and back
 
     expect(await screen.findByRole("button", { name: "LBP" })).toHaveAttribute("aria-pressed", "true");
@@ -335,7 +335,7 @@ describe("SiteNav 'My Car' menu (CAR-62)", () => {
 
   const menuButton = () => screen.getByRole("button", { name: "My Car" });
 
-  it("is closed until clicked, then lists Car Profile, Fuel Log, Maintenance and Add a car", async () => {
+  it("is closed until clicked, then lists Car Profile, Fuel Log, Maintenance, Expenses and Add a car", async () => {
     const user = userEvent.setup();
     renderAt("/dashboard");
     await screen.findByRole("button", { name: "Log Out" });
@@ -349,6 +349,7 @@ describe("SiteNav 'My Car' menu (CAR-62)", () => {
     expect(screen.getByRole("link", { name: "Car Profile" })).toHaveAttribute("href", "/cars/mine");
     expect(screen.getByRole("link", { name: "Fuel Log" })).toHaveAttribute("href", "/fuel-log");
     expect(screen.getByRole("link", { name: "Maintenance" })).toHaveAttribute("href", "/maintenance");
+    expect(screen.getByRole("link", { name: "Expenses" })).toHaveAttribute("href", "/expenses");
     expect(screen.getByRole("link", { name: "Add a car" })).toHaveAttribute("href", "/cars/new");
   });
 
@@ -398,7 +399,7 @@ describe("SiteNav 'My Car' menu (CAR-62)", () => {
     expect(menuButton()).toHaveAttribute("aria-expanded", "false");
   });
 
-  it.each(["/maintenance", "/fuel-log", "/cars/mine", "/cars/abc-123", "/cars/new"])(
+  it.each(["/maintenance", "/expenses", "/fuel-log", "/cars/mine", "/cars/abc-123", "/cars/new"])(
     "shows the menu as the current section on %s",
     async (path) => {
       renderAt(path);

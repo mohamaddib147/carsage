@@ -13,11 +13,17 @@
 // CAR-62: a Maintenance card lists every item that is Overdue or Due soon across all
 // the user's cars (each linking to that item on the Maintenance page), says how many
 // need an odometer reading, and has friendly "nothing tracked" / "all caught up" states.
+// CAR-64: an "All cars, this month" tile: the current Beirut month's fuel (fuel_logs)
+// plus other costs (car_expenses) summed across ALL the user's cars, each amount
+// converted through lib/currency.js's one rate (lib/costs.js), drawn with <Price> so
+// the header's USD | LBP switch (shown on the Dashboard since CAR-64) changes it.
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
+import Price from "../components/Price.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
+import { formatMonth, monthlySummary, monthOf } from "../lib/costs.js";
 import { diyFixRate, latestFixedMessage, timeAgo } from "../lib/diySuccess.js";
 import {
   dashboardMaintenance,
@@ -80,6 +86,34 @@ function DashboardPage() {
   // fixRate: null while loading OR once loaded, null means "no feedback given
   // anywhere yet" (the empty state) rather than a real 0%.
   const [diyStats, setDiyStats] = useState({ loading: true, fixRate: null, latestFix: null });
+  // CAR-64: null while loading; { summary, failed } once loaded.
+  const [monthCosts, setMonthCosts] = useState(null);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let cancelled = false;
+
+    async function loadMonthCosts() {
+      const [fuelReply, expensesReply] = await Promise.all([
+        supabase.from("fuel_logs").select("id, car_id, filled_at, cost_amount, cost_currency").eq("user_id", user.id),
+        supabase.from("car_expenses").select("id, car_id, spent_on, category, amount, currency").eq("user_id", user.id),
+      ]);
+      if (cancelled) return;
+      if (fuelReply.error || expensesReply.error) {
+        setMonthCosts({ summary: null, failed: true });
+        return;
+      }
+      // Kept in LBP; <Price> shows both currencies in the user's chosen order.
+      const month = monthOf(todayInBeirut());
+      setMonthCosts({ summary: monthlySummary(fuelReply.data ?? [], expensesReply.data ?? [], month, "LBP"), month, failed: false });
+    }
+
+    loadMonthCosts();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   // CAR-62: null while loading; { due, needsReading, total } once loaded.
   const [maintenance, setMaintenance] = useState(null);
 
@@ -262,6 +296,55 @@ function DashboardPage() {
               );
             })}
           </ul>
+        )}
+      </section>
+
+      <section className="dashboard-section" aria-label="All cars, this month">
+        <h2>
+          All cars, this month
+          {monthCosts?.month && <span className="dashboard-costs__month"> ({formatMonth(monthCosts.month)})</span>}
+        </h2>
+        {monthCosts === null ? (
+          <>
+            <p role="status" className="sr-only">Loading this month&apos;s costs...</p>
+            <div className="dashboard-stat-tile dashboard-stat-tile--skeleton" aria-hidden="true">
+              <div className="skeleton-bar skeleton-bar--stat-value" />
+              <div className="skeleton-bar skeleton-bar--stat-label" />
+            </div>
+          </>
+        ) : monthCosts.failed ? (
+          <p className="dashboard-diy-empty">
+            Couldn&apos;t load this month&apos;s costs right now. See <Link to="/expenses">Expenses</Link>.
+          </p>
+        ) : monthCosts.summary.total == null ? (
+          <p className="dashboard-diy-empty">
+            Nothing logged for {formatMonth(monthCosts.month)} yet. Log fill-ups in the{" "}
+            <Link to="/fuel-log">Fuel Log</Link> and other costs in <Link to="/expenses">Expenses</Link>.
+          </p>
+        ) : (
+          <div className="dashboard-stat-tile dashboard-costs">
+            <p className="dashboard-stat-tile__value">
+              <Price amount={monthCosts.summary.total} currency="LBP" />
+            </p>
+            <p className="dashboard-stat-tile__label">spent on all your cars this month</p>
+            <dl className="dashboard-costs__split">
+              <div>
+                <dt>Fuel</dt>
+                <dd>
+                  {monthCosts.summary.fuel == null ? "none logged" : <Price amount={monthCosts.summary.fuel} currency="LBP" />}
+                </dd>
+              </div>
+              <div>
+                <dt>Other costs</dt>
+                <dd>
+                  {monthCosts.summary.other == null ? "none logged" : <Price amount={monthCosts.summary.other} currency="LBP" />}
+                </dd>
+              </div>
+            </dl>
+            <Link className="dashboard-maintenance__all" to="/expenses">
+              See expenses <span aria-hidden="true">→</span>
+            </Link>
+          </div>
         )}
       </section>
 

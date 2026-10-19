@@ -105,6 +105,7 @@ describe("App routing — public screens", () => {
       "/cars/mine",
       "/fuel-log",
       "/maintenance",
+      "/expenses",
       "/cars/new",
     ]);
   });
@@ -157,9 +158,9 @@ describe("App routing — every route is either protected or deliberately public
 
   const protectedPaths = declaredRoutes.filter((route) => route.protectedRoute).map((route) => route.path);
 
-  it("protects the app screens (incl. the CAR-53 Fuel Log and CAR-62 Maintenance) and the car profile routes", () => {
+  it("protects the app screens (incl. the CAR-53 Fuel Log, CAR-62 Maintenance and CAR-64 Expenses) and the car profile routes", () => {
     expect([...protectedPaths].sort()).toEqual(
-      ["/advisor", "/cars/:carId", "/cars/mine", "/cars/new", "/dashboard", "/fuel-log", "/maintenance", "/trip-planner"].sort(),
+      ["/advisor", "/cars/:carId", "/cars/mine", "/cars/new", "/dashboard", "/expenses", "/fuel-log", "/maintenance", "/trip-planner"].sort(),
     );
   });
 
