@@ -57,6 +57,14 @@
 // — adjusted down for congestion server-side), with a caption explaining
 // why they differ. Both new fields are optional on the result object so
 // this degrades gracefully against an older cached response shape.
+//
+// CAR-61: the backend now uses the car's real km/L from its Fuel Log once it
+// rests on enough measured fill-ups, else the rated figure, and says which
+// (`efficiency_source`, `efficiency_km_per_l`, `real_interval_count`). The
+// results show that basis in one line, and the fuel-cost info tip and the
+// traffic explainer only talk about "rated" efficiency when rated was used.
+// A response without `efficiency_source` (older shape) shows no basis line
+// and the original rated wording.
 
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -72,7 +80,47 @@ import { apiFetch } from "../lib/apiClient.js";
 import { LIMITS, getFuelPriceError } from "../lib/limits.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { getTrafficLevel } from "../lib/trafficLevel.js";
+import { formatKmPerLiter, MIN_INTERVALS_FOR_TRIP_PLANNER } from "../lib/odometer.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
+
+/**
+ * CAR-61: one line saying which km/L the estimate used. The figure and the
+ * source both come from the backend's response, never worked out here, so
+ * the line can't disagree with the cost it explains.
+ * @param {{ result: { efficiency_source?: "real" | "rated", efficiency_km_per_l?: number, real_interval_count?: number } }} props
+ * @returns {JSX.Element | null} nothing for an older response without a source.
+ */
+function EfficiencyBasis({ result }) {
+  const kmPerLiter = Number(result.efficiency_km_per_l);
+  if (!result.efficiency_source || !Number.isFinite(kmPerLiter) || kmPerLiter <= 0) return null;
+  const intervals = Number(result.real_interval_count) || 0;
+
+  if (result.efficiency_source === "real") {
+    return (
+      <p className="trip-result__basis">
+        Based on your real average of <strong>{formatKmPerLiter(kmPerLiter)} km/L</strong>,
+        from {intervals} measured fill-ups in your <Link to="/fuel-log">Fuel Log</Link>.
+      </p>
+    );
+  }
+  return (
+    <p className="trip-result__basis">
+      Based on the car&apos;s rated <strong>{formatKmPerLiter(kmPerLiter)} km/L</strong>.{" "}
+      {intervals > 0 ? (
+        <>
+          Your <Link to="/fuel-log">Fuel Log</Link> has {intervals} measured{" "}
+          {intervals === 1 ? "fill-up" : "fill-ups"}; estimates switch to your real average at{" "}
+          {MIN_INTERVALS_FOR_TRIP_PLANNER}.
+        </>
+      ) : (
+        <>
+          Add odometer readings to your fill-ups in the <Link to="/fuel-log">Fuel Log</Link> to
+          use your real-world figure instead.
+        </>
+      )}
+    </p>
+  );
+}
 
 /** Maps a car's general fuel_type onto the price bucket fuel-prices
  * tracks — mirrors app/routers/trip_planner.py's
@@ -481,6 +529,8 @@ function TripPlannerPage() {
           <p className="trip-result-card__route">
             {origin ? `${origin} → ${destination}` : destination}
           </p>
+          <EfficiencyBasis result={result} />
+
           <dl className="trip-result">
             <div className="trip-result__field">
               <span className="trip-result__icon" aria-hidden="true">
@@ -489,9 +539,19 @@ function TripPlannerPage() {
               <dt>
                 Fuel Cost{hasTrafficComparison ? " (Light Traffic)" : ""}
                 <InfoTip label="About this fuel cost estimate">
-                  This estimate uses your car&apos;s rated fuel efficiency under
-                  ideal conditions. Actual consumption may be higher in heavy
-                  traffic.
+                  {result.efficiency_source === "real" ? (
+                    <>
+                      This estimate uses your real average from your Fuel Log,
+                      which already reflects how you usually drive. It can still
+                      be higher in heavy traffic.
+                    </>
+                  ) : (
+                    <>
+                      This estimate uses your car&apos;s rated fuel efficiency under
+                      ideal conditions. Actual consumption may be higher in heavy
+                      traffic.
+                    </>
+                  )}
                 </InfoTip>
               </dt>
               <dd>
@@ -574,8 +634,10 @@ function TripPlannerPage() {
           </dl>
           {hasTrafficComparison && (
             <p className="trip-result__explainer">
-              Light traffic assumes free-flowing driving close to your
-              car&apos;s rated fuel efficiency. Heavy traffic means more
+              Light traffic assumes free-flowing driving close to{" "}
+              {result.efficiency_source === "real"
+                ? "your real average"
+                : <>your car&apos;s rated fuel efficiency</>}. Heavy traffic means more
               stop-and-go driving, idling, and lower average speeds, all of
               which burn noticeably more fuel per km, so the current-traffic
               estimate is usually higher.

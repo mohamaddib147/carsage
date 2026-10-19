@@ -117,12 +117,27 @@ function holdInserts(calls) {
   return { finish: () => finishSave() };
 }
 
-/** The body rows of the fill-ups table, each as its cell texts. */
-function tableRows() {
+/** Every body row of the fill-ups table, each as ALL its cell texts. */
+function allCells() {
   return within(screen.getByRole("table"))
     .getAllByRole("row")
     .slice(1)
     .map((row) => within(row).getAllByRole("cell").map((cell) => cell.textContent));
+}
+
+/**
+ * The body rows' date, liters and price cells (the first five columns, the
+ * CAR-53/54 part of the table these older tests are about). CAR-61's Odometer
+ * and km/L columns come after them and are checked by `odometerCells()`; the
+ * full column order is pinned by the CAR-61 header test.
+ */
+function tableRows() {
+  return allCells().map((cells) => cells.slice(0, 5));
+}
+
+/** The body rows' CAR-61 cells: [Odometer, km/L]. */
+function odometerCells() {
+  return allCells().map((cells) => cells.slice(5));
 }
 
 async function fillForm(user, { liters, cost }) {
@@ -686,7 +701,8 @@ describe("FuelLogPage — price per 20 liters (CAR-53 addition)", () => {
     await screen.findByRole("table");
 
     const headers = screen.getAllByRole("columnheader").map((header) => header.textContent);
-    expect(headers).toEqual(["Date", "Liters", "Cost", "Price per liter", "Price per 20 L"]);
+    // CAR-61 appended Odometer and km/L after these; this test is about the first five.
+    expect(headers.slice(0, 5)).toEqual(["Date", "Liters", "Cost", "Price per liter", "Price per 20 L"]);
   });
 
   it("shows each entry's price per 20 liters next to its price per liter, in its own currency and converted", async () => {
@@ -844,5 +860,235 @@ describe("FuelLogPage — fill-up history bar chart (mentor feedback: replaces t
     expect(
       screen.getByText("Liters filled at each fill-up. Hover or tap a bar for the date, liters and cost, in USD."),
     ).toBeInTheDocument();
+  });
+});
+
+describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
+  const RATED_CAR = { ...CAR_1, fuel_efficiency: 12 };
+  // The ticket's example: 84,250 -> 84,610 km = 360 km on 40 L = 9.0 km/L.
+  const ODO_1 = { id: "odo-1", filled_at: "2026-10-01", liters: "35", cost_amount: "50", cost_currency: "USD", created_at: "2026-10-01T09:00:00Z", odometer_km: 84250 };
+  const ODO_2 = { id: "odo-2", filled_at: "2026-10-09", liters: "40", cost_amount: "57", cost_currency: "USD", created_at: "2026-10-09T09:00:00Z", odometer_km: 84610 };
+  const LEGACY = { ...ROW_A, odometer_km: null };
+
+  async function typeOdometer(user, text) {
+    await user.type(screen.getByLabelText("Odometer (km)"), text);
+  }
+
+  function setDate(value) {
+    fireEvent.change(screen.getByLabelText("Date *"), { target: { value } });
+  }
+
+  function averageBlock() {
+    return screen.getByText(/Your real average/).closest(".fuel-log-real-average");
+  }
+
+  it("adds Odometer and km/L columns after the existing ones, in this order", async () => {
+    mockDatabase({ logsByCar: { "car-1": { data: [LEGACY], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Date", "Liters", "Cost", "Price per liter", "Price per 20 L", "Odometer", "km/L",
+    ]);
+  });
+
+  it("shows dashes and no average for older fill-ups without a reading (legacy rows)", async () => {
+    mockDatabase({ cars: [RATED_CAR], logsByCar: { "car-1": { data: [ROW_B, LEGACY], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    expect(odometerCells()).toEqual([["-", "-"], ["-", "-"]]);
+    expect(screen.queryByText(/Your real average/)).not.toBeInTheDocument();
+    expect(screen.getByText(/assumes you fill the tank to full each time/)).toBeInTheDocument();
+  });
+
+  it("shows km/L on the later of two readings and the real vs rated average (normal case)", async () => {
+    mockDatabase({ cars: [RATED_CAR], logsByCar: { "car-1": { data: [ODO_2, ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    // Newest first: the 9 Oct fill-up closes the 360 km / 40 L interval.
+    expect(odometerCells()).toEqual([["84,610 km", "9.0"], ["84,250 km", "-"]]);
+    expect(averageBlock()).toHaveTextContent("Your real average: 9.0 km/L (rated: 12.0 km/L)");
+    expect(averageBlock()).toHaveTextContent("Based on 1 measured fill-up. Trip Planner starts using it after 3.");
+  });
+
+  it("says so plainly when the car has no rated figure, never NaN or 0", async () => {
+    mockDatabase({ cars: [{ ...CAR_1, fuel_efficiency: null }], logsByCar: { "car-1": { data: [ODO_2, ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    expect(averageBlock()).toHaveTextContent("9.0 km/L (no rated figure set for this car)");
+    expect(averageBlock()).not.toHaveTextContent(/NaN|rated: 0/);
+  });
+
+  it("flags an implausible interval in its row and leaves it out of the average", async () => {
+    // 84,610 -> 846,100 is an extra digit: 761,490 km on 30 L.
+    const typo = { id: "odo-3", filled_at: "2026-10-15", liters: "30", cost_amount: "40", cost_currency: "USD", created_at: "2026-10-15T09:00:00Z", odometer_km: 846100 };
+    mockDatabase({ cars: [RATED_CAR], logsByCar: { "car-1": { data: [typo, ODO_2, ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    expect(odometerCells()[0]).toEqual(["846,100 km", "- (check reading)"]);
+    expect(averageBlock()).toHaveTextContent("Your real average: 9.0 km/L");
+  });
+
+  it("saves the reading as a number with the fill-up", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ cars: [RATED_CAR], logsByCar: { "car-1": { data: [ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "40", cost: "57" });
+    await typeOdometer(user, "84610");
+    expect(screen.getByLabelText("Odometer (km)")).toHaveValue("84,610"); // thousand separators
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    expect(calls.inserts).toHaveLength(1);
+    expect(calls.inserts[0]).toMatchObject({ car_id: "car-1", liters: 40, odometer_km: 84610 });
+    await screen.findByRole("status");
+    expect(screen.getByLabelText("Odometer (km)")).toHaveValue(""); // ready for the next one
+  });
+
+  it("leaves odometer_km out entirely when no reading is given (stored exactly as before)", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase();
+
+    renderPage();
+    await screen.findByText("No fill-ups logged yet");
+    await fillForm(user, { liters: "20", cost: "30" });
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    await screen.findByRole("status");
+    expect(calls.inserts[0]).not.toHaveProperty("odometer_km");
+  });
+
+  it.each([
+    ["lower than the previous reading", "84000", /^Must be higher than your previous reading of 84,250 km \(1 Oct 2026\)/],
+    ["equal to the previous reading", "84250", /^Must be higher than your previous reading of 84,250 km/],
+    ["above the 2,000,000 km limit", "2000001", /too large/],
+    ["zero", "0", /must be greater than 0/],
+  ])("refuses a reading %s, without saving", async (_label, reading, message) => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "40", cost: "57" });
+    await typeOdometer(user, reading);
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(screen.getByLabelText("Odometer (km)")).toHaveAttribute("aria-invalid", "true");
+    expect(calls.inserts).toEqual([]);
+  });
+
+  it("refuses a backdated reading that isn't below a later one", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [ODO_2, ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    setDate("2026-10-05"); // between the two existing readings
+    await fillForm(user, { liters: "20", cost: "30" });
+    await typeOdometer(user, "84700");
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Must be lower than your later reading of 84,610 km (9 Oct 2026).",
+    );
+    expect(calls.inserts).toEqual([]);
+  });
+
+  it("lets the user carry on with correct readings after a saved typo (fill-ups can't be edited)", async () => {
+    const user = userEvent.setup();
+    const typo = { id: "odo-3", filled_at: "2026-10-15", liters: "30", cost_amount: "40", cost_currency: "USD", created_at: "2026-10-15T09:00:00Z", odometer_km: 846100 };
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [typo, ODO_2, ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "30", cost: "40" });
+    await typeOdometer(user, "84900"); // the real mileage, far below the typo
+
+    expect(screen.getByText("+290 km since your last reading (84,610 km).")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(calls.inserts[0]).toMatchObject({ odometer_km: 84900 });
+  });
+
+  it("shows the distance since the last reading as you type, so a typo stands out", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "40" });
+    await typeOdometer(user, "84610");
+
+    expect(screen.getByText("+360 km since your last reading (84,250 km).")).toBeInTheDocument();
+  });
+
+  it("warns (without blocking) when the distance is unrealistic for the liters typed", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "40", cost: "57" });
+    await typeOdometer(user, "846100"); // an extra digit
+
+    expect(screen.getByText(/doesn't look like a realistic distance/)).toBeInTheDocument();
+    // A real but unlogged trip in between can look like this too, so it can still be saved.
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+  });
+
+  it("won't save a reading while the car's fill-ups are still loading (nothing to check it against)", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": new Promise(() => {}) } });
+
+    renderPage();
+    await screen.findByText("Loading fill-ups...");
+    await fillForm(user, { liters: "40", cost: "57" });
+    await typeOdometer(user, "84610");
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Still loading this car's fill-ups.");
+    expect(calls.inserts).toEqual([]);
+  });
+
+  it("never mixes two cars' readings: validation, km/L and the average are per car", async () => {
+    const user = userEvent.setup();
+    const CAR_2_ODO_1 = { id: "c2-1", filled_at: "2026-10-01", liters: "30", cost_amount: "40", cost_currency: "USD", created_at: "2026-10-01T09:00:00Z", odometer_km: 10000 };
+    const CAR_2_ODO_2 = { id: "c2-2", filled_at: "2026-10-09", liters: "30", cost_amount: "40", cost_currency: "USD", created_at: "2026-10-09T09:00:00Z", odometer_km: 10450 };
+    const calls = mockDatabase({
+      cars: [RATED_CAR, { ...CAR_2, fuel_efficiency: 15 }],
+      logsByCar: {
+        "car-1": { data: [ODO_2, ODO_1], error: null },
+        "car-2": { data: [CAR_2_ODO_2, CAR_2_ODO_1], error: null },
+      },
+    });
+
+    renderPage();
+    await screen.findByRole("table");
+    expect(averageBlock()).toHaveTextContent("9.0 km/L (rated: 12.0 km/L)");
+
+    await user.selectOptions(screen.getByLabelText("Car"), "car-2");
+    await waitFor(() => expect(odometerCells()).toEqual([["10,450 km", "15.0"], ["10,000 km", "-"]]));
+    // 450 km / 30 L = 15.0, and the rated figure is car 2's own.
+    expect(averageBlock()).toHaveTextContent("15.0 km/L (rated: 15.0 km/L)");
+
+    // 10,900 km is fine for car 2 even though it is far below car 1's 84,610 km.
+    await fillForm(user, { liters: "30", cost: "40" });
+    await typeOdometer(user, "10900");
+    expect(screen.getByText("+450 km since your last reading (10,450 km).")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(calls.inserts[0]).toMatchObject({ car_id: "car-2", odometer_km: 10900 });
   });
 });

@@ -12,6 +12,8 @@ uses — that:
   9. fuel_prices is service-role only,
  10. fuel_logs (CAR-53): owner-only read/insert, no cross-user car references, no
      edit/delete, nothing for anonymous visitors, and the database's own input limits.
+     CAR-61 adds the optional odometer_km column: null still accepted, 1-2,000,000
+     whole km only, and the same owner-only / no-edit rules apply to it.
 It also asserts the key shipped to the browser is the `anon` key.
 Everything it creates is deleted at the end. Exit code is 1 on any gap.
 
@@ -277,6 +279,29 @@ try:
         check(f"the database rejects a fill-up with {label}", r.status_code in (400, 409), f"-> {r.status_code} {r.text[:70]}")
     r = as_(A, "POST", "fuel_logs", json={**good, "liters": 200, "cost_amount": 0.01})
     works("boundary values are accepted (200 L, 0.01 cost)", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+
+    print("    -- odometer_km (CAR-61): optional, whole km, 1 to 2,000,000; same owner-only rules --")
+    r = as_(A, "POST", "fuel_logs", json={**good, "odometer_km": 84250})
+    works("A logs a fill-up WITH an odometer reading", r.status_code == 201 and r.json()[0].get("odometer_km") == 84250, f"-> {r.status_code} {r.text[:70]}")
+    odo_row = r.json()[0]["id"] if r.status_code == 201 else None
+    r = as_(A, "POST", "fuel_logs", json={**good, "odometer_km": None})
+    works("a fill-up with no odometer reading (like every older row) is still accepted", r.status_code == 201, f"-> {r.status_code}")
+    r = as_(A, "POST", "fuel_logs", json={**good, "odometer_km": 2000000})
+    works("boundary odometer 2,000,000 km is accepted", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+    for label, value in [("0 km", 0), ("a negative reading", -1), ("above the 2,000,000 km ceiling", 2000001),
+                         ("a decimal reading", 84250.5), ("text", "84k")]:
+        r = as_(A, "POST", "fuel_logs", json={**good, "odometer_km": value})
+        check(f"the database rejects an odometer of {label}", r.status_code in (400, 409), f"-> {r.status_code} {r.text[:70]}")
+    r = as_(B, "POST", "fuel_logs", json={**good, "user_id": B["id"], "odometer_km": 90000})
+    check("B logs an odometer reading against A's car_id", r.status_code >= 400, f"-> {r.status_code} (row created!)" if r.status_code < 300 else "")
+    r = as_(B, "GET", f"fuel_logs?select=odometer_km&id=eq.{odo_row}")
+    check("B reads A's odometer reading", affected(r) == 0, f"-> {r.status_code} {r.text[:60]}")
+    r = as_(A, "PATCH", f"fuel_logs?id=eq.{odo_row}", json={"odometer_km": 1})
+    check("even the OWNER cannot change a saved odometer reading", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(B, "PATCH", f"fuel_logs?id=eq.{odo_row}", json={"odometer_km": 1})
+    check("B changes A's odometer reading", affected(r) in (0, None), f"-> {r.status_code}")
+    still = svc("GET", f"fuel_logs?id=eq.{odo_row}&select=odometer_km").json()
+    check("A's odometer reading is unchanged after both attempts (service role)", still == [{"odometer_km": 84250}], str(still))
 finally:
     for u in (A, B):
         if not u:

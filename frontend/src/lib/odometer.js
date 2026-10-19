@@ -1,0 +1,196 @@
+// Odometer readings in the Fuel Log (CAR-61): validating a reading, the distance
+// since the previous fill-up, real-world km/L per fill-up and on average, and the
+// car's latest reading. Pure functions; pages/FuelLogPage.jsx wires them up.
+//
+// ASSUMPTION (fill-to-full): every fill-up fills the tank to full. Only then does
+// the fuel put in at a fill-up equal the fuel burned since the previous one, so
+// the km/L of the interval ending at fill-up N is
+//   (odometer at N - odometer at N-1) / liters at N.
+// There is no "full tank" flag on `fuel_logs`; the Fuel Log page says this to the
+// user under its history table.
+//
+// An interval counts only when the two fill-ups are adjacent in date order and BOTH
+// have a reading (an older fill-up with no reading between them breaks the chain
+// rather than being skipped, since skipping it would ignore its fuel and overstate
+// km/L), the reading went up, and the result is a plausible 2-40 km/L (catches an
+// extra digit, miles mixed with km, a partial fill-up). The average is total km /
+// total liters, weighted by distance.
+//
+// Mirrors backend/app/services/real_efficiency.py; change the two together.
+
+import { LIMITS } from "./limits.js";
+import { formatFillDate, sortFillUps } from "./fuelLog.js";
+
+export const MIN_PLAUSIBLE_KM_PER_L = 2;
+export const MAX_PLAUSIBLE_KM_PER_L = 40;
+
+/** Trip Planner only uses the real average once it rests on this many valid intervals. */
+export const MIN_INTERVALS_FOR_TRIP_PLANNER = 3;
+
+/**
+ * A fill-up's odometer reading as a number, or null when it has none (legacy rows)
+ * or the stored value is unusable.
+ * @param {{ odometer_km?: number | string | null }} entry
+ * @returns {number | null}
+ */
+export function readingOf(entry) {
+  const value = entry?.odometer_km;
+  if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+/** Oldest fill-up first (date, then when it was logged). Returns a new array. */
+function chronological(entries) {
+  return sortFillUps(entries).reverse();
+}
+
+/** "84250" -> "84,250 km". */
+export function formatKm(km) {
+  return `${Math.round(Number(km)).toLocaleString("en-US")} km`;
+}
+
+/** 9 -> "9.0", 16.666 -> "16.7". */
+export function formatKmPerLiter(kmPerLiter) {
+  return Number(kmPerLiter).toFixed(1);
+}
+
+/** True for an interval's km/L inside the plausible range (inclusive). */
+function isPlausible(kmPerLiter) {
+  return kmPerLiter >= MIN_PLAUSIBLE_KM_PER_L && kmPerLiter <= MAX_PLAUSIBLE_KM_PER_L;
+}
+
+/**
+ * The closest readings on either side of a date: `previous` is the latest reading
+ * on or before it (a same-day fill-up already logged counts as earlier), `next` the
+ * earliest reading after it.
+ *
+ * A reading whose own interval is already flagged as unrealistic (e.g. a saved
+ * typo like 846,100 instead of 84,610) is NOT used as a neighbour. Fill-ups can't
+ * be edited or deleted, so treating a saved typo as the floor would make every
+ * correct reading after it look "too low" forever.
+ * @param {string} date - YYYY-MM-DD
+ * @param {object[]} entries - one car's fill-ups.
+ * @returns {{ previous: { km: number, date: string } | null, next: { km: number, date: string } | null }}
+ */
+function neighbourReadings(date, entries) {
+  let previous = null;
+  let next = null;
+  const intervals = fillUpEfficiencies(entries);
+  for (const entry of chronological(entries)) {
+    const km = readingOf(entry);
+    if (km == null) continue;
+    if (intervals.get(entry.id)?.plausible === false) continue;
+    if (entry.filled_at <= date) previous = { km, date: entry.filled_at };
+    else if (!next) next = { km, date: entry.filled_at };
+  }
+  return { previous, next };
+}
+
+/**
+ * Validates the optional Odometer field of the add-a-fill-up form.
+ * @param {string} text - the raw field text (digits only from FormattedNumberInput).
+ * @param {string} date - the fill-up's date (YYYY-MM-DD).
+ * @param {object[]} entries - the SAME car's existing fill-ups.
+ * @returns {string | undefined} a message, or undefined when blank or valid.
+ */
+export function getOdometerError(text, date, entries) {
+  const raw = String(text ?? "").replace(/,/g, "").trim();
+  if (raw === "") return undefined;
+  if (!/^\d+$/.test(raw)) return "Enter the odometer as a whole number of km.";
+  const km = Number(raw);
+  if (km < 1) return "The odometer reading must be greater than 0.";
+  if (km > LIMITS.MAX_ODOMETER_KM) {
+    return `That reading is too large (the limit is ${formatKm(LIMITS.MAX_ODOMETER_KM)}). Check for an extra digit.`;
+  }
+
+  const { previous, next } = neighbourReadings(date, entries);
+  if (previous && km <= previous.km) {
+    return `Must be higher than your previous reading of ${formatKm(previous.km)} (${formatFillDate(previous.date)}). Odometers only go up.`;
+  }
+  if (next && km >= next.km) {
+    return `Must be lower than your later reading of ${formatKm(next.km)} (${formatFillDate(next.date)}).`;
+  }
+  return undefined;
+}
+
+/**
+ * Distance since the previous reading for a reading being typed, so a typo (an
+ * extra digit) is obvious before saving; saved fill-ups can't be edited.
+ * @param {string} text - the raw field text.
+ * @param {string} date - the fill-up's date.
+ * @param {object[]} entries - the same car's fill-ups.
+ * @param {string} [litersText] - liters typed so far; used to flag an implausible km/L.
+ * @returns {{ distanceKm: number, previousKm: number, implausible: boolean } | null}
+ *   null when the reading is blank/invalid or there's no earlier reading.
+ */
+export function distanceSincePrevious(text, date, entries, litersText = "") {
+  if (getOdometerError(text, date, entries)) return null;
+  const raw = String(text ?? "").replace(/,/g, "").trim();
+  if (raw === "") return null;
+  const { previous } = neighbourReadings(date, entries);
+  if (!previous) return null;
+  const distanceKm = Number(raw) - previous.km;
+  const liters = Number(litersText);
+  const implausible = Number.isFinite(liters) && liters > 0 && !isPlausible(distanceKm / liters);
+  return { distanceKm, previousKm: previous.km, implausible };
+}
+
+/**
+ * Real km/L for each fill-up that closes a measured interval.
+ * @param {object[]} entries - one car's fill-ups, any order.
+ * @returns {Map<string, { distanceKm: number, kmPerLiter: number, plausible: boolean }>}
+ *   keyed by entry id; a fill-up with no interval (first one, no reading, or the
+ *   previous fill-up has none) is simply absent.
+ */
+export function fillUpEfficiencies(entries) {
+  const result = new Map();
+  const ordered = chronological(entries);
+  for (let index = 1; index < ordered.length; index += 1) {
+    const start = readingOf(ordered[index - 1]);
+    const end = readingOf(ordered[index]);
+    const liters = Number(ordered[index].liters);
+    if (start == null || end == null || !Number.isFinite(liters) || liters <= 0) continue;
+    const distanceKm = end - start;
+    const kmPerLiter = distanceKm / liters;
+    result.set(ordered[index].id, {
+      distanceKm,
+      kmPerLiter,
+      plausible: distanceKm > 0 && isPlausible(kmPerLiter),
+    });
+  }
+  return result;
+}
+
+/**
+ * The car's real-world km/L over every valid interval (weighted by distance).
+ * @param {object[]} entries - ONE car's fill-ups.
+ * @returns {{ kmPerLiter: number, intervalCount: number, distanceKm: number } | null}
+ *   null when there is no valid interval yet (never NaN or 0).
+ */
+export function realEfficiency(entries) {
+  let distanceKm = 0;
+  let liters = 0;
+  let intervalCount = 0;
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  for (const [id, interval] of fillUpEfficiencies(entries)) {
+    if (!interval.plausible) continue;
+    distanceKm += interval.distanceKm;
+    liters += Number(byId.get(id).liters);
+    intervalCount += 1;
+  }
+  if (intervalCount === 0) return null;
+  return { kmPerLiter: distanceKm / liters, intervalCount, distanceKm };
+}
+
+/**
+ * The car's latest odometer reading (by fill-up date), for distance-based
+ * features such as maintenance reminders (CAR-62).
+ * @param {object[]} entries - ONE car's fill-ups.
+ * @returns {{ km: number, filledAt: string } | null} null with no reading at all.
+ */
+export function latestOdometer(entries) {
+  const withReading = chronological(entries).filter((entry) => readingOf(entry) != null);
+  const last = withReading[withReading.length - 1];
+  return last ? { km: readingOf(last), filledAt: last.filled_at } : null;
+}

@@ -153,10 +153,15 @@ def test_returns_a_clear_error_when_fuel_prices_are_unavailable():
     assert response.json() == {"detail": "Could not reach the fuel price source."}
 
 
-def _mock_supabase_for_estimate(car_data, trip_id="trip-1"):
+def _mock_supabase_for_estimate(car_data, trip_id="trip-1", fuel_logs=None, fuel_logs_error=None):
     """Mocks supabase.table("cars")...maybe_single() to return `car_data`,
     and supabase.table("trips").insert(...) to echo back the inserted row
     plus an id. Returns (mock_supabase, captured_insert_dict).
+
+    CAR-61: also mocks supabase.table("fuel_logs").select(...).eq(...).eq(...)
+    .execute() to return `fuel_logs` (default: none, so the rated figure is
+    used, as before), or to raise `fuel_logs_error`. Every .eq(column, value)
+    on fuel_logs is recorded in captured["fuel_logs_filters"].
 
     Matches supabase-py's real (surprising) behavior: maybe_single().execute()
     returns None outright — not a response object with .data = None — when
@@ -181,9 +186,29 @@ def _mock_supabase_for_estimate(car_data, trip_id="trip-1"):
 
     trips_table.insert.side_effect = insert
 
+    fuel_logs_table = MagicMock()
+
+    class _FuelLogsQuery:
+        def select(self, _columns):
+            return self
+
+        def eq(self, column, value):
+            # setdefault: the key only exists once the query really ran, so a
+            # test asserting "nothing was touched" (captured == {}) still holds.
+            captured.setdefault("fuel_logs_filters", []).append((column, value))
+            return self
+
+        def execute(self):
+            if fuel_logs_error is not None:
+                raise fuel_logs_error
+            return MagicMock(data=list(fuel_logs or []))
+
+    fuel_logs_table.select.side_effect = lambda columns: _FuelLogsQuery().select(columns)
+
     mock_supabase.table.side_effect = lambda name: {
         "cars": cars_table,
         "trips": trips_table,
+        "fuel_logs": fuel_logs_table,
     }[name]
 
     return mock_supabase, captured
@@ -540,3 +565,136 @@ class TestDirectionsInputValidation:
 
         assert response.status_code == 422
         mock_route.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# CAR-61: real km/L from the Fuel Log vs the car's rated fuel_efficiency.
+#
+# Numbers are picked so using the WRONG source gives a visibly different cost:
+# rated = 12 km/L, real = 9 km/L (every interval is 90 km on 10 L), a 90 km
+# trip at 100,000 LBP/L costs 750,000 LBP on rated vs 1,000,000 LBP on real.
+# ---------------------------------------------------------------------------
+
+CAR_ID = "00000000-0000-4000-8000-000000000001"
+RATED = {"fuel_efficiency": 12, "fuel_type": "Gasoline"}
+
+
+def _fill_ups(intervals, start_km=10000, distance=90, liters=10):
+    """`intervals + 1` fill-ups for one car, each 90 km and 10 L apart (9 km/L)."""
+    return [
+        {
+            "filled_at": f"2026-09-{day + 1:02d}",
+            "created_at": f"2026-09-{day + 1:02d}T10:00:00+00:00",
+            "liters": liters,
+            "odometer_km": start_km + day * distance,
+        }
+        for day in range(intervals + 1)
+    ]
+
+
+def _estimate(car_data, fuel_logs=None, fuel_logs_error=None, traffic_min=60):
+    mock_supabase, captured = _mock_supabase_for_estimate(
+        car_data, fuel_logs=fuel_logs, fuel_logs_error=fuel_logs_error
+    )
+    with patch("app.routers.trip_planner.supabase", mock_supabase), patch(
+        "app.routers.trip_planner.get_route_summary"
+    ) as mock_route:
+        mock_route.return_value = {
+            "distance_km": 90.0,
+            "duration_min": 60,
+            "duration_in_traffic_min": traffic_min,
+        }
+        response = client.post(
+            "/trip-planner/estimate",
+            json={
+                "car_id": CAR_ID,
+                "origin": "Beirut",
+                "destination": "Byblos",
+                "fuel_price_per_liter_lbp": 100000,
+            },
+        )
+    return response, captured
+
+
+class TestEstimateRealVsRatedEfficiency:
+    def test_uses_the_real_average_once_there_are_three_valid_intervals(self):
+        response, captured = _estimate(RATED, fuel_logs=_fill_ups(3))
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["efficiency_source"] == "real"
+        assert body["efficiency_km_per_l"] == pytest.approx(9.0)
+        assert body["real_interval_count"] == 3
+        # 90 km / 9 km/L = 10 L * 100,000 = 1,000,000. On rated 12 it would be 750,000.
+        assert body["estimated_cost_lbp"] == 1000000.0
+        assert captured["row"]["estimated_cost"] == 1000000.0
+
+    def test_falls_back_to_rated_with_only_two_valid_intervals_and_says_so(self):
+        response, _ = _estimate(RATED, fuel_logs=_fill_ups(2))
+
+        body = response.json()
+        assert body["efficiency_source"] == "rated"
+        assert body["efficiency_km_per_l"] == pytest.approx(12.0)
+        assert body["real_interval_count"] == 2
+        # 90 km / 12 km/L = 7.5 L * 100,000 = 750,000. On real 9 it would be 1,000,000.
+        assert body["estimated_cost_lbp"] == 750000.0
+
+    def test_falls_back_to_rated_with_no_fuel_log_at_all(self):
+        response, _ = _estimate(RATED, fuel_logs=[])
+
+        body = response.json()
+        assert body["efficiency_source"] == "rated"
+        assert body["real_interval_count"] == 0
+        assert body["estimated_cost_lbp"] == 750000.0
+
+    def test_legacy_fill_ups_without_odometer_readings_never_count(self):
+        legacy = [{**row, "odometer_km": None} for row in _fill_ups(5)]
+        response, _ = _estimate(RATED, fuel_logs=legacy)
+
+        body = response.json()
+        assert body["efficiency_source"] == "rated"
+        assert body["real_interval_count"] == 0
+
+    def test_an_implausible_interval_does_not_count_toward_the_three(self):
+        rows = _fill_ups(2)  # two valid 9 km/L intervals
+        # A third reading with an extra digit: (100,800 - 10,180) / 10 L = 9,062 km/L.
+        rows.append({"filled_at": "2026-09-04", "created_at": "2026-09-04T10:00:00+00:00", "liters": 10, "odometer_km": 100800})
+        response, _ = _estimate(RATED, fuel_logs=rows)
+
+        body = response.json()
+        assert body["efficiency_source"] == "rated"
+        assert body["real_interval_count"] == 2
+
+    def test_the_fuel_log_query_is_scoped_to_the_caller_and_the_car(self):
+        _, captured = _estimate(RATED, fuel_logs=_fill_ups(3))
+
+        assert ("user_id", "user-123") in captured["fuel_logs_filters"]
+        assert ("car_id", CAR_ID) in captured["fuel_logs_filters"]
+
+    def test_real_average_works_even_when_the_car_has_no_rated_figure(self):
+        response, _ = _estimate({"fuel_efficiency": None, "fuel_type": "Gasoline"}, fuel_logs=_fill_ups(3))
+
+        assert response.status_code == 200
+        assert response.json()["efficiency_source"] == "real"
+
+    def test_no_rated_figure_and_not_enough_data_is_the_same_400_as_before(self):
+        response, _ = _estimate({"fuel_efficiency": None, "fuel_type": "Gasoline"}, fuel_logs=_fill_ups(1))
+
+        assert response.status_code == 400
+        assert "fuel efficiency" in response.json()["detail"].lower()
+
+    def test_a_failed_fuel_log_read_falls_back_to_rated_instead_of_failing(self):
+        response, _ = _estimate(RATED, fuel_logs_error=RuntimeError("PostgREST down"))
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["efficiency_source"] == "rated"
+        assert body["estimated_cost_lbp"] == 750000.0
+
+    def test_the_current_traffic_cost_is_also_based_on_the_real_average(self):
+        # 120 vs 60 min = 2x slower -> the full 30% penalty: 9 / 1.3 km/L.
+        response, _ = _estimate(RATED, fuel_logs=_fill_ups(3), traffic_min=120)
+
+        body = response.json()
+        assert body["efficiency_source"] == "real"
+        assert body["estimated_cost_current_traffic_lbp"] == round(90 / (9 / 1.3) * 100000, 0)

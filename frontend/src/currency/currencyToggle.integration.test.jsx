@@ -114,12 +114,14 @@ describe("the currency toggle across screens", () => {
       "2,691,000 LBP ($30.00)",
       "137,296 LBP/L ($1.53/L)",
       "2,745,918 LBP/20 L ($30.61/20 L)",
+      "-", // CAR-61 Odometer: this fill-up has no reading
+      "-", // CAR-61 km/L
     ]);
 
     // switching back to USD on the Fuel Log flips it too
     await user.click(screen.getByRole("button", { name: "USD" }));
     expect(primaries()).toEqual(["USD"]);
-    expect(within(table).getAllByRole("cell").map((cell) => cell.textContent).slice(2)).toEqual([
+    expect(within(table).getAllByRole("cell").map((cell) => cell.textContent).slice(2, 5)).toEqual([
       "$30.00 (2,691,000 LBP)",
       "$1.53/L (137,296 LBP/L)",
       "$30.61/20 L (2,745,918 LBP/20 L)",

@@ -1266,6 +1266,13 @@ select:focus {
   font-weight: 700;
 }
 
+/* CAR-61: "Based on your real average of 9.0 km/L ..." above the results. */
+.trip-result__basis {
+  margin: 0 0 calc(var(--spacing-unit) * 1.5);
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
 .trip-result__caption {
   margin: 4px 0 0;
   font-size: 0.75rem;
@@ -2410,6 +2417,44 @@ select:focus {
   margin: 0 0 var(--spacing-unit);
   color: var(--color-text-muted);
   font-size: 0.9rem;
+}
+
+/* CAR-61: odometer hint turns into a warning when the distance since the last
+   reading gives an unrealistic km/L for the liters typed (likely a typo). */
+.form-hint--warning {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+/* CAR-61: "Your real average: 9.0 km/L (rated: 12.0 km/L)" under the chart. */
+.fuel-log-real-average {
+  margin-top: calc(var(--spacing-unit) * 1.5);
+}
+
+.fuel-log-real-average__figure {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.fuel-log-real-average__note {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+/* CAR-61: the full-tank assumption, stated under the fill-ups table. */
+.fuel-log-table__caption {
+  margin: 0;
+  padding: var(--spacing-unit) calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 1.5);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+/* CAR-61: a km/L cell outside the realistic range, excluded from the average. */
+.fuel-log-check-reading {
+  color: var(--color-danger);
+  cursor: help;
+  white-space: nowrap;
 }
 
 .fuel-log-chart__wrap {

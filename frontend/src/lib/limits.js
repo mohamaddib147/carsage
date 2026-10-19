@@ -24,6 +24,9 @@ export const LIMITS = {
   MAX_FILL_LITERS: 200,
   MAX_FILL_COST: 1_000_000_000_000,
   MIN_FILL_DATE: "2000-01-01",
+  // CAR-61: fuel_logs.odometer_km is whole km, 1 to 2,000,000 (the CHECK
+  // fuel_logs_odometer_km_range_check, docs/db_migrations/2026-10-19_car61_*).
+  MAX_ODOMETER_KM: 2_000_000,
   // sign up (Supabase Auth enforces 6+; bcrypt only uses the first 72 bytes)
   EMAIL: 254,
   PASSWORD_MIN: 6,

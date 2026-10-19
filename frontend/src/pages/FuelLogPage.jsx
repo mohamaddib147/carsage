@@ -15,6 +15,14 @@
 // currency starts on the user's primary currency (CAR-54) and follows the header
 // toggle until they pick one here themselves; every figure in the list is shown
 // through <Price>, so the toggle changes them all.
+//
+// CAR-61: an optional Odometer (km) field. A reading must be higher than the car's
+// previous reading and lower than any later one (checked against this car's own
+// loaded fill-ups before saving, since a saved fill-up can't be edited), and the
+// form shows the distance since the last reading so a typo stands out. The table
+// gains Odometer and km/L columns, and the chart section a "real average" line
+// (lib/odometer.js). km/L assumes every fill-up fills the tank to full; that
+// assumption is stated to the user under the table.
 
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -27,6 +35,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import FormattedNumberInput from "../components/FormattedNumberInput.jsx";
 import PageShell from "../components/PageShell.jsx";
 import Price from "../components/Price.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
@@ -44,9 +53,46 @@ import {
   sortFillUps,
   todayLocal,
 } from "../lib/fuelLog.js";
+import {
+  distanceSincePrevious,
+  fillUpEfficiencies,
+  formatKm,
+  formatKmPerLiter,
+  getOdometerError,
+  MIN_INTERVALS_FOR_TRIP_PLANNER,
+  readingOf,
+  realEfficiency,
+} from "../lib/odometer.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 
-const ENTRY_COLUMNS = "id, filled_at, liters, cost_amount, cost_currency, created_at";
+const ENTRY_COLUMNS = "id, filled_at, liters, cost_amount, cost_currency, created_at, odometer_km";
+
+/**
+ * "Your real average: 9.0 km/L (rated: 12.0 km/L)" under the chart, plus whether
+ * Trip Planner uses it yet. Renders nothing until there is a measured interval.
+ * @param {{ real: { kmPerLiter: number, intervalCount: number } | null, ratedKmPerLiter: number | null }} props
+ * @returns {JSX.Element | null}
+ */
+function RealAverageLine({ real, ratedKmPerLiter }) {
+  if (!real) return null;
+  const rated = Number(ratedKmPerLiter);
+  const remaining = MIN_INTERVALS_FOR_TRIP_PLANNER - real.intervalCount;
+  return (
+    <div className="fuel-log-real-average">
+      <p className="fuel-log-real-average__figure">
+        Your real average: <strong>{formatKmPerLiter(real.kmPerLiter)} km/L</strong>
+        {Number.isFinite(rated) && rated > 0
+          ? ` (rated: ${formatKmPerLiter(rated)} km/L)`
+          : " (no rated figure set for this car)"}
+      </p>
+      <p className="fuel-log-real-average__note">
+        {remaining > 0
+          ? `Based on ${real.intervalCount} measured ${real.intervalCount === 1 ? "fill-up" : "fill-ups"}. Trip Planner starts using it after ${MIN_INTERVALS_FOR_TRIP_PLANNER}.`
+          : `Based on ${real.intervalCount} measured fill-ups. Trip Planner uses it for your cost estimates.`}
+      </p>
+    </div>
+  );
+}
 
 /**
  * The chart's hover/tap detail: date, liters and cost (in the currency the
@@ -92,6 +138,8 @@ function FuelLogPage() {
   const [date, setDate] = useState(todayLocal());
   const [liters, setLiters] = useState("");
   const [cost, setCost] = useState("");
+  // CAR-61: raw digits from FormattedNumberInput; "" = not given (optional).
+  const [odometer, setOdometer] = useState("");
   const { currency: primaryCurrency } = useCurrency();
   // null = the user hasn't chosen here, so the form follows the header toggle.
   const [chosenCurrency, setChosenCurrency] = useState(null);
@@ -109,6 +157,10 @@ function FuelLogPage() {
   const entries = showingSelectedCar ? loaded.entries : null;
   const loadError = showingSelectedCar ? loaded.error : "";
   const chartPoints = entries ? fillUpChartPoints(entries, primaryCurrency) : [];
+  // CAR-61: every figure below comes from the selected car's own entries only.
+  const efficiencies = entries ? fillUpEfficiencies(entries) : new Map();
+  const real = entries ? realEfficiency(entries) : null;
+  const sinceLast = entries ? distanceSincePrevious(odometer, date, entries, liters) : null;
 
   useEffect(() => {
     if (!user) return;
@@ -119,7 +171,7 @@ function FuelLogPage() {
       setLoadingCars(true);
       const { data } = await supabase
         .from("cars")
-        .select("id, make, model, year")
+        .select("id, make, model, year, fuel_efficiency")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
 
@@ -186,22 +238,35 @@ function FuelLogPage() {
     setSaved(false);
 
     const errors = getFillUpErrors({ date, liters, cost });
+    if (odometer !== "") {
+      // A reading is checked against this car's other readings; until they've
+      // loaded, there is nothing to check it against, so don't save blind.
+      const odometerError =
+        entries === null
+          ? "Still loading this car's fill-ups. Try again in a moment."
+          : getOdometerError(odometer, date, entries);
+      if (odometerError) errors.odometer = odometerError;
+    }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
     const carId = selectedCarId;
+    const row = {
+      user_id: user.id,
+      car_id: carId,
+      filled_at: date,
+      liters: Number(liters),
+      cost_amount: Number(cost),
+      cost_currency: currency,
+    };
+    // Only sent when given: a fill-up without a reading is stored exactly as before.
+    if (odometer !== "") row.odometer_km = Number(odometer);
+
     setSaving(true);
     try {
       const { data, error } = await supabase
         .from("fuel_logs")
-        .insert({
-          user_id: user.id,
-          car_id: carId,
-          filled_at: date,
-          liters: Number(liters),
-          cost_amount: Number(cost),
-          cost_currency: currency,
-        })
+        .insert(row)
         .select(ENTRY_COLUMNS)
         .single();
 
@@ -219,6 +284,7 @@ function FuelLogPage() {
       );
       setLiters("");
       setCost("");
+      setOdometer("");
       setDate(todayLocal());
       setSaved(true);
     } finally {
@@ -347,6 +413,34 @@ function FuelLogPage() {
             )}
           </div>
 
+          <div className="form-field">
+            <label htmlFor="fillOdometer">Odometer (km)</label>
+            <FormattedNumberInput
+              id="fillOdometer"
+              placeholder="e.g. 84,250 (optional)"
+              value={odometer}
+              aria-invalid={fieldErrors.odometer ? "true" : undefined}
+              aria-describedby="fillOdometerHint"
+              onChange={setOdometer}
+            />
+            {fieldErrors.odometer ? (
+              <p role="alert" className="auth-form__error">{fieldErrors.odometer}</p>
+            ) : sinceLast ? (
+              <p
+                id="fillOdometerHint"
+                className={`form-hint${sinceLast.implausible ? " form-hint--warning" : ""}`}
+              >
+                +{formatKm(sinceLast.distanceKm)} since your last reading ({formatKm(sinceLast.previousKm)}).
+                {sinceLast.implausible &&
+                  " That doesn't look like a realistic distance for these liters. Check the reading for a typo: a saved fill-up can't be edited."}
+              </p>
+            ) : (
+              <p id="fillOdometerHint" className="form-hint">
+                Optional. The total km on your dashboard, used to work out your real km/L.
+              </p>
+            )}
+          </div>
+
           {saveError && (
             <p role="alert" className="auth-form__error">{saveError}</p>
           )}
@@ -388,6 +482,7 @@ function FuelLogPage() {
               </BarChart>
             </ResponsiveContainer>
           </div>
+          <RealAverageLine real={real} ratedKmPerLiter={selectedCar?.fuel_efficiency ?? null} />
         </section>
       )}
 
@@ -424,12 +519,16 @@ function FuelLogPage() {
                   <th scope="col">Cost</th>
                   <th scope="col">Price per liter</th>
                   <th scope="col">Price per 20 L</th>
+                  <th scope="col">Odometer</th>
+                  <th scope="col">km/L</th>
                 </tr>
               </thead>
               <tbody>
                 {entries.map((entry) => {
                   const perLiter = pricePerLiter(entry);
                   const per20Liters = pricePer20Liters(entry);
+                  const reading = readingOf(entry);
+                  const interval = efficiencies.get(entry.id);
                   return (
                     <tr key={entry.id}>
                       <td>{formatFillDate(entry.filled_at)}</td>
@@ -451,11 +550,30 @@ function FuelLogPage() {
                           <Price amount={per20Liters} currency={entry.cost_currency} suffix="/20 L" />
                         )}
                       </td>
+                      <td>{reading == null ? "-" : formatKm(reading)}</td>
+                      <td>
+                        {!interval ? (
+                          "-"
+                        ) : interval.plausible ? (
+                          formatKmPerLiter(interval.kmPerLiter)
+                        ) : (
+                          <span
+                            className="fuel-log-check-reading"
+                            title="Outside a realistic range (2 to 40 km/L). Check these odometer readings; this one isn't counted in your average."
+                          >
+                            - (check reading)
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+            <p className="fuel-log-table__caption">
+              km/L is worked out between two fill-ups in a row that both have an odometer
+              reading, and assumes you fill the tank to full each time.
+            </p>
           </div>
         )}
       </section>
