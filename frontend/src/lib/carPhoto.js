@@ -10,10 +10,8 @@ import { supabase } from "./supabaseClient.js";
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 hour
 
-// Mirrors backend/app/validation.py's MAX_REGISTRATION_IMAGE_BYTES /
-// ALLOWED_REGISTRATION_IMAGE_TYPES (CAR-57) — same bound, own named
-// constants here since this isn't registration-scan-specific. The bucket
-// itself also enforces this server-side (file_size_limit/allowed_mime_types
+// An 8 MB cap and the usual phone-photo formats. The bucket itself also
+// enforces this server-side (file_size_limit/allowed_mime_types
 // on the `car-photos` bucket) as defense-in-depth.
 export const MAX_CAR_PHOTO_BYTES = 8 * 1024 * 1024;
 export const ALLOWED_CAR_PHOTO_TYPES = new Set([
@@ -33,9 +31,8 @@ const EXTENSION_BY_TYPE = {
 };
 
 /**
- * Client-side pre-check for a car photo, before it's uploaded. Mirrors
- * `getRegistrationImageError` (lib/limits.js) — the backend/bucket's own
- * checks still apply regardless; this is just fast, friendly feedback.
+ * Client-side pre-check for a car photo, before it's uploaded. The
+ * bucket's own checks still apply regardless; this is just fast, friendly feedback.
  * @param {File} file
  * @returns {string} an error message, or "" if the file looks fine.
  */

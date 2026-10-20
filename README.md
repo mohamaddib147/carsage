@@ -26,7 +26,7 @@ It was built as a capstone project (React + FastAPI + Supabase). Fuel prices are
 
 | Feature | What it does |
 |---|---|
-| **Car Onboarding** | Add your car with a short form. Type the make, model and year and CarSage fills in engine type, fuel efficiency, cylinders, drivetrain, transmission and fuel tank size for you. You can change any of it. (Scanning a registration card is shown as "coming soon".) |
+| **Car Onboarding** | Add your car with a short form. Type the make, model and year and CarSage fills in engine type, fuel efficiency, cylinders, drivetrain, transmission and fuel tank size for you. You can change any of it. |
 | **Car Profile** | See every saved spec for your car, edit any of them, or delete the car. |
 | **Trip Planner** | Enter where you start and where you are going. You get the distance, the driving time with live traffic, the fuel cost, and the cost of a full tank, plus a map of the route. It compares light traffic with current traffic. |
 | **AI Advisor** | Describe a car problem in plain words. You get a clear "DIY Fixable" or "See a Mechanic" verdict with short guidance, and a tutorial video for DIY fixes. Answers are checked against official US recall and complaint data first. Your conversation is saved. |
@@ -224,7 +224,6 @@ The FastAPI service is used by the frontend; it is not meant to be called by han
 | `POST /trip-planner/estimate` | The full trip estimate for one of your cars; saves the trip. |
 | `GET /trip-planner/fuel-prices` | Current fuel prices per fuel type (LBP and USD). |
 | `GET /cars/spec-suggestions` | Best-effort spec autofill for a make, model and year. |
-| `POST /cars/scan-registration` | Reads a photographed registration card and extracts make, model, year, VIN and license plate. |
 | `POST /ai-advisor/classify` | Sends a described problem to the AI Advisor and saves the conversation. |
 
 Errors are always short, plain messages; the service never returns stack traces or internal details.

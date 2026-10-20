@@ -30,39 +30,6 @@ export const LIMITS = {
   PASSWORD_MAX: 72,
 };
 
-// CAR-57 registration-card scan: mirrors the backend
-// (backend/app/validation.py's MAX_REGISTRATION_IMAGE_BYTES /
-// ALLOWED_REGISTRATION_IMAGE_TYPES) so an obviously-bad file is rejected
-// before it ever reaches the network.
-export const MAX_REGISTRATION_IMAGE_BYTES = 8 * 1024 * 1024;
-export const ALLOWED_REGISTRATION_IMAGE_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/heic",
-  "image/heif",
-]);
-
-/**
- * Client-side pre-check for a registration-card photo, before it's
- * uploaded. Mirrors the backend's own check (which still applies
- * regardless — this is just fast, friendly feedback).
- * @param {File} file
- * @returns {string} an error message, or "" if the file looks fine.
- */
-export function getRegistrationImageError(file) {
-  if (!ALLOWED_REGISTRATION_IMAGE_TYPES.has(file.type)) {
-    return "Please choose a JPEG, PNG, WEBP or HEIC photo.";
-  }
-  if (file.size > MAX_REGISTRATION_IMAGE_BYTES) {
-    return "That image is too large. Please use a photo under 8 MB.";
-  }
-  if (file.size === 0) {
-    return "That image appears to be empty. Please try again.";
-  }
-  return "";
-}
-
 /**
  * @param {string | null | undefined} value
  * @param {number} max
