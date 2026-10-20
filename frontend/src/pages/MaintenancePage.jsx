@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import FormattedNumberInput from "../components/FormattedNumberInput.jsx";
 import PageShell from "../components/PageShell.jsx";
+import RecordPhotos from "../components/RecordPhotos.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { describeActionError, describeSaveError, LIMITS } from "../lib/limits.js";
@@ -726,6 +727,12 @@ function MaintenancePage() {
                                     Undo
                                   </button>
                                 )}
+                                <RecordPhotos
+                                  kind="maintenance"
+                                  parentId={record.id}
+                                  userId={user.id}
+                                  label={`the ${item.name} completion on ${formatFillDate(record.done_on)}`}
+                                />
                               </li>
                             ))}
                         </ul>

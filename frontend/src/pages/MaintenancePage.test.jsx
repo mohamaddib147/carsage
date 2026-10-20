@@ -487,6 +487,19 @@ describe("MaintenancePage — edit, delete and undo", () => {
     await waitFor(() => expect(calls.recordDeletes).toEqual([["id", "r-new"]]));
     expect(await screen.findByRole("status")).toHaveTextContent("Completion of Oil change on 1 Sep 2026 undone.");
   });
+
+  it("each completion has its own Photos control, closed, so no photo is fetched until it is opened", async () => {
+    const user = userEvent.setup();
+    const records = [{ id: "r-1", done_on: "2026-09-01", odometer_km: 88000, note: null, created_at: "2026-09-01T09:00:00Z" }];
+    mockDatabase({ itemsByCar: { "car-1": [item({ maintenance_records: records })] } });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "History (1)" }));
+    const toggle = screen.getByRole("button", { name: "Show photos for the Oil change completion on 1 Sep 2026" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(supabase.from).not.toHaveBeenCalledWith("maintenance_record_photos");
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
 });
 
 describe("MaintenancePage — several cars", () => {

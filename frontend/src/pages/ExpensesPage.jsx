@@ -21,6 +21,7 @@ import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import PageShell from "../components/PageShell.jsx";
 import Price from "../components/Price.jsx";
+import RecordPhotos from "../components/RecordPhotos.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { useCurrency } from "../currency/CurrencyContext.jsx";
 import { CURRENCIES, formatMoney } from "../lib/currency.js";
@@ -449,6 +450,7 @@ function ExpensesPage() {
                   <th scope="col">Category</th>
                   <th scope="col">Amount</th>
                   <th scope="col">Note</th>
+                  <th scope="col">Receipt</th>
                   <th scope="col"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
@@ -461,6 +463,14 @@ function ExpensesPage() {
                       <Price amount={Number(expense.amount)} currency={expense.currency} />
                     </td>
                     <td>{expense.note || "-"}</td>
+                    <td>
+                      <RecordPhotos
+                        kind="receipt"
+                        parentId={expense.id}
+                        userId={user.id}
+                        label={`the ${categoryLabel(expense.category)} expense of ${formatFillDate(expense.spent_on)}`}
+                      />
+                    </td>
                     <td>
                       {confirmDeleteId === expense.id ? (
                         <span role="alert" className="costs-confirm">

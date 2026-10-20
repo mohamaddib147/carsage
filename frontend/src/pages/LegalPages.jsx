@@ -120,8 +120,13 @@ export function PrivacyPage() {
         <p>
           When you create an account, CarSage stores your email address and the
           data you add yourself: your cars and their specs, trip searches, fuel
-          fill-up logs, and your AI Advisor conversations. We don&apos;t ask for or
-          store payment information, and we don&apos;t sell your data to anyone.
+          fill-up logs, maintenance and expenses, any photos you attach to them, and
+          your AI Advisor conversations. We don&apos;t ask for or store payment
+          information, and we don&apos;t sell your data to anyone.
+        </p>
+        <p>
+          Photos you attach to maintenance and expenses stay in your private storage
+          and are never sent to Google.
         </p>
 
         <h2>Row-level security</h2>
@@ -242,7 +247,11 @@ export function PrivacyPage() {
           </li>
           <li>
             <strong>An expense</strong>, <strong>a maintenance item</strong> (with its
-            history), or <strong>a single maintenance completion</strong>.
+            history), or <strong>a single maintenance completion</strong>, together
+            with any photos or receipt attached to them.
+          </li>
+          <li>
+            <strong>A photo or receipt you attached</strong> (Remove).
           </li>
         </ul>
         <p>

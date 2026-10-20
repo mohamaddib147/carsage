@@ -172,6 +172,15 @@ describe("legal pages", () => {
     expect(text).not.toMatch(/photo file is not removed/);
   });
 
+  it("says attached maintenance and expense photos stay private and never go to Google, and can be removed", async () => {
+    renderAt("/privacy");
+
+    await screen.findByRole("heading", { name: "What we store" });
+    expect(screen.getByText("Photos you attach to maintenance and expenses stay in your private storage and are never sent to Google.")).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/together with any photos or receipt attached to them/);
+    expect(screen.getByText("A photo or receipt you attached")).toBeInTheDocument();
+  });
+
   it("each page carries its own last-updated date (the policy change doesn't move the Terms date)", async () => {
     renderAt("/privacy");
     expect(await screen.findByText("Last updated: 21 October 2026")).toBeInTheDocument();

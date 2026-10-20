@@ -337,6 +337,19 @@ describe("ExpensesPage — delete", () => {
   });
 });
 
+describe("ExpensesPage — receipts (Step 3)", () => {
+  it("each expense has a Receipt column with a closed control, so no receipt is fetched until it is opened", async () => {
+    mockDatabase({ expensesByCar: { "car-1": [expense("e1", "2026-10-05", "parking", 5)] } });
+    renderPage();
+
+    const toggle = await screen.findByRole("button", { name: "Show receipt for the Parking expense of 5 Oct 2026" });
+    expect(screen.getByRole("columnheader", { name: "Receipt" })).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(supabase.from).not.toHaveBeenCalledWith("car_expense_receipts");
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+});
+
 describe("ExpensesPage — several cars", () => {
   it("never mixes cars: each car's totals, history and queries are its own", async () => {
     const user = userEvent.setup();
