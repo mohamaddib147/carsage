@@ -80,10 +80,11 @@ function isPlausible(kmPerLiter) {
  * on or before it (a same-day fill-up already logged counts as earlier), `next` the
  * earliest reading after it.
  *
- * A reading whose own interval is already flagged as unrealistic (e.g. a saved
- * typo like 846,100 instead of 84,610) is NOT used as a neighbour. Fill-ups can't
- * be edited or deleted, so treating a saved typo as the floor would make every
- * correct reading after it look "too low" forever.
+ * A reading whose step the average DISCARDED (a saved typo like 846,100 instead of
+ * 84,610) is NOT used as a neighbour. Fill-ups can't be edited or deleted, so treating
+ * a saved typo as the floor would make every correct reading after it look "too low"
+ * forever. A reading that was merely part of a partial fill (merged, not discarded) is
+ * a real reading and is kept.
  * @param {string} date - YYYY-MM-DD
  * @param {object[]} entries - one car's fill-ups.
  * @returns {{ previous: { km: number, date: string } | null, next: { km: number, date: string } | null }}
@@ -91,11 +92,11 @@ function isPlausible(kmPerLiter) {
 function neighbourReadings(date, entries) {
   let previous = null;
   let next = null;
-  const intervals = fillUpEfficiencies(entries);
+  const dispositions = stepDispositions(entries);
   for (const entry of chronological(entries)) {
     const km = readingOf(entry);
     if (km == null) continue;
-    if (intervals.get(entry.id)?.plausible === false) continue;
+    if (dispositions.get(entry.id)?.status === STEP_STATUS.DISCARDED) continue;
     if (entry.filled_at <= date) previous = { km, date: entry.filled_at };
     else if (!next) next = { km, date: entry.filled_at };
   }
@@ -234,7 +235,8 @@ function fuelRuns(entries) {
       prev = reading;
       continue;
     }
-    run.push({ distanceKm, liters });
+    // id = the later fill-up of the step, so the table can map a step to its row.
+    run.push({ id: entry.id, distanceKm, liters });
     prev = reading;
   }
   if (run.length) runs.push(run);
@@ -250,11 +252,12 @@ function deviation({ distanceKm, liters }) {
 }
 
 /**
- * Committed { distanceKm, liters, stepCount } spans for one run. The whole run is tried
+ * Committed { distanceKm, liters, ids } spans for one run. The whole run is tried
  * first: if its combined km/L is in the band, partial fills cancel and it is one span.
- * Otherwise the single most extreme step is excised and each side re-tried.
- * @param {{ distanceKm: number, liters: number }[]} steps
- * @returns {{ distanceKm: number, liters: number, stepCount: number }[]}
+ * Otherwise the single most extreme step is excised and each side re-tried. `ids` are
+ * the step ids the span keeps (steps absent from every span were discarded).
+ * @param {{ id: string, distanceKm: number, liters: number }[]} steps
+ * @returns {{ distanceKm: number, liters: number, ids: string[] }[]}
  */
 function mergeRun(steps) {
   if (steps.length === 0) return [];
@@ -262,13 +265,43 @@ function mergeRun(steps) {
   const liters = steps.reduce((sum, s) => sum + s.liters, 0);
   const ratio = distanceKm / liters;
   if (ratio >= MIN_PLAUSIBLE_KM_PER_L && ratio <= MAX_PLAUSIBLE_KM_PER_L) {
-    return [{ distanceKm, liters, stepCount: steps.length }];
+    return [{ distanceKm, liters, ids: steps.map((s) => s.id) }];
   }
   let worst = 0;
   for (let i = 1; i < steps.length; i += 1) {
     if (deviation(steps[i]) > deviation(steps[worst])) worst = i;
   }
   return [...mergeRun(steps.slice(0, worst)), ...mergeRun(steps.slice(worst + 1))];
+}
+
+/** Per-step disposition keys (see stepDispositions). */
+export const STEP_STATUS = { IN_RANGE: "in_range", MERGED: "merged", DISCARDED: "discarded" };
+
+/**
+ * For each fill-up that closes a step, its rough km/L and how the average used it:
+ *   - "in_range": the step's own km/L is 2-40 (shown as the number);
+ *   - "merged": its own km/L is outside 2-40 but the merge kept it (a partial fill);
+ *   - "discarded": the merge dropped it (a reading the average doesn't trust).
+ * @param {object[]} entries - ONE car's fill-ups.
+ * @returns {Map<string, { kmPerLiter: number, status: string }>} keyed by fill-up id.
+ */
+export function stepDispositions(entries) {
+  const result = new Map();
+  for (const run of fuelRuns(entries)) {
+    const kept = new Set();
+    for (const span of mergeRun(run)) for (const id of span.ids) kept.add(id);
+    for (const step of run) {
+      const ratio = step.distanceKm / step.liters;
+      const inBand = ratio >= MIN_PLAUSIBLE_KM_PER_L && ratio <= MAX_PLAUSIBLE_KM_PER_L;
+      const status = inBand
+        ? STEP_STATUS.IN_RANGE
+        : kept.has(step.id)
+          ? STEP_STATUS.MERGED
+          : STEP_STATUS.DISCARDED;
+      result.set(step.id, { kmPerLiter: ratio, status });
+    }
+  }
+  return result;
 }
 
 /**
@@ -287,7 +320,7 @@ export function realEfficiency(entries) {
     for (const span of mergeRun(run)) {
       distanceKm += span.distanceKm;
       liters += span.liters;
-      intervalCount += span.stepCount;
+      intervalCount += span.ids.length;
     }
   }
   if (intervalCount === 0) return null;

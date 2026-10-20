@@ -59,7 +59,6 @@ import {
 } from "../lib/fuelLog.js";
 import {
   distanceSincePrevious,
-  fillUpEfficiencies,
   formatKm,
   formatKmPerLiter,
   getOdometerError,
@@ -68,6 +67,8 @@ import {
   MIN_INTERVALS_FOR_TRIP_PLANNER,
   readingOf,
   realEfficiency,
+  STEP_STATUS,
+  stepDispositions,
 } from "../lib/odometer.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 
@@ -171,7 +172,7 @@ function FuelLogPage() {
   const loadError = showingSelectedCar ? loaded.error : "";
   const chartPoints = entries ? fillUpChartPoints(entries, primaryCurrency) : [];
   // CAR-61: every figure below comes from the selected car's own entries only.
-  const efficiencies = entries ? fillUpEfficiencies(entries) : new Map();
+  const efficiencies = entries ? stepDispositions(entries) : new Map();
   const real = entries ? realEfficiency(entries) : null;
   const sinceLast = entries ? distanceSincePrevious(odometer, date, entries, liters) : null;
 
@@ -608,8 +609,15 @@ function FuelLogPage() {
                       <td>
                         {!interval ? (
                           "-"
-                        ) : interval.plausible ? (
+                        ) : interval.status === STEP_STATUS.IN_RANGE ? (
                           formatKmPerLiter(interval.kmPerLiter)
+                        ) : interval.status === STEP_STATUS.MERGED ? (
+                          <span
+                            className="fuel-log-merged-step"
+                            title="Counted as part of a partial fill in your average."
+                          >
+                            -
+                          </span>
                         ) : (
                           <span
                             className="fuel-log-check-reading"

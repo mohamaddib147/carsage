@@ -16,6 +16,8 @@ import {
   latestOdometer,
   readingOf,
   realEfficiency,
+  STEP_STATUS,
+  stepDispositions,
 } from "./odometer.js";
 
 /** One fill-up on 2026-09-<day>. */
@@ -216,5 +218,28 @@ describe("formatting", () => {
     expect(formatKm(84250)).toBe("84,250 km");
     expect(formatKmPerLiter(9)).toBe("9.0");
     expect(formatKmPerLiter(500 / 30)).toBe("16.7");
+  });
+});
+
+describe("stepDispositions (how each step's figure relates to the average)", () => {
+  it("marks an in-range step with its km/L", () => {
+    const d = stepDispositions([entry("a", 1, 1000, 30), entry("b", 10, 1400, 40)]);
+    expect(d.get("b")).toEqual({ kmPerLiter: 10, status: STEP_STATUS.IN_RANGE });
+    expect(d.has("a")).toBe(false); // first fill-up has no step
+  });
+
+  it("marks a partial-fill step the average KEPT as 'merged', not discarded", () => {
+    // small top-up (62.5) then big fill (8.6); the merge keeps both.
+    const d = stepDispositions([entry("a", 1, 10000, 30), entry("b", 10, 10500, 8), entry("c", 20, 11000, 58)]);
+    expect(d.get("b").status).toBe(STEP_STATUS.MERGED); // 62.5, out of band but kept
+    expect(d.get("b").kmPerLiter).toBeCloseTo(62.5, 6);
+    expect(d.get("c").status).toBe(STEP_STATUS.IN_RANGE); // 8.6
+  });
+
+  it("marks a step the average DISCARDED (a typo) as 'discarded'", () => {
+    // 84,610 -> 846,100 (extra digit): the step into the typo is excised.
+    const d = stepDispositions([entry("a", 1, 84250, 40), entry("b", 10, 84610, 40), entry("c", 20, 846100, 30)]);
+    expect(d.get("b").status).toBe(STEP_STATUS.IN_RANGE); // 9.0
+    expect(d.get("c").status).toBe(STEP_STATUS.DISCARDED); // the extra-digit step
   });
 });

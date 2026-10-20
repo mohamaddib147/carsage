@@ -938,6 +938,24 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     expect(averageBlock()).toHaveTextContent("Your real average: 9.0 km/L");
   });
 
+  it("shows a partial-fill step (kept by the average) as a plain dash with a tooltip, not 'check reading'", async () => {
+    // Small top-up (500 km / 8 L = 62.5, out of band) merges with the big fill
+    // (500 km / 58 L = 8.6); the average keeps it, so its row is not an error.
+    const anchor = { id: "pf1", filled_at: "2026-10-01", liters: "30", cost_amount: "20", cost_currency: "USD", created_at: "2026-10-01T09:00:00Z", odometer_km: 10000 };
+    const topUp = { id: "pf2", filled_at: "2026-10-10", liters: "8", cost_amount: "6", cost_currency: "USD", created_at: "2026-10-10T09:00:00Z", odometer_km: 10500 };
+    const bigFill = { id: "pf3", filled_at: "2026-10-20", liters: "58", cost_amount: "45", cost_currency: "USD", created_at: "2026-10-20T09:00:00Z", odometer_km: 11000 };
+    mockDatabase({ cars: [RATED_CAR], logsByCar: { "car-1": { data: [bigFill, topUp, anchor], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    // Newest first: big fill (8.6), top-up (merged dash), anchor (no step).
+    expect(odometerCells()).toEqual([["11,000 km", "8.6"], ["10,500 km", "-"], ["10,000 km", "-"]]);
+    expect(screen.getByTitle("Counted as part of a partial fill in your average.")).toBeInTheDocument();
+    expect(screen.queryByText("- (check reading)")).not.toBeInTheDocument();
+    expect(averageBlock()).toHaveTextContent("Your real average: 15.2 km/L");
+  });
+
   it("saves the reading as a number with the fill-up", async () => {
     const user = userEvent.setup();
     const calls = mockDatabase({ cars: [RATED_CAR], logsByCar: { "car-1": { data: [ODO_1], error: null } } });

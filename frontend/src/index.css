@@ -3006,6 +3006,13 @@ textarea:focus {
   white-space: nowrap;
 }
 
+/* CAR-61 step 1c: a per-step km/L outside 2-40 that the average KEPT as part of a
+   partial fill -- a neutral dash with a tooltip, not the red "check reading". */
+.fuel-log-merged-step {
+  color: var(--color-text-muted);
+  cursor: help;
+}
+
 .fuel-log-chart__wrap {
   background-color: var(--color-surface);
   border-radius: var(--radius-lg);
