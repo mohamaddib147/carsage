@@ -11,7 +11,7 @@ import { Link } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 
 const LAST_UPDATED = "September 2026";
-const PRIVACY_LAST_UPDATED = "20 October 2026";
+const PRIVACY_LAST_UPDATED = "21 October 2026";
 
 /**
  * Terms of Service page.
@@ -228,9 +228,28 @@ export function PrivacyPage() {
         </p>
 
         <h2>Deleting your data</h2>
+        <p>You can delete these yourself in the app:</p>
+        <ul>
+          <li>
+            <strong>A car</strong> (Car Profile). This also permanently deletes that
+            car&apos;s trips, fuel log entries, maintenance items with their history,
+            and expenses. Your AI Advisor conversations are kept, no longer linked to
+            a car. The car&apos;s photo file is not removed from file storage when the
+            car is deleted; to remove it, use Remove photo first.
+          </li>
+          <li>
+            <strong>A car&apos;s photo</strong> (Car Profile, Remove photo). The photo
+            file is deleted from file storage.
+          </li>
+          <li>
+            <strong>An expense</strong>, <strong>a maintenance item</strong> (with its
+            history), or <strong>a single maintenance completion</strong>.
+          </li>
+        </ul>
         <p>
-          You can delete individual cars and fuel logs yourself from within the app.
-          To delete your entire account and all associated data, contact the
+          You can&apos;t delete these in the app: individual fuel log entries, saved
+          trips, AI Advisor conversations, or your account. To have any of them
+          deleted, or to delete your account and all associated data, contact the
           project maintainer using the details on the{" "}
           <a href="https://github.com/mohamaddib147/carsage" target="_blank" rel="noopener noreferrer">
             project&apos;s GitHub page
