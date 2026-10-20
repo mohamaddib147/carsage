@@ -135,4 +135,39 @@ describe("legal pages", () => {
     expect(screen.getByText("Google Maps & Places")).toBeInTheDocument();
     expect(screen.getByText(/NHTSA/)).toBeInTheDocument();
   });
+
+  it("Privacy Policy discloses every photo scan sent to Gemini, the free-tier terms, and what is stored", async () => {
+    renderAt("/privacy");
+
+    expect(await screen.findByRole("heading", { name: "Photo scans and Google Gemini" })).toBeInTheDocument();
+    for (const scan of ["Registration card", "Fuel pump display", "Odometer"]) {
+      expect(screen.getByText(scan)).toBeInTheDocument();
+    }
+    expect(screen.getByText(/Later features may add more photo scans/)).toBeInTheDocument();
+    expect(screen.getByText(/free \(unpaid\) tier of the Gemini API/)).toBeInTheDocument();
+    expect(screen.getByText(/provide, improve and develop its products and services, and human\s+reviewers may read it/)).toBeInTheDocument();
+    expect(screen.getByText(/does not store: the\s+photo itself/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Gemini API Additional Terms of Service" })).toHaveAttribute(
+      "href",
+      "https://ai.google.dev/gemini-api/terms",
+    );
+  });
+
+  it("each page carries its own last-updated date (the policy change doesn't move the Terms date)", async () => {
+    renderAt("/privacy");
+    expect(await screen.findByText("Last updated: 20 October 2026")).toBeInTheDocument();
+  });
+
+  it("the Terms of Service date is unchanged", async () => {
+    renderAt("/terms");
+    expect(await screen.findByText("Last updated: September 2026")).toBeInTheDocument();
+  });
+});
+
+describe("landing page trust badge", () => {
+  it("says the data is never sold, not the broader 'stays private'", async () => {
+    renderAt("/");
+    expect(await screen.findByText("✓ Your data is never sold")).toBeInTheDocument();
+    expect(screen.queryByText(/stays private/)).not.toBeInTheDocument();
+  });
 });
