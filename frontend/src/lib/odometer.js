@@ -13,13 +13,18 @@
 // (distance, later-liters) pair is the same number as the per-run formula, which is
 // how this is computed.)
 //
-// A run breaks (and a new one starts) when a fill-up has no reading, the reading did
-// not go up, or the step's km/L is outside MIN_PLAUSIBLE..MAX_PLAUSIBLE (an extra
-// digit, miles mixed with km, or an extreme partial fill) -- that one step is left
-// out so a single bad reading can't poison the average.
+// A run breaks (and a new one starts) when a fill-up has no reading or the reading did
+// not go up. WITHIN a run the plausibility band is tested on the COMBINED span, not on
+// each step alone: a small top-up gives a high per-step km/L and the next fill-up a low
+// one, so testing them individually would drop the top-up's distance and bias the
+// average. Testing the whole run lets those partial-fill swings cancel. Only when the
+// whole run is still implausible (a typo that slipped past the backwards check) is the
+// single most extreme step excised and each side re-tried, so one bad reading can't
+// poison the average yet real partial fills are kept.
 //
-// The per-fill-up km/L in the table is a ROUGH guide only (a partial fill makes it
-// swing); the run average is the reliable number.
+// The per-fill-up km/L shown in the table (fillUpEfficiencies, a rough per-step guide)
+// still uses the per-step band; the run average (realEfficiency) uses the merge above
+// and is NOT simply the sum of the per-step figures.
 //
 // Mirrors backend/app/services/real_efficiency.py; change the two together (a parity
 // test on shared fixtures guards that they agree).
@@ -198,9 +203,78 @@ export function fillUpEfficiencies(entries) {
 }
 
 /**
- * The car's real-world km/L: total measured km / total liters over the valid steps
- * (see the module header for why this needs no full tank). intervalCount is the number
- * of fill-ups after the first that were measured.
+ * One car's fill-ups split into runs. Each run is a list of { distanceKm, liters }
+ * steps between consecutive fill-ups whose readings both exist and strictly increase;
+ * a missing or non-increasing reading ends the run and re-anchors the next. The first
+ * fill-up of a run is only an anchor, so its liters never appear here.
+ * @param {object[]} entries - ONE car's fill-ups.
+ * @returns {{ distanceKm: number, liters: number }[][]}
+ */
+function fuelRuns(entries) {
+  const runs = [];
+  let run = [];
+  let prev = null;
+  for (const entry of chronological(entries)) {
+    const reading = readingOf(entry);
+    if (reading == null) {
+      if (run.length) runs.push(run);
+      run = [];
+      prev = null;
+      continue;
+    }
+    if (prev == null) {
+      prev = reading;
+      continue;
+    }
+    const liters = Number(entry.liters);
+    const distanceKm = reading - prev;
+    if (distanceKm <= 0 || !Number.isFinite(liters) || liters <= 0) {
+      if (run.length) runs.push(run);
+      run = [];
+      prev = reading;
+      continue;
+    }
+    run.push({ distanceKm, liters });
+    prev = reading;
+  }
+  if (run.length) runs.push(run);
+  return runs;
+}
+
+/** How far a step's km/L sits outside the plausible band (0 when inside). */
+function deviation({ distanceKm, liters }) {
+  const ratio = distanceKm / liters;
+  if (ratio > MAX_PLAUSIBLE_KM_PER_L) return ratio - MAX_PLAUSIBLE_KM_PER_L;
+  if (ratio < MIN_PLAUSIBLE_KM_PER_L) return MIN_PLAUSIBLE_KM_PER_L - ratio;
+  return 0;
+}
+
+/**
+ * Committed { distanceKm, liters, stepCount } spans for one run. The whole run is tried
+ * first: if its combined km/L is in the band, partial fills cancel and it is one span.
+ * Otherwise the single most extreme step is excised and each side re-tried.
+ * @param {{ distanceKm: number, liters: number }[]} steps
+ * @returns {{ distanceKm: number, liters: number, stepCount: number }[]}
+ */
+function mergeRun(steps) {
+  if (steps.length === 0) return [];
+  const distanceKm = steps.reduce((sum, s) => sum + s.distanceKm, 0);
+  const liters = steps.reduce((sum, s) => sum + s.liters, 0);
+  const ratio = distanceKm / liters;
+  if (ratio >= MIN_PLAUSIBLE_KM_PER_L && ratio <= MAX_PLAUSIBLE_KM_PER_L) {
+    return [{ distanceKm, liters, stepCount: steps.length }];
+  }
+  let worst = 0;
+  for (let i = 1; i < steps.length; i += 1) {
+    if (deviation(steps[i]) > deviation(steps[worst])) worst = i;
+  }
+  return [...mergeRun(steps.slice(0, worst)), ...mergeRun(steps.slice(worst + 1))];
+}
+
+/**
+ * The car's real-world km/L: total measured km / total liters (see the module header
+ * for why this needs no full tank and merges partial-fill steps). intervalCount is the
+ * number of fill-ups after the first that were measured.
  * @param {object[]} entries - ONE car's fill-ups.
  * @returns {{ kmPerLiter: number, intervalCount: number, distanceKm: number } | null}
  *   null when there is no valid step yet (never NaN or 0).
@@ -209,12 +283,12 @@ export function realEfficiency(entries) {
   let distanceKm = 0;
   let liters = 0;
   let intervalCount = 0;
-  const byId = new Map(entries.map((entry) => [entry.id, entry]));
-  for (const [id, interval] of fillUpEfficiencies(entries)) {
-    if (!interval.plausible) continue;
-    distanceKm += interval.distanceKm;
-    liters += Number(byId.get(id).liters);
-    intervalCount += 1;
+  for (const run of fuelRuns(entries)) {
+    for (const span of mergeRun(run)) {
+      distanceKm += span.distanceKm;
+      liters += span.liters;
+      intervalCount += span.stepCount;
+    }
   }
   if (intervalCount === 0) return null;
   return { kmPerLiter: distanceKm / liters, intervalCount, distanceKm };

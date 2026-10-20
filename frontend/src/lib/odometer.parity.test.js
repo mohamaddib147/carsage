@@ -58,4 +58,28 @@ describe("no full-tank assumption", () => {
     const rows = [row("a", "2026-01-01", 1000, 999), row("b", "2026-01-10", 1400, 40)];
     expect(realEfficiency(rows).kmPerLiter).toBeCloseTo(10, 9); // 400/40, not 400/(999+40)
   });
+
+  it("merges a small top-up with the next fill instead of dropping it (the bias fix)", () => {
+    const rows = [row("a", "2026-08-01", 10000, 30), row("b", "2026-08-10", 10500, 8), row("c", "2026-08-20", 11000, 58)];
+    const result = realEfficiency(rows);
+    expect(result.kmPerLiter).toBeCloseTo(1000 / 66, 9); // 15.15, not 8.6
+    expect(result.distanceKm).toBeCloseTo(1000, 9);
+    expect(result.intervalCount).toBe(2);
+  });
+
+  it("still excises a typo inside a run that the backwards check misses", () => {
+    const rows = [row("a", "2026-09-01", 84000, 40), row("b", "2026-09-08", 84400, 40), row("c", "2026-09-15", 844500, 40), row("d", "2026-09-22", 844900, 40)];
+    const result = realEfficiency(rows);
+    expect(result.kmPerLiter).toBeCloseTo(10, 9);
+    expect(result.distanceKm).toBeCloseTo(800, 9);
+    expect(result.intervalCount).toBe(2);
+  });
+
+  it("still splits the run on a backwards reading", () => {
+    const rows = [row("a", "2026-10-01", 20000, 40), row("b", "2026-10-08", 20400, 40), row("c", "2026-10-15", 20100, 40), row("d", "2026-10-22", 20500, 40)];
+    const result = realEfficiency(rows);
+    expect(result.kmPerLiter).toBeCloseTo(10, 9);
+    expect(result.distanceKm).toBeCloseTo(800, 9); // the backwards jump is not counted
+    expect(result.intervalCount).toBe(2);
+  });
 });

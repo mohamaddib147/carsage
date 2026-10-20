@@ -180,3 +180,46 @@ def test_first_fill_up_liters_are_excluded_from_the_average():
     ]
     # 400 km / 40 L = 10, not 400 / (999 + 40).
     assert real_efficiency(rows)["km_per_liter"] == pytest.approx(10)
+
+
+def test_a_small_top_up_merges_with_the_next_fill_instead_of_being_dropped():
+    """The bias fix: a small top-up (high per-step km/L) is not excluded on its own;
+    it merges with the neighbouring fill so the distance it covered still counts."""
+    rows = [
+        {"filled_at": "2026-08-01", "created_at": "a", "odometer_km": 10000, "liters": 30},
+        {"filled_at": "2026-08-10", "created_at": "b", "odometer_km": 10500, "liters": 8},   # 500/8 = 62.5
+        {"filled_at": "2026-08-20", "created_at": "c", "odometer_km": 11000, "liters": 58},  # 500/58 = 8.6
+    ]
+    result = real_efficiency(rows)
+    assert result["km_per_liter"] == pytest.approx(1000 / 66)  # 15.15, not 8.6
+    assert result["distance_km"] == pytest.approx(1000)
+    assert result["interval_count"] == 2
+
+
+def test_a_typo_inside_a_run_is_still_excised_not_merged():
+    """A reading too high but followed by an even higher one is not a partial fill:
+    the run total is implausible, so the extreme step is excised, keeping the rest."""
+    rows = [
+        {"filled_at": "2026-09-01", "created_at": "a", "odometer_km": 84000, "liters": 40},
+        {"filled_at": "2026-09-08", "created_at": "b", "odometer_km": 84400, "liters": 40},   # 400/40 = 10
+        {"filled_at": "2026-09-15", "created_at": "c", "odometer_km": 844500, "liters": 40},  # typo, huge
+        {"filled_at": "2026-09-22", "created_at": "d", "odometer_km": 844900, "liters": 40},  # 400/40 = 10
+    ]
+    # No backwards step here (844500 < 844900), so the backwards check does not catch it.
+    result = real_efficiency(rows)
+    assert result["km_per_liter"] == pytest.approx(10)
+    assert result["distance_km"] == pytest.approx(800)
+    assert result["interval_count"] == 2
+
+
+def test_a_backwards_reading_still_splits_the_run():
+    rows = [
+        {"filled_at": "2026-10-01", "created_at": "a", "odometer_km": 20000, "liters": 40},
+        {"filled_at": "2026-10-08", "created_at": "b", "odometer_km": 20400, "liters": 40},  # 10
+        {"filled_at": "2026-10-15", "created_at": "c", "odometer_km": 20100, "liters": 40},  # backwards -> split
+        {"filled_at": "2026-10-22", "created_at": "d", "odometer_km": 20500, "liters": 40},  # 10 from 20100
+    ]
+    result = real_efficiency(rows)
+    assert result["km_per_liter"] == pytest.approx(10)
+    assert result["distance_km"] == pytest.approx(800)  # 400 + 400, the backwards jump is not counted
+    assert result["interval_count"] == 2
