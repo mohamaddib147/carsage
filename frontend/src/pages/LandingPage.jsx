@@ -145,7 +145,7 @@ function LandingPage() {
         <div className="landing-trust-row">
           <span>✓ Completely free</span>
           <span>✓ No credit card required</span>
-          <span>✓ Your data stays private</span>
+          <span>✓ Your data is never sold</span>
         </div>
       </section>
 
