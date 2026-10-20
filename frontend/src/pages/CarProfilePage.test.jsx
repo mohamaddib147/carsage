@@ -579,6 +579,50 @@ describe("CarProfilePage — deleting (CAR-38)", () => {
     );
   });
 
+  it("also deletes the car's photo file, only after the row is deleted", async () => {
+    const user = userEvent.setup();
+    const { eqForDelete } = mockCarsTable({
+      selectResult: { data: { ...SAMPLE_CAR, photo_path: "user-123/car-456/photo.jpg" }, error: null },
+    });
+    const { remove } = mockStorage();
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Delete Car" }));
+    await user.click(screen.getByRole("button", { name: "Yes, Delete" }));
+
+    await waitFor(() => expect(remove).toHaveBeenCalledWith(["user-123/car-456/photo.jpg"]));
+    expect(eqForDelete.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
+    await waitFor(() => expect(screen.getByText("Dashboard placeholder")).toBeInTheDocument());
+  });
+
+  it("makes no Storage call when the car has no photo", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+    const { remove } = mockStorage();
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Delete Car" }));
+    await user.click(screen.getByRole("button", { name: "Yes, Delete" }));
+    await waitFor(() => expect(screen.getByText("Dashboard placeholder")).toBeInTheDocument());
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("keeps the photo file when the car delete fails", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({
+      selectResult: { data: { ...SAMPLE_CAR, photo_path: "user-123/car-456/photo.jpg" }, error: null },
+      deleteResult: { error: { code: "42501", message: "rls" } },
+    });
+    const { remove } = mockStorage();
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Delete Car" }));
+    await user.click(screen.getByRole("button", { name: "Yes, Delete" }));
+
+    expect(await screen.findByText("You don't have permission to do that.")).toBeInTheDocument();
+    expect(remove).not.toHaveBeenCalled();
+  });
+
   it("the confirmation lists everything the delete takes with it", async () => {
     const user = userEvent.setup();
     mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });

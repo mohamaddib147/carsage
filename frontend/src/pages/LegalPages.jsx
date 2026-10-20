@@ -233,9 +233,8 @@ export function PrivacyPage() {
           <li>
             <strong>A car</strong> (Car Profile). This also permanently deletes that
             car&apos;s trips, fuel log entries, maintenance items with their history,
-            and expenses. Your AI Advisor conversations are kept, no longer linked to
-            a car. The car&apos;s photo file is not removed from file storage when the
-            car is deleted; to remove it, use Remove photo first.
+            expenses, and its photo file. Your AI Advisor conversations are kept, no
+            longer linked to a car.
           </li>
           <li>
             <strong>A car&apos;s photo</strong> (Car Profile, Remove photo). The photo

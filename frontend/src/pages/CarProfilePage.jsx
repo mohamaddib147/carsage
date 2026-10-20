@@ -409,7 +409,8 @@ function CarProfilePage() {
    * maintenance items (and their history) and expenses go with it through
    * ON DELETE CASCADE; Advisor conversations are kept (SET NULL). The
    * confirmation copy below lists all of it, since fuel log entries can't be
-   * deleted any other way. */
+   * deleted any other way. The car's photo file is not covered by any
+   * cascade, so it is removed from Storage once the row is gone. */
   async function handleDelete() {
     setDeleteError("");
     setDeleting(true);
@@ -419,6 +420,7 @@ function CarProfilePage() {
         setDeleteError(describeActionError(error, "Could not delete this car. Please try again."));
         return;
       }
+      await deleteCarPhoto(car.photo_path);
       navigate("/dashboard", { replace: true });
     } finally {
       setDeleting(false);

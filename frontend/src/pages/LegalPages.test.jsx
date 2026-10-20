@@ -161,15 +161,15 @@ describe("legal pages", () => {
     expect(document.body.textContent).not.toMatch(/name and address/i);
   });
 
-  it("Deleting your data matches what the app can delete (no fuel log deletion; car photo file kept on car delete)", async () => {
+  it("Deleting your data matches what the app can delete (no fuel log deletion; a car delete removes its photo file)", async () => {
     renderAt("/privacy");
 
     await screen.findByRole("heading", { name: "Deleting your data" });
     const text = document.body.textContent;
     expect(text).not.toMatch(/delete individual cars and fuel logs/);
     expect(text).toMatch(/You can.t delete these in the app: individual fuel log entries, saved trips, AI Advisor conversations, or your account/);
-    expect(text).toMatch(/permanently deletes that car.s trips, fuel log entries, maintenance items with their history, and expenses/);
-    expect(text).toMatch(/photo file is not removed from file storage when the car is deleted/);
+    expect(text).toMatch(/permanently deletes that car.s trips, fuel log entries, maintenance items with their history, expenses, and its photo file/);
+    expect(text).not.toMatch(/photo file is not removed/);
   });
 
   it("each page carries its own last-updated date (the policy change doesn't move the Terms date)", async () => {
