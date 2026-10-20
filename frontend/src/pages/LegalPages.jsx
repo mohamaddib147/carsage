@@ -3,13 +3,14 @@
 // soon" placeholders with real, plain-language content describing what
 // CarSage actually does and which third-party services it calls, not a
 // substitute for review by a lawyer, but accurate to the running app
-// rather than a generic template. LAST_UPDATED is a single source so both
-// pages (and a future changelog) stay in sync.
+// rather than a generic template. Each page has its own "last updated"
+// date, since a change to one doesn't mean the other changed too.
 
 import { Link } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 
 const LAST_UPDATED = "September 2026";
+const PRIVACY_LAST_UPDATED = "20 October 2026";
 
 /**
  * Terms of Service page.
@@ -106,7 +107,7 @@ export function PrivacyPage() {
   return (
     <PageShell
       title="Privacy Policy"
-      description={`Last updated: ${LAST_UPDATED}`}
+      description={`Last updated: ${PRIVACY_LAST_UPDATED}`}
     >
       <div className="legal-content">
         <p>
@@ -154,12 +155,16 @@ export function PrivacyPage() {
           <li>
             <strong>Google Gemini and Groq</strong>: the AI models used to classify a
             described car issue and generate AI Advisor guidance. The issue
-            description you type is sent to whichever of these is available.
-            Gemini is also used, when you choose to scan a registration card
-            on Car Onboarding, to read that photo and extract your car's
-            make, model, year, VIN and license plate; the photo itself is
-            never stored, only the resulting fields, which you can review
-            and edit before saving.
+            description you type is sent to Gemini, or to Groq if Gemini is
+            unavailable. CarSage uses Google&apos;s free (unpaid) tier of the
+            Gemini API. Under Google&apos;s terms for that tier, Google may use the
+            content submitted to it to provide, improve and develop its products
+            and services, and human reviewers may read it, so please don&apos;t
+            include personal details in your description. See Google&apos;s{" "}
+            <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener noreferrer">
+              Gemini API Additional Terms of Service
+            </a>{" "}
+            (&quot;Unpaid Services&quot;, &quot;How Google Uses Your Data&quot;).
           </li>
           <li>
             <strong>YouTube Data API</strong>: used to find a relevant tutorial video

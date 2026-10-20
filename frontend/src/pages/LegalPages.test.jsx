@@ -130,4 +130,27 @@ describe("legal pages", () => {
     expect(screen.getByText("Google Maps & Places")).toBeInTheDocument();
     expect(screen.getByText(/NHTSA/)).toBeInTheDocument();
   });
+
+  it("Privacy Policy says the typed Advisor text goes to Gemini's free tier (Groq as fallback), with the terms link, and no registration card", async () => {
+    renderAt("/privacy");
+
+    expect(await screen.findByText(/sent to Gemini, or to Groq if Gemini is unavailable/)).toBeInTheDocument();
+    expect(screen.getByText(/free \(unpaid\) tier of the/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Gemini API Additional Terms of Service" })).toHaveAttribute(
+      "href",
+      "https://ai.google.dev/gemini-api/terms",
+    );
+    expect(document.body.textContent).not.toMatch(/registration card/i);
+    expect(document.body.textContent).not.toMatch(/name and address/i);
+  });
+
+  it("each page carries its own last-updated date (the Terms date is unchanged)", async () => {
+    renderAt("/privacy");
+    expect(await screen.findByText("Last updated: 20 October 2026")).toBeInTheDocument();
+  });
+
+  it("the Terms of Service date is unchanged", async () => {
+    renderAt("/terms");
+    expect(await screen.findByText("Last updated: September 2026")).toBeInTheDocument();
+  });
 });
