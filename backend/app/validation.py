@@ -29,24 +29,12 @@ MAX_MESSAGE_TEXT_CHARS = 8000
 # A manual fuel price override, LBP per liter (real prices are ~1.4e5).
 MAX_FUEL_PRICE_LBP = 10_000_000
 
-# CAR-57 registration-card scan: a generous cap for a phone camera photo
-# (a modern phone photo is typically 2-6 MB) without allowing something
-# absurd through to the Gemini vision call. Mirrors the frontend
-# (src/lib/limits.js). HEIC/HEIF covers an iPhone camera's default format.
-MAX_REGISTRATION_IMAGE_BYTES = 8 * 1024 * 1024
-ALLOWED_REGISTRATION_IMAGE_TYPES = {
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/heic",
-    "image/heif",
-}
-
-# Fuel-log camera (pump / odometer scans). Same byte cap as the
-# registration-card scan; HEIC/HEIF are deliberately NOT included here —
-# unlike that scan, these images are re-encoded by Pillow
-# (app/services/image_validation.py) before reaching Gemini, and Pillow
-# has no built-in HEIC/HEIF decoder.
+# Fuel-log camera (pump / odometer scans): a generous cap for a phone
+# camera photo (typically 2-6 MB) without letting something absurd through
+# to the Gemini vision call. Mirrors the frontend (src/lib/fuelCamera.js).
+# HEIC/HEIF are deliberately NOT included: these images are re-encoded by
+# Pillow (app/services/image_validation.py) before reaching Gemini, and
+# Pillow has no built-in HEIC/HEIF decoder.
 MAX_FUEL_PHOTO_BYTES = 8 * 1024 * 1024
 ALLOWED_FUEL_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
 

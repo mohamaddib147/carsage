@@ -169,10 +169,9 @@ def post_classify_issue(
     if not car_data:
         raise HTTPException(status_code=404, detail="Car not found.")
 
-    # Shares the same Gemini key (and quota) as the fuel-log camera and
-    # registration scan, so the same per-user/global daily cap applies
-    # here (advisor, app/services/usage_limiter.py). Unlike those two
-    # photo features, this FAILS OPEN if the usage table/trigger itself
+    # Shares the same Gemini key (and quota) as the fuel-log camera, so the
+    # same per-user/global daily cap applies here (advisor,
+    # app/services/usage_limiter.py). Unlike the camera, this FAILS OPEN if the usage table/trigger itself
     # fails for any reason other than the limit genuinely being hit:
     # blocking car-safety advice over a usage-counter hiccup is worse
     # than under-counting it for a few requests. A genuine limit hit is

@@ -1,14 +1,14 @@
 # Isolates all LLM calls behind this module (classify_issue for the AI
 # Advisor, estimate_tank_capacity for Car Onboarding's autofill,
-# extract_registration_fields for CAR-57's registration-card scan), so the
+# extract_pump_fields / extract_odometer_fields for the Fuel Log camera), so the
 # rest of the app never talks to a provider directly and the
 # provider could be swapped without touching the router. Gemini is the
 # primary provider; Groq is an automatic fallback used only when Gemini
 # returns a 429 (rate limit). Both providers are prompted for the exact
 # same JSON shape so the caller never has to know which one answered.
-# extract_registration_fields is the one exception: it sends an image,
-# and Groq's configured model (GROQ_MODEL) has no vision capability, so
-# there is no fallback for that call — see its own docstring.
+# The two photo readers are the exception: they send an image, and Groq's
+# configured model (GROQ_MODEL) has no vision capability, so there is no
+# fallback for them — see _call_gemini_vision's docstring.
 
 import base64
 import json
@@ -18,7 +18,6 @@ import re
 import httpx
 
 from app.config import GEMINI_API_KEY, GEMINI_VISION_API_KEY, GROQ_API_KEY
-from app.validation import MAX_CAR_YEAR, MIN_CAR_YEAR
 
 logger = logging.getLogger(__name__)
 
@@ -72,43 +71,11 @@ TANK_SYSTEM_PROMPT = (
 MIN_TANK_LITERS = 5
 MAX_TANK_LITERS = 200
 
-# CAR-57 registration-card scan: reads only vehicle-identification fields
-# from a photographed registration document, never the owner's personal
-# details (name, address) even when they're visible on the card — those
-# are irrelevant to Car Onboarding's form and out of scope to even ask
-# for. "readable": false signals the photo isn't a recognizable
-# registration document at all (blank, unrelated, or unreadable), distinct
-# from a genuine document with some fields the model just couldn't make
-# out (those come back null individually rather than failing the whole
-# response).
-REGISTRATION_SCAN_SYSTEM_PROMPT = (
-    "You are reading a photograph of a vehicle registration document to "
-    "extract identification fields for a car-tracking app.\n\n"
-    "Extract ONLY these fields: the vehicle's make, model, model year, "
-    "VIN (vehicle identification number), and license plate number.\n\n"
-    "Do NOT extract, mention, or infer the owner's name, address, or any "
-    "other personal information, even if it is visible on the document — "
-    "it is not needed and must never appear in your answer.\n\n"
-    "If the photo is not recognizable as a vehicle registration document "
-    "at all (e.g. it's blank, unrelated, or too unclear to identify as "
-    "one), set \"readable\" to false and every field to null. Otherwise "
-    "set \"readable\" to true, and set any individual field you cannot "
-    "make out to null rather than guessing.\n\n"
-    "Respond with ONLY a JSON object, no other text and no markdown code "
-    "fences, in exactly this shape:\n"
-    '{"readable": true or false, "make": string or null, "model": string '
-    'or null, "year": integer or null, "vin": string or null, '
-    '"license_plate": string or null}'
-)
-REGISTRATION_SCAN_FAILURE_MESSAGE = (
-    "Could not read that image right now. Please try again or enter details manually."
-)
-
-# Fuel-log camera (CAR-N, Step 2): reads a photo of a pump's display
+# Fuel-log camera (Step 2, no Jira task yet): reads a photo of a pump's display
 # (total liters + total price) or a car's odometer, to prefill the Fuel
 # Log form. Same "readable: false when unrecognizable, individual nulls
-# for a field the model can't make out" contract as the registration scan
-# above — never guesses.
+# for a field the model can't make out" contract throughout — never
+# guesses.
 PUMP_SCAN_SYSTEM_PROMPT = (
     "You are reading a photograph of a fuel pump's display to help someone "
     "log a fill-up.\n\n"
@@ -276,12 +243,12 @@ def _call_gemini_vision(
     image_bytes: bytes,
     mime_type: str,
     system_prompt: str,
-    prompt_text: str = "Read this vehicle registration document.",
-    failure_message: str = REGISTRATION_SCAN_FAILURE_MESSAGE,
+    prompt_text: str,
+    failure_message: str,
     timeout: float = 25.0,
 ) -> str:
     """
-    Calls Gemini with an image attached (CAR-57), same request shape as
+    Calls Gemini with an image attached, same request shape as
     _call_gemini but with an inline_data part alongside the text prompt.
     Raises LLMError directly on any failure — unlike _call_gemini, this
     never triggers the Groq fallback, since Groq's configured model
@@ -450,87 +417,13 @@ def estimate_tank_capacity(make: str, model: str, year: int) -> float | None:
     return _parse_tank_response(raw_text)
 
 
-_REGISTRATION_STRING_FIELDS = ("make", "model", "vin", "license_plate")
-_EMPTY_REGISTRATION_FIELDS = {
-    "readable": False,
-    "make": None,
-    "model": None,
-    "year": None,
-    "vin": None,
-    "license_plate": None,
-}
-
-
-def _parse_registration_fields(text: str) -> dict:
-    """
-    Parses a registration-scan reply into the fixed field shape. Any
-    missing, malformed, or implausible field is dropped to null (or the
-    whole thing to _EMPTY_REGISTRATION_FIELDS) rather than ever guessing
-    — same defensive posture as _parse_tank_response.
-    """
-    if not text:
-        return dict(_EMPTY_REGISTRATION_FIELDS)
-
-    cleaned = _strip_code_fence(text)
-
-    try:
-        parsed = json.loads(cleaned)
-    except (json.JSONDecodeError, TypeError):
-        return dict(_EMPTY_REGISTRATION_FIELDS)
-
-    if not isinstance(parsed, dict) or parsed.get("readable") is not True:
-        return dict(_EMPTY_REGISTRATION_FIELDS)
-
-    result = {"readable": True}
-    for field in _REGISTRATION_STRING_FIELDS:
-        value = parsed.get(field)
-        result[field] = value.strip() if isinstance(value, str) and value.strip() else None
-
-    year = parsed.get("year")
-    result["year"] = (
-        year
-        if isinstance(year, int) and not isinstance(year, bool) and MIN_CAR_YEAR <= year <= MAX_CAR_YEAR
-        else None
-    )
-
-    return result
-
-
-def extract_registration_fields(image_bytes: bytes, mime_type: str) -> dict:
-    """
-    Reads a photographed vehicle registration document (CAR-57) and
-    extracts make/model/year/VIN/license plate for Car Onboarding's
-    scan-to-fill feature. The image is used only for this one call and is
-    never stored by this function or anything it calls.
-
-    Args:
-        image_bytes: The raw uploaded image bytes.
-        mime_type: The image's content type (already validated by the
-            caller against ALLOWED_REGISTRATION_IMAGE_TYPES).
-
-    Returns:
-        {"readable": bool, "make": str|None, "model": str|None,
-         "year": int|None, "vin": str|None, "license_plate": str|None}.
-        "readable" is False (with every field None) when the photo isn't
-        recognizable as a registration document, or when the reply
-        couldn't be confidently parsed — never guesses.
-
-    Raises:
-        LLMError: if Gemini itself couldn't be reached or answered at
-            all. There is no Groq fallback for this call (see
-            _call_gemini_vision's docstring).
-    """
-    raw_text = _call_gemini_vision(image_bytes, mime_type, REGISTRATION_SCAN_SYSTEM_PROMPT)
-    return _parse_registration_fields(raw_text)
-
-
 _EMPTY_PUMP_FIELDS = {"readable": False, "liters": None, "total_price": None, "currency": None}
 
 
 def _parse_pump_fields(text: str) -> dict:
     """Parses a pump-scan reply into the fixed field shape, dropping any
     missing/malformed/implausible field to null rather than ever
-    guessing — same defensive posture as _parse_registration_fields."""
+    guessing."""
     if not text:
         return dict(_EMPTY_PUMP_FIELDS)
 

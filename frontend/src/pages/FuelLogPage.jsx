@@ -405,8 +405,8 @@ function FuelLogPage() {
    * Handles a pump photo picked via the "Scan Pump" button (Step 2). Fills
    * Liters and Cost (and the currency selector, if a currency was read off
    * the photo -- needed so the filled Cost number isn't mislabeled) only
-   * when they're currently empty, same merge-if-empty pattern as CAR-57's
-   * registration-card scan. Never saves anything itself -- the user still
+   * when they're currently empty, so a value the user typed is never
+   * overwritten. Never saves anything itself -- the user still
    * reviews and submits the form.
    * @param {import('react').ChangeEvent<HTMLInputElement>} event
    */

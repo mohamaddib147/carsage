@@ -53,7 +53,7 @@ def test_a_different_feature_is_read_separately_even_while_cached():
     mock_supabase = _mock_supabase({"per_user_daily": 20, "global_daily": 150})
     with patch("app.services.ai_limits.supabase", mock_supabase):
         ai_limits.get_limit("camera")
-        ai_limits.get_limit("registration_scan")
+        ai_limits.get_limit("advisor")
 
     assert mock_supabase.table.call_count == 2
 

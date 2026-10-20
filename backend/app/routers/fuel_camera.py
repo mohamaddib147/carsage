@@ -2,7 +2,7 @@
 # Jira task yet): read a photo of a fuel pump's display or a car's
 # odometer via Gemini vision (app/services/llm_client.py) to prefill the
 # Fuel Log form. Same "the image is read for this one request and never
-# persisted" contract as CAR-57's registration-card scan.
+# persisted" contract throughout.
 #
 # Both endpoints are the "camera" feature for AI-usage limiting
 # (app/services/usage_limiter.py, enforced by a database trigger on

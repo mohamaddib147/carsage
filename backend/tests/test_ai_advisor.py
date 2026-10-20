@@ -722,9 +722,9 @@ class TestIdAndStorageValidation:
 
 
 class TestAdvisorUsageLimiting:
-    """The Advisor shares its Gemini quota with the camera/registration-scan
-    features (app/services/usage_limiter.py). A genuine limit hit is a 429
-    like everywhere else; unlike camera/registration-scan, any OTHER usage
+    """The Advisor shares its Gemini quota with the fuel-log camera
+    (app/services/usage_limiter.py). A genuine limit hit is a 429 like
+    everywhere else; unlike the camera, any OTHER usage
     check failure FAILS OPEN here -- it's logged, and classification still
     goes ahead, since blocking car-safety advice over a usage-counter
     hiccup is worse than under-counting it."""

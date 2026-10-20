@@ -492,10 +492,8 @@ textarea:focus {
   background-color: var(--color-border);
 }
 
-/* CAR-57 registration-card scan: the "Scan Registration Card" card above
-   the manual form, and the divider under it. Reinstates the shape the
-   earlier disabled placeholder had (removed in the site-audit pass) now
-   that "Scan Document" does something real. */
+/* Camera-scan card: an icon, a title and description, and the button that
+   opens the camera. Used by the Fuel Log's pump and odometer scans. */
 .scan-card {
   display: flex;
   align-items: center;
@@ -541,8 +539,7 @@ textarea:focus {
   cursor: pointer;
 }
 
-/* Shown beside every camera-scan button (registration card, fuel pump,
-   odometer): a one-line disclosure that the photo is sent to Google's
+/* Shown beside every camera-scan button (fuel pump, odometer): a one-line disclosure that the photo is sent to Google's
    Gemini API, sourced from Gemini's own API Additional Terms of Service
    (see lib/geminiPrivacyNotice.js). */
 .camera-privacy-note {
@@ -552,9 +549,8 @@ textarea:focus {
   font-size: 0.75rem;
 }
 
-/* The Fuel Log's pump/odometer scan cards sit between other form fields
-   rather than above the whole form, so they need less surrounding space
-   than CAR-57's original full-width one. */
+/* The Fuel Log's pump/odometer scan cards sit between other form fields,
+   so they need less surrounding space than a standalone card. */
 .scan-card--compact {
   margin-top: 0;
   margin-bottom: calc(var(--spacing-unit) * 1);
@@ -563,27 +559,6 @@ textarea:focus {
 .btn-accent--loading {
   opacity: 0.7;
   cursor: default;
-}
-
-.form-divider {
-  display: flex;
-  align-items: center;
-  gap: calc(var(--spacing-unit) * 2);
-  margin: calc(var(--spacing-unit) * 3) 0;
-  max-width: 640px;
-  color: var(--color-text-muted);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.form-divider::before,
-.form-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background-color: var(--color-border);
 }
 
 .btn-block {

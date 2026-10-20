@@ -26,7 +26,7 @@ It was built as a capstone project (React + FastAPI + Supabase). Fuel prices are
 
 | Feature | What it does |
 |---|---|
-| **Car Onboarding** | Add your car with a short form. Type the make, model and year and CarSage fills in engine type, fuel efficiency, cylinders, drivetrain, transmission and fuel tank size for you. You can change any of it. (Scanning a registration card is shown as "coming soon".) |
+| **Car Onboarding** | Add your car with a short form. Type the make, model and year and CarSage fills in engine type, fuel efficiency, cylinders, drivetrain, transmission and fuel tank size for you. You can change any of it. |
 | **Car Profile** | See every saved spec for your car, edit any of them, or delete the car. |
 | **Trip Planner** | Enter where you start and where you are going. You get the distance, the driving time with live traffic, the fuel cost, and the cost of a full tank, plus a map of the route. It compares light traffic with current traffic. |
 | **AI Advisor** | Describe a car problem in plain words. You get a clear "DIY Fixable" or "See a Mechanic" verdict with short guidance, and a tutorial video for DIY fixes. Answers are checked against official US recall and complaint data first. Your conversation is saved. |
@@ -127,7 +127,7 @@ Copy each `.env.example` to `.env` and fill it in. **Never commit a `.env` file*
 | `SUPABASE_SERVICE_KEY` | Yes | The Supabase **service role** key. It bypasses Row Level Security, so keep it on the server only and never put it in the frontend. |
 | `GOOGLE_MAPS_API_KEY` | Yes | Google Cloud key with the **Directions API** enabled. Used for routes and traffic-adjusted travel time. |
 | `GEMINI_API_KEY` | Yes | Google AI Studio key for the AI Advisor (primary model) and the tank-size estimate fallback. |
-| `GEMINI_VISION_API_KEY` | No | A separate Gemini key just for vision calls (registration-card scan, fuel-log camera). Without it, those calls reuse `GEMINI_API_KEY`. |
+| `GEMINI_VISION_API_KEY` | No | A separate Gemini key just for vision calls (the fuel-log camera). Without it, those calls reuse `GEMINI_API_KEY`. |
 | `GROQ_API_KEY` | No | Groq key. If Gemini is busy or unavailable the AI Advisor falls back to Groq. Without it, that case shows a clear error instead. |
 | `API_NINJAS_KEY` | No | API Ninjas key for car spec autofill (cylinders, drivetrain, transmission). Without it the form is simply filled in by hand or from the other free sources. |
 | `YOUTUBE_API_KEY` | No | YouTube Data API v3 key for DIY video suggestions. Without it the advisor answers without a video. |
@@ -229,7 +229,6 @@ The FastAPI service is used by the frontend; it is not meant to be called by han
 | `POST /trip-planner/estimate` | The full trip estimate for one of your cars; saves the trip. |
 | `GET /trip-planner/fuel-prices` | Current fuel prices per fuel type (LBP and USD). |
 | `GET /cars/spec-suggestions` | Best-effort spec autofill for a make, model and year. |
-| `POST /cars/scan-registration` | Reads a photographed registration card and extracts make, model, year, VIN and license plate. |
 | `POST /ai-advisor/classify` | Sends a described problem to the AI Advisor and saves the conversation. |
 | `POST /fuel-log/scan-pump` | Reads a photographed fuel pump display and extracts liters, total price and currency. |
 | `POST /fuel-log/scan-odometer` | Reads a photographed odometer display and extracts the reading. |

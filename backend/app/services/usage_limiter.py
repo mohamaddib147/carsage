@@ -1,5 +1,5 @@
 # Atomic per-user and global daily usage limiting for Gemini-backed
-# features (camera, advisor, registration_scan), enforced by a Postgres
+# features (camera, advisor), enforced by a Postgres
 # trigger on api_usage / api_usage_global
 # (docs/db_migrations/2026-10-20_ai_camera_usage_limits.sql) — this module
 # never computes or checks a count itself, only upserts and reacts to the
@@ -12,7 +12,7 @@
 # backend-invoked stored procedure, but not a trigger fired by a plain
 # write).
 #
-# Camera and registration_scan FAIL CLOSED on anything other than the
+# The camera FAILS CLOSED on anything other than the
 # limit actually being hit (UsageCheckFailed): a real database/network
 # problem means "can't read photos right now, enter it manually" — a photo
 # feature whose usage counter might be broken is not safe to let through
@@ -95,8 +95,8 @@ def record_global_usage(feature: str) -> None:
     """
     Same as record_usage, but for the feature-wide counter
     (api_usage_global), enforced by api_usage_global_enforce_limit. A
-    feature whose api_limits.global_daily is NULL (advisor,
-    registration_scan) is never blocked by this — see that function's own
+    feature whose api_limits.global_daily is NULL (advisor) is never
+    blocked by this — see that function's own
     comment — it is only ever hit for camera today.
     """
     try:
