@@ -16,7 +16,8 @@
 # CAR-61: the estimate uses the car's REAL km/L (worked out from the caller's
 # own Fuel Log odometer readings for that car, see
 # app/services/real_efficiency.py) once it rests on at least
-# MIN_INTERVALS_FOR_ESTIMATE valid intervals; otherwise the rated
+# MIN_INTERVALS_FOR_ESTIMATE fill-ups after the first and MIN_DISTANCE_KM_FOR_ESTIMATE
+# km of measured driving; otherwise the rated
 # `cars.fuel_efficiency`, exactly as before. The response says which one was
 # used (`efficiency_source`) and the figure (`efficiency_km_per_l`).
 
@@ -34,7 +35,11 @@ from app.services.fuel_prices import (
     lbp_to_usd,
 )
 from app.services.google_maps import GoogleMapsError, get_route_summary
-from app.services.real_efficiency import MIN_INTERVALS_FOR_ESTIMATE, real_efficiency
+from app.services.real_efficiency import (
+    MIN_DISTANCE_KM_FOR_ESTIMATE,
+    MIN_INTERVALS_FOR_ESTIMATE,
+    real_efficiency,
+)
 from app.supabase_client import supabase
 from app.validation import FuelPriceLbp, PlaceText, RecordId
 
@@ -253,7 +258,8 @@ def post_estimate(
     (distance_km / km_per_liter) * fuel_price_per_liter,
     and saves the result as a new row in `trips`. km_per_liter is the car's
     real average from its Fuel Log when that rests on at least
-    MIN_INTERVALS_FOR_ESTIMATE valid intervals (CAR-61), else its rated
+    MIN_INTERVALS_FOR_ESTIMATE fill-ups after the first and
+    MIN_DISTANCE_KM_FOR_ESTIMATE km of measured driving (CAR-61), else its rated
     fuel_efficiency.
 
     Requires a valid Supabase session (Authorization: Bearer <jwt>) so
@@ -281,11 +287,18 @@ def post_estimate(
     if not car_data:
         raise HTTPException(status_code=404, detail="Car not found.")
 
-    # CAR-61: real average if there is enough Fuel Log data, else rated. The
-    # rated-only error below is unchanged and only reached when there isn't.
+    # CAR-61: real average if there is enough Fuel Log data, else rated. "Enough"
+    # is at least MIN_INTERVALS_FOR_ESTIMATE fill-ups after the first AND at least
+    # MIN_DISTANCE_KM_FOR_ESTIMATE km measured, so a handful of short hops can't set
+    # the figure. The rated-only error below is unchanged and only reached when
+    # there isn't enough.
     real = _real_efficiency_for_car(user_id, str(payload.car_id))
     real_interval_count = real["interval_count"] if real else 0
-    if real and real_interval_count >= MIN_INTERVALS_FOR_ESTIMATE:
+    if (
+        real
+        and real_interval_count >= MIN_INTERVALS_FOR_ESTIMATE
+        and real["distance_km"] >= MIN_DISTANCE_KM_FOR_ESTIMATE
+    ):
         fuel_efficiency = real["km_per_liter"]
         efficiency_source = "real"
     else:

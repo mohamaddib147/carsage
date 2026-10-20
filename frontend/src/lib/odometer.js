@@ -2,21 +2,27 @@
 // since the previous fill-up, real-world km/L per fill-up and on average, and the
 // car's latest reading. Pure functions; pages/FuelLogPage.jsx wires them up.
 //
-// ASSUMPTION (fill-to-full): every fill-up fills the tank to full. Only then does
-// the fuel put in at a fill-up equal the fuel burned since the previous one, so
-// the km/L of the interval ending at fill-up N is
-//   (odometer at N - odometer at N-1) / liters at N.
-// There is no "full tank" flag on `fuel_logs`; the Fuel Log page says this to the
-// user under its history table.
+// NO FULL-TANK ASSUMPTION. The average is total km driven / total liters put in,
+// over "runs" of consecutive fill-ups that all have odometer readings. Within a run
+// the distance is (last reading - first reading) and the liters are the sum of every
+// fill-up's liters EXCEPT the first: the fuel added at a run's first fill-up was
+// burned before the run began, so it only anchors the odometer; every later fill-up's
+// fuel is what carried the car across the measured distance. A partial fill just
+// shifts fuel between one interval and the next, and those shifts cancel over a run,
+// so the user does NOT have to fill to full. (Summing each valid step's
+// (distance, later-liters) pair is the same number as the per-run formula, which is
+// how this is computed.)
 //
-// An interval counts only when the two fill-ups are adjacent in date order and BOTH
-// have a reading (an older fill-up with no reading between them breaks the chain
-// rather than being skipped, since skipping it would ignore its fuel and overstate
-// km/L), the reading went up, and the result is a plausible 2-40 km/L (catches an
-// extra digit, miles mixed with km, a partial fill-up). The average is total km /
-// total liters, weighted by distance.
+// A run breaks (and a new one starts) when a fill-up has no reading, the reading did
+// not go up, or the step's km/L is outside MIN_PLAUSIBLE..MAX_PLAUSIBLE (an extra
+// digit, miles mixed with km, or an extreme partial fill) -- that one step is left
+// out so a single bad reading can't poison the average.
 //
-// Mirrors backend/app/services/real_efficiency.py; change the two together.
+// The per-fill-up km/L in the table is a ROUGH guide only (a partial fill makes it
+// swing); the run average is the reliable number.
+//
+// Mirrors backend/app/services/real_efficiency.py; change the two together (a parity
+// test on shared fixtures guards that they agree).
 
 import { LIMITS } from "./limits.js";
 import { formatFillDate, sortFillUps } from "./fuelLog.js";
@@ -24,8 +30,12 @@ import { formatFillDate, sortFillUps } from "./fuelLog.js";
 export const MIN_PLAUSIBLE_KM_PER_L = 2;
 export const MAX_PLAUSIBLE_KM_PER_L = 40;
 
-/** Trip Planner only uses the real average once it rests on this many valid intervals. */
+// Trip Planner uses the real average only once it rests on at least this many fill-ups
+// after the first AND this many km of measured driving (both floors; see the backend
+// gate in trip_planner.py, which is the authority). These two constants drive the
+// Fuel Log's "starts using it after..." message.
 export const MIN_INTERVALS_FOR_TRIP_PLANNER = 3;
+export const MIN_DISTANCE_FOR_TRIP_PLANNER = 500;
 
 /**
  * A fill-up's odometer reading as a number, or null when it has none (legacy rows)
@@ -159,10 +169,13 @@ export function distanceSincePrevious(text, date, entries, litersText = "") {
 }
 
 /**
- * Real km/L for each fill-up that closes a measured interval.
+ * Rough per-fill-up km/L for each fill-up that closes a measured step (distance since
+ * the previous reading / this fill-up's liters). This is only a guide for the table:
+ * a partial fill makes an individual figure swing; the run average (realEfficiency)
+ * is the reliable number.
  * @param {object[]} entries - one car's fill-ups, any order.
  * @returns {Map<string, { distanceKm: number, kmPerLiter: number, plausible: boolean }>}
- *   keyed by entry id; a fill-up with no interval (first one, no reading, or the
+ *   keyed by entry id; a fill-up with no step (first one, no reading, or the
  *   previous fill-up has none) is simply absent.
  */
 export function fillUpEfficiencies(entries) {
@@ -185,10 +198,12 @@ export function fillUpEfficiencies(entries) {
 }
 
 /**
- * The car's real-world km/L over every valid interval (weighted by distance).
+ * The car's real-world km/L: total measured km / total liters over the valid steps
+ * (see the module header for why this needs no full tank). intervalCount is the number
+ * of fill-ups after the first that were measured.
  * @param {object[]} entries - ONE car's fill-ups.
  * @returns {{ kmPerLiter: number, intervalCount: number, distanceKm: number } | null}
- *   null when there is no valid interval yet (never NaN or 0).
+ *   null when there is no valid step yet (never NaN or 0).
  */
 export function realEfficiency(entries) {
   let distanceKm = 0;

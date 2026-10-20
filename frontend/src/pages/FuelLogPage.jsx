@@ -24,9 +24,9 @@
 // typo would otherwise block every correct reading after it and fill-ups can't be
 // edited. The form also shows the distance since the last reading so a typo
 // stands out. The table
-// gains Odometer and km/L columns, and the chart section a "real average" line
-// (lib/odometer.js). km/L assumes every fill-up fills the tank to full; that
-// assumption is stated to the user under the table.
+// gains Odometer and km/L columns (the per-row km/L is a rough guide), and the chart
+// section a "real average" line (lib/odometer.js) which is total km / total liters and
+// needs no full tank -- see that module's header.
 
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -64,6 +64,7 @@ import {
   formatKmPerLiter,
   getOdometerError,
   getOdometerOrderWarning,
+  MIN_DISTANCE_FOR_TRIP_PLANNER,
   MIN_INTERVALS_FOR_TRIP_PLANNER,
   readingOf,
   realEfficiency,
@@ -74,14 +75,17 @@ const ENTRY_COLUMNS = "id, filled_at, liters, cost_amount, cost_currency, create
 
 /**
  * "Your real average: 9.0 km/L (rated: 12.0 km/L)" under the chart, plus whether
- * Trip Planner uses it yet. Renders nothing until there is a measured interval.
- * @param {{ real: { kmPerLiter: number, intervalCount: number } | null, ratedKmPerLiter: number | null }} props
+ * Trip Planner uses it yet. Renders nothing until there is a measured step.
+ * @param {{ real: { kmPerLiter: number, intervalCount: number, distanceKm: number } | null, ratedKmPerLiter: number | null }} props
  * @returns {JSX.Element | null}
  */
 function RealAverageLine({ real, ratedKmPerLiter }) {
   if (!real) return null;
   const rated = Number(ratedKmPerLiter);
-  const remaining = MIN_INTERVALS_FOR_TRIP_PLANNER - real.intervalCount;
+  // Trip Planner needs enough fill-ups AND enough distance (both floors).
+  const trusted =
+    real.intervalCount >= MIN_INTERVALS_FOR_TRIP_PLANNER && real.distanceKm >= MIN_DISTANCE_FOR_TRIP_PLANNER;
+  const fillUps = `${real.intervalCount} measured ${real.intervalCount === 1 ? "fill-up" : "fill-ups"}`;
   return (
     <div className="fuel-log-real-average">
       <p className="fuel-log-real-average__figure">
@@ -91,9 +95,9 @@ function RealAverageLine({ real, ratedKmPerLiter }) {
           : " (no rated figure set for this car)"}
       </p>
       <p className="fuel-log-real-average__note">
-        {remaining > 0
-          ? `Based on ${real.intervalCount} measured ${real.intervalCount === 1 ? "fill-up" : "fill-ups"}. Trip Planner starts using it after ${MIN_INTERVALS_FOR_TRIP_PLANNER}.`
-          : `Based on ${real.intervalCount} measured fill-ups. Trip Planner uses it for your cost estimates.`}
+        {trusted
+          ? `Based on ${fillUps} over ${formatKm(real.distanceKm)}. Trip Planner uses it for your cost estimates.`
+          : `Based on ${fillUps} over ${formatKm(real.distanceKm)}. Trip Planner starts using it after ${MIN_INTERVALS_FOR_TRIP_PLANNER} fill-ups and ${formatKm(MIN_DISTANCE_FOR_TRIP_PLANNER)}.`}
       </p>
     </div>
   );
@@ -621,8 +625,9 @@ function FuelLogPage() {
               </tbody>
             </table>
             <p className="fuel-log-table__caption">
-              km/L is worked out between two fill-ups in a row that both have an odometer
-              reading, and assumes you fill the tank to full each time.
+              The km/L on each row is a rough guide between two fill-ups with odometer
+              readings; a partial fill makes it swing. The average shown above the chart
+              is the reliable figure, and you do not have to fill the tank to full.
             </p>
           </div>
         )}

@@ -1580,7 +1580,7 @@ describe("TripPlannerPage — which km/L the estimate used (CAR-61)", () => {
     await planTrip({ ...ESTIMATE_90K, efficiency_source: "rated", efficiency_km_per_l: 12, real_interval_count: 2 });
 
     expect(basisLine()).toHaveTextContent(
-      "Based on the car's rated 12.0 km/L. Your Fuel Log has 2 measured fill-ups; estimates switch to your real average at 3.",
+      "Based on the car's rated 12.0 km/L. Your Fuel Log has 2 measured fill-ups; estimates switch to your real average once there are 3 over 500 km.",
     );
   });
 

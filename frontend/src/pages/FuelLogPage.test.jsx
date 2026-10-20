@@ -901,7 +901,7 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
 
     expect(odometerCells()).toEqual([["-", "-"], ["-", "-"]]);
     expect(screen.queryByText(/Your real average/)).not.toBeInTheDocument();
-    expect(screen.getByText(/assumes you fill the tank to full each time/)).toBeInTheDocument();
+    expect(screen.getByText(/you do not have to fill the tank to full/)).toBeInTheDocument();
   });
 
   it("shows km/L on the later of two readings and the real vs rated average (normal case)", async () => {
@@ -913,7 +913,7 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     // Newest first: the 9 Oct fill-up closes the 360 km / 40 L interval.
     expect(odometerCells()).toEqual([["84,610 km", "9.0"], ["84,250 km", "-"]]);
     expect(averageBlock()).toHaveTextContent("Your real average: 9.0 km/L (rated: 12.0 km/L)");
-    expect(averageBlock()).toHaveTextContent("Based on 1 measured fill-up. Trip Planner starts using it after 3.");
+    expect(averageBlock()).toHaveTextContent("Based on 1 measured fill-up over 360 km. Trip Planner starts using it after 3 fill-ups and 500 km.");
   });
 
   it("says so plainly when the car has no rated figure, never NaN or 0", async () => {

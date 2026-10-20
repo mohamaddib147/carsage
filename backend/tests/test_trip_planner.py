@@ -571,16 +571,17 @@ class TestDirectionsInputValidation:
 # CAR-61: real km/L from the Fuel Log vs the car's rated fuel_efficiency.
 #
 # Numbers are picked so using the WRONG source gives a visibly different cost:
-# rated = 12 km/L, real = 9 km/L (every interval is 90 km on 10 L), a 90 km
+# rated = 12 km/L, real = 9 km/L (every interval is 180 km on 20 L), a 90 km
 # trip at 100,000 LBP/L costs 750,000 LBP on rated vs 1,000,000 LBP on real.
+# 3 intervals of 180 km = 540 km, clearing the 500 km Trip Planner floor.
 # ---------------------------------------------------------------------------
 
 CAR_ID = "00000000-0000-4000-8000-000000000001"
 RATED = {"fuel_efficiency": 12, "fuel_type": "Gasoline"}
 
 
-def _fill_ups(intervals, start_km=10000, distance=90, liters=10):
-    """`intervals + 1` fill-ups for one car, each 90 km and 10 L apart (9 km/L)."""
+def _fill_ups(intervals, start_km=10000, distance=180, liters=20):
+    """`intervals + 1` fill-ups for one car, each 180 km and 20 L apart (9 km/L)."""
     return [
         {
             "filled_at": f"2026-09-{day + 1:02d}",
@@ -655,10 +656,19 @@ class TestEstimateRealVsRatedEfficiency:
         assert body["efficiency_source"] == "rated"
         assert body["real_interval_count"] == 0
 
+    def test_falls_back_to_rated_when_enough_fill_ups_but_under_the_distance_floor(self):
+        # 4 intervals (>= 3) but only 480 km measured (< 500 km floor): rated.
+        response, _ = _estimate(RATED, fuel_logs=_fill_ups(4, distance=120, liters=20))
+
+        body = response.json()
+        assert body["real_interval_count"] == 4
+        assert body["efficiency_source"] == "rated"
+        assert body["estimated_cost_lbp"] == 750000.0
+
     def test_an_implausible_interval_does_not_count_toward_the_three(self):
         rows = _fill_ups(2)  # two valid 9 km/L intervals
-        # A third reading with an extra digit: (100,800 - 10,180) / 10 L = 9,062 km/L.
-        rows.append({"filled_at": "2026-09-04", "created_at": "2026-09-04T10:00:00+00:00", "liters": 10, "odometer_km": 100800})
+        # A third reading with an extra digit is an implausible step and is excluded.
+        rows.append({"filled_at": "2026-09-04", "created_at": "2026-09-04T10:00:00+00:00", "liters": 20, "odometer_km": 1008000})
         response, _ = _estimate(RATED, fuel_logs=rows)
 
         body = response.json()

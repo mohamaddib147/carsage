@@ -80,7 +80,11 @@ import { apiFetch } from "../lib/apiClient.js";
 import { LIMITS, getFuelPriceError } from "../lib/limits.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { getTrafficLevel } from "../lib/trafficLevel.js";
-import { formatKmPerLiter, MIN_INTERVALS_FOR_TRIP_PLANNER } from "../lib/odometer.js";
+import {
+  formatKmPerLiter,
+  MIN_DISTANCE_FOR_TRIP_PLANNER,
+  MIN_INTERVALS_FOR_TRIP_PLANNER,
+} from "../lib/odometer.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 
 /**
@@ -109,8 +113,8 @@ function EfficiencyBasis({ result }) {
       {intervals > 0 ? (
         <>
           Your <Link to="/fuel-log">Fuel Log</Link> has {intervals} measured{" "}
-          {intervals === 1 ? "fill-up" : "fill-ups"}; estimates switch to your real average at{" "}
-          {MIN_INTERVALS_FOR_TRIP_PLANNER}.
+          {intervals === 1 ? "fill-up" : "fill-ups"}; estimates switch to your real average once
+          there are {MIN_INTERVALS_FOR_TRIP_PLANNER} over {MIN_DISTANCE_FOR_TRIP_PLANNER} km.
         </>
       ) : (
         <>

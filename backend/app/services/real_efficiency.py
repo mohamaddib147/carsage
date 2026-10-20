@@ -1,29 +1,35 @@
 """Works out a car's real-world fuel efficiency (km/L) from its Fuel Log odometer readings (CAR-61).
 
-ASSUMPTION (fill-to-full): every fill-up fills the tank to full. Only then does
-the fuel put in at a fill-up equal the fuel burned since the previous one, so
-the km/L of the interval ending at fill-up N is
+NO FULL-TANK ASSUMPTION. The average is total km driven / total liters put in, over
+"runs" of consecutive fill-ups that all have odometer readings. Within a run the
+distance is (last reading - first reading) and the liters are the sum of every
+fill-up's liters EXCEPT the first: the fuel added at the first fill-up of a run was
+burned before the run began (we have no distance for it), so it only anchors the
+odometer. Every later fill-up's fuel is what carried the car across the measured
+distance.
 
-    (odometer at N - odometer at N-1) / liters at N
+Why this works without filling to full: a partial fill just shifts fuel between one
+interval and the next (you measure a bit less distance for the liters you added this
+time, a bit more next time). Over a run those shifts cancel, because the total liters
+added between the first and last reading is exactly the fuel that produced the total
+distance (the tank's start and end levels differ by at most a tank, which is small
+against a run of several fill-ups). Summing the per-interval (distance, later-liters)
+pairs is algebraically the same number as the per-run formula, which is what this
+module does.
 
-There is no "full tank" flag on `fuel_logs`; the Fuel Log page states this
-assumption to the user under its history table. A partial fill-up makes its
-interval read too high, which is one reason implausible intervals are dropped.
+A run is broken (and a new one started) when:
+  * a fill-up has no odometer reading (we can't measure across it);
+  * the reading did not go up (a lower or equal reading is a typo or a swapped car,
+    not a distance);
+  * the step's km/L is outside MIN_PLAUSIBLE_KM_PER_L..MAX_PLAUSIBLE_KM_PER_L (an
+    extra digit, miles vs km, or an extreme partial fill) -- that one step is
+    excluded so a single bad reading can't poison the average.
 
-An interval only counts when:
-  * both fill-ups are adjacent in date order AND both have an odometer reading
-    (an older fill-up with no reading in between breaks the chain instead of
-    being skipped over, because skipping it would ignore that fill-up's fuel
-    and overstate km/L);
-  * the reading went up (a lower or equal reading is a typo, not a distance);
-  * the resulting km/L is between MIN_PLAUSIBLE_KM_PER_L and
-    MAX_PLAUSIBLE_KM_PER_L (catches an extra digit, readings typed in miles
-    on one fill-up and km on the next, and partial fill-ups).
+The per-fill-up figure shown in the table is a ROUGH guide only (a partial fill makes
+it swing); the run average is the reliable number.
 
-The average is total km / total liters over the valid intervals (weighted by
-distance), not a mean of per-interval ratios, so one short hop can't skew it.
-
-Mirrors frontend/src/lib/odometer.js; change the two together.
+Mirrors frontend/src/lib/odometer.js; change the two together (a parity test on
+shared fixtures, backend/tests/fixtures/efficiency_cases.json, guards that they agree).
 """
 
 import math
@@ -32,9 +38,11 @@ from typing import Any
 MIN_PLAUSIBLE_KM_PER_L = 2.0
 MAX_PLAUSIBLE_KM_PER_L = 40.0
 
-# Trip Planner only trusts the real average once it rests on this many valid
-# intervals; below that it keeps using the car's rated fuel_efficiency.
+# Trip Planner trusts the real average only once it rests on at least this many
+# fill-ups after the first (i.e. this many measured intervals) AND this many km of
+# measured driving; below either floor it keeps using the car's rated fuel_efficiency.
 MIN_INTERVALS_FOR_ESTIMATE = 3
+MIN_DISTANCE_KM_FOR_ESTIMATE = 500.0
 
 
 def _number(value: Any) -> float | None:
@@ -62,7 +70,13 @@ def _chronological(rows: list[dict]) -> list[dict]:
 
 def valid_intervals(rows: list[dict]) -> list[tuple[float, float]]:
     """
-    The usable (distance_km, liters) intervals between consecutive fill-ups.
+    The usable (distance_km, liters) steps between consecutive fill-ups.
+
+    Each step pairs two adjacent fill-ups (date order) and contributes the distance
+    between their readings and the LATER fill-up's liters (the first fill-up of any
+    run is only ever a `previous`, so its liters are never counted -- this is the
+    "exclude the first fill-up's liters" rule). A step that breaks a run (see the
+    module docstring) is simply left out, which also starts the next run.
 
     Args:
         rows: one car's `fuel_logs` rows, in any order, each with filled_at,
@@ -70,7 +84,7 @@ def valid_intervals(rows: list[dict]) -> list[tuple[float, float]]:
 
     Returns:
         A list of (distance_km, liters) pairs, oldest first; empty when no
-        interval qualifies (see the module docstring for the rules).
+        step qualifies.
     """
     intervals: list[tuple[float, float]] = []
     ordered = _chronological(rows)
@@ -91,7 +105,7 @@ def valid_intervals(rows: list[dict]) -> list[tuple[float, float]]:
 
 def real_efficiency(rows: list[dict]) -> dict | None:
     """
-    The car's real-world km/L over all valid intervals.
+    The car's real-world km/L: total measured km / total liters (see module docstring).
 
     Args:
         rows: one car's `fuel_logs` rows (the caller must already have scoped
@@ -99,9 +113,10 @@ def real_efficiency(rows: list[dict]) -> dict | None:
 
     Returns:
         {"km_per_liter": float, "interval_count": int, "distance_km": float},
-        or None when there is no valid interval at all. Callers decide
-        whether interval_count is enough to rely on (see
-        MIN_INTERVALS_FOR_ESTIMATE).
+        or None when there is no valid step at all. interval_count is the number
+        of fill-ups after the first that were measured. Callers decide whether
+        that and distance_km are enough to rely on (see MIN_INTERVALS_FOR_ESTIMATE
+        and MIN_DISTANCE_KM_FOR_ESTIMATE).
     """
     intervals = valid_intervals(rows)
     if not intervals:
