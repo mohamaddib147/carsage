@@ -33,7 +33,7 @@ describe("categories", () => {
     expect(EXPENSE_CATEGORIES.map((category) => category.key)).toEqual([
       "repair", "maintenance", "insurance", "registration", "parking", "car_wash", "tolls", "fines", "other",
     ]);
-    expect(categoryLabel("registration")).toBe("Registration / Mécanique");
+    expect(categoryLabel("registration")).toBe("Registration / Inspection");
     expect(categoryLabel("car_wash")).toBe("Car wash");
     expect(categoryLabel("fines")).toBe("Fines");
   });

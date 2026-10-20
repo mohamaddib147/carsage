@@ -432,7 +432,7 @@ describe("DashboardPage — Maintenance card (CAR-62)", () => {
           data: [
             dateItem("ok", "car-a", "Brake check", "2026-09-01"),
             kmItem("soon", "car-b", "Toyota oil", 10000), // due at 15,000; car B is at 14,800
-            dateItem("late", "car-a", "Mécanique inspection", "2025-10-01"), // due 1 Oct: overdue
+            dateItem("late", "car-a", "Vehicle inspection", "2025-10-01"), // due 1 Oct: overdue
           ],
           error: null,
         },
@@ -441,10 +441,10 @@ describe("DashboardPage — Maintenance card (CAR-62)", () => {
     );
     renderDashboard();
 
-    await within(await screen.findByRole("region", { name: "Maintenance due" })).findByText("Mécanique inspection");
+    await within(await screen.findByRole("region", { name: "Maintenance due" })).findByText("Vehicle inspection");
     const links = within(card()).getAllByRole("link").filter((link) => link.classList.contains("dashboard-maintenance__item"));
     expect(links.map((link) => link.textContent)).toEqual([
-      "OverdueMécanique inspection2005 Mercedes-Benz C23018 days overdue",
+      "OverdueVehicle inspection2005 Mercedes-Benz C23018 days overdue",
       "Due soonToyota oil2020 Toyota Corolla200 km left",
     ]);
     expect(links[0]).toHaveAttribute("href", "/maintenance?car=car-a#maintenance-item-late");

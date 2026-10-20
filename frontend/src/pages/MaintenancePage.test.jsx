@@ -170,7 +170,7 @@ describe("MaintenancePage — empty states", () => {
     renderPage();
 
     expect(await screen.findByText("Nothing tracked yet")).toBeInTheDocument();
-    for (const name of ["Oil change", "Tire rotation", "Brake check", "Mécanique inspection", "Insurance renewal"]) {
+    for (const name of ["Oil change", "Tire rotation", "Brake check", "Vehicle inspection", "Insurance renewal"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
     expect(screen.getByText("No odometer reading yet for this car.")).toBeInTheDocument();
@@ -249,7 +249,7 @@ describe("MaintenancePage — adding an item", () => {
     const calls = mockDatabase();
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: "Mécanique inspection" }));
+    await user.click(await screen.findByRole("button", { name: "Vehicle inspection" }));
     fireEvent.change(screen.getByLabelText("Last done on *"), { target: { value: "2026-10-20" } });
     await user.click(screen.getByRole("button", { name: "Save item" }));
 
@@ -289,7 +289,7 @@ describe("MaintenancePage — status and order", () => {
         "car-1": [
           item({ id: "ok", name: "Brake check", interval_km: null, interval_months: 12, baseline_date: "2026-09-01", baseline_km: null }),
           item({ id: "soon", name: "Insurance renewal", interval_km: null, interval_months: 12, baseline_date: "2025-10-25", baseline_km: null }), // due 25 Oct: 6 days
-          item({ id: "late", name: "Mécanique inspection", interval_km: null, interval_months: 12, baseline_date: "2025-10-01", baseline_km: null }), // due 1 Oct
+          item({ id: "late", name: "Vehicle inspection", interval_km: null, interval_months: 12, baseline_date: "2025-10-01", baseline_km: null }), // due 1 Oct
         ],
       },
     });
@@ -297,11 +297,11 @@ describe("MaintenancePage — status and order", () => {
     await screen.findByRole("heading", { name: "Brake check" });
 
     expect(cards()).toEqual([
-      { name: "Mécanique inspection", badge: "Overdue" },
+      { name: "Vehicle inspection", badge: "Overdue" },
       { name: "Insurance renewal", badge: "Due soon" },
       { name: "Brake check", badge: "OK" },
     ]);
-    expect(cardFor("Mécanique inspection")).toHaveTextContent("Next due: 1 Oct 2026 (18 days overdue)");
+    expect(cardFor("Vehicle inspection")).toHaveTextContent("Next due: 1 Oct 2026 (18 days overdue)");
     expect(cardFor("Insurance renewal")).toHaveTextContent("(6 days left)");
   });
 

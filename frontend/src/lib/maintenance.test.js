@@ -201,7 +201,7 @@ describe("PRESETS", () => {
       { name: "Oil change", intervalKm: 5000, intervalMonths: 6 },
       { name: "Tire rotation", intervalKm: 10000, intervalMonths: null },
       { name: "Brake check", intervalKm: 20000, intervalMonths: 12 },
-      { name: "Mécanique inspection", intervalKm: null, intervalMonths: 12 },
+      { name: "Vehicle inspection", intervalKm: null, intervalMonths: 12 },
       { name: "Insurance renewal", intervalKm: null, intervalMonths: 12 },
     ]);
   });
@@ -294,7 +294,7 @@ describe("dashboardMaintenance (across cars)", () => {
   });
 
   it("lists Overdue before Due soon and leaves OK items out", () => {
-    const overdue = { id: "d1", car_id: "car-a", name: "Mecanique", interval_km: null, interval_months: 12, baseline_date: "2025-09-01", baseline_km: null, maintenance_records: [] };
+    const overdue = { id: "d1", car_id: "car-a", name: "Vehicle inspection", interval_km: null, interval_months: 12, baseline_date: "2025-09-01", baseline_km: null, maintenance_records: [] };
     const ok = { id: "o1", car_id: "car-a", name: "Brakes", interval_km: null, interval_months: 12, baseline_date: "2026-09-01", baseline_km: null, maintenance_records: [] };
     const result = dashboardMaintenance([kmItem("a1", "car-a", 84000), ok, overdue], readings, TODAY);
 

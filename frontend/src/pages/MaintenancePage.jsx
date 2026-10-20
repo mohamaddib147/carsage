@@ -1,5 +1,5 @@
 // Maintenance screen (CAR-62, `/maintenance`): a car's recurring service items (oil,
-// tires, brakes, the yearly mécanique, insurance, or anything custom), each due by km,
+// tires, brakes, the yearly vehicle inspection, insurance, or anything custom), each due by km,
 // by months, or both, sorted by urgency with an Overdue / Due soon / OK badge (or "Add
 // an odometer reading" for a km-based item on a car with no reading). The due logic and
 // thresholds live in lib/maintenance.js; the car's current km comes from the CAR-61

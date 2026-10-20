@@ -1,5 +1,5 @@
 // Expenses screen (CAR-64, `/expenses`, in the header's "My Car" menu): a car's
-// non-fuel costs (repair, maintenance, insurance, registration / mécanique, parking,
+// non-fuel costs (repair, maintenance, insurance, registration / inspection, parking,
 // car wash, tolls, fines, other) and its monthly cost of ownership, fuel included.
 //
 // Expenses are read and written straight to `car_expenses` through Supabase: row-level

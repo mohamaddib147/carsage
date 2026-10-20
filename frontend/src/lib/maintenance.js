@@ -56,7 +56,7 @@ export const PRESETS = [
   { name: "Oil change", intervalKm: 5000, intervalMonths: 6 },
   { name: "Tire rotation", intervalKm: 10000, intervalMonths: null },
   { name: "Brake check", intervalKm: 20000, intervalMonths: 12 },
-  { name: "Mécanique inspection", intervalKm: null, intervalMonths: 12 },
+  { name: "Vehicle inspection", intervalKm: null, intervalMonths: 12 },
   { name: "Insurance renewal", intervalKm: null, intervalMonths: 12 },
 ];
 

@@ -364,7 +364,7 @@ function DashboardPage() {
           </p>
         ) : maintenance.total === 0 ? (
           <p className="dashboard-diy-empty">
-            Nothing tracked yet. Set up reminders for oil changes, the mécanique and more in{" "}
+            Nothing tracked yet. Set up reminders for oil changes, the yearly vehicle inspection and more in{" "}
             <Link to="/maintenance">Maintenance</Link>.
           </p>
         ) : (

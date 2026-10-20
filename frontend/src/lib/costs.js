@@ -24,7 +24,7 @@ export const EXPENSE_CATEGORIES = [
   { key: "repair", label: "Repair" },
   { key: "maintenance", label: "Maintenance" },
   { key: "insurance", label: "Insurance" },
-  { key: "registration", label: "Registration / Mécanique" },
+  { key: "registration", label: "Registration / Inspection" },
   { key: "parking", label: "Parking" },
   { key: "car_wash", label: "Car wash" },
   { key: "tolls", label: "Tolls" },

@@ -169,7 +169,7 @@ describe("ExpensesPage — adding an expense", () => {
 
     const select = await screen.findByLabelText("Category *");
     expect(within(select).getAllByRole("option").map((option) => option.textContent)).toEqual([
-      "Choose a category", "Repair", "Maintenance", "Insurance", "Registration / Mécanique", "Parking", "Car wash", "Tolls", "Fines", "Other",
+      "Choose a category", "Repair", "Maintenance", "Insurance", "Registration / Inspection", "Parking", "Car wash", "Tolls", "Fines", "Other",
     ]);
   });
 
