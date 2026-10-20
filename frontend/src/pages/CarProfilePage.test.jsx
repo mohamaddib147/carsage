@@ -579,6 +579,18 @@ describe("CarProfilePage — deleting (CAR-38)", () => {
     );
   });
 
+  it("the confirmation lists everything the delete takes with it", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Delete Car" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Delete this car? This also permanently deletes its trips, fuel log entries, maintenance items and their history, expenses, and photos. Your AI Advisor conversations are kept. This can't be undone.",
+    );
+  });
+
   it("does not delete when the confirmation is cancelled (edge case)", async () => {
     const user = userEvent.setup();
     const { delete: carDelete } = mockCarsTable({

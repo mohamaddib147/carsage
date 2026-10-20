@@ -405,10 +405,11 @@ function CarProfilePage() {
     setIsEditing(false);
   }
 
-  /** Deletes the current car (CAR-38). The `trips_car_id_fkey` and
-   * `advisor_conversations_car_id_fkey` foreign keys are CASCADE / SET
-   * NULL respectively, so this car's trip history goes with it — the
-   * confirmation copy below says so. */
+  /** Deletes the current car (CAR-38). Its trips, fuel log entries,
+   * maintenance items (and their history) and expenses go with it through
+   * ON DELETE CASCADE; Advisor conversations are kept (SET NULL). The
+   * confirmation copy below lists all of it, since fuel log entries can't be
+   * deleted any other way. */
   async function handleDelete() {
     setDeleteError("");
     setDeleting(true);
@@ -816,8 +817,9 @@ function CarProfilePage() {
       {confirmingDelete ? (
         <div className="profile-delete-confirm">
           <p role="alert">
-            Delete this car? Its trip history will be deleted too, and this
-            can't be undone.
+            Delete this car? This also permanently deletes its trips, fuel log
+            entries, maintenance items and their history, expenses, and photos.
+            Your AI Advisor conversations are kept. This can't be undone.
           </p>
           {deleteError && (
             <p role="alert" className="auth-form__error">
