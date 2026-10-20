@@ -523,6 +523,7 @@ function AIAdvisorPage() {
           value={description}
           onChange={(event) => setDescription(event.target.value)}
           disabled={submitting}
+          aria-describedby="advisorInputHint"
         />
         <button
           className="btn-primary"
@@ -532,6 +533,9 @@ function AIAdvisorPage() {
           Send
         </button>
       </form>
+      <p id="advisorInputHint" className="form-hint">
+        Don&apos;t include personal details such as names, license plates or phone numbers.
+      </p>
       <p className="advisor-disclaimer">
         AI-generated guidance, not a substitute for a professional
         inspection.

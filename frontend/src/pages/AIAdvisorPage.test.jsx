@@ -222,6 +222,16 @@ describe("AIAdvisorPage — chatting", () => {
     expect(screen.queryByText("See a Mechanic")).not.toBeInTheDocument();
   });
 
+  it("shows a hint under the input not to include personal details, tied to the input", async () => {
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
+    expect(input).toHaveAccessibleDescription(
+      "Don't include personal details such as names, license plates or phone numbers.",
+    );
+  });
+
   it("disables Send when the input is empty", async () => {
     mockSupabaseTables({ cars: [{ id: "car-1" }] });
     renderPage();
