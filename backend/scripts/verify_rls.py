@@ -26,6 +26,12 @@ uses — that:
      unlike every table above, these have NO owner at all -- RLS is on with zero
      policies, so a logged-in user gets exactly the same (total) refusal as anon.
      Only the backend's service-role key, which bypasses RLS, can read or write them.
+ 14. record-photos (Step 3): maintenance photos and expense receipts. The owner adds a row
+     (exact canonical path only), uploads, reads through a 5-minute signed URL, and can
+     remove a file after its row is gone; odd paths, a 4th photo, a 2nd receipt, edits,
+     overwrites, over-2-MB and non-JPEG files, the public URL, the 101st photo, user B and
+     anonymous visitors are all refused; undoing a completion and deleting a car queue
+     every path, and the drainer removes the files and empties the queue.
 It also asserts the key shipped to the browser is the `anon` key.
 Everything it creates is deleted at the end. Exit code is 1 on any gap.
 
@@ -106,6 +112,8 @@ def affected(r):
 
 
 A = B = None
+extra_users = []  # section 14's third user (the 100-photo cap)
+uploaded_paths = []  # every file section 14 put in record-photos, removed at the end
 try:
     A, B = make_user("a"), make_user("b")
     # Seed each user's rows with the service role (the backend writes trips/advisor rows this way).
@@ -492,17 +500,236 @@ try:
             check(f"{label} inserts into {table} -> refused", r.status_code >= 400, f"-> {r.status_code}")
     r = svc("GET", f"api_limits?select=feature&feature=eq.{rls_probe_feature}")
     check("none of the refused inserts above actually created a row", r.json() == [], str(r.json()))
-finally:
+    print("\n== 14. record-photos: maintenance photos and expense receipts (Step 3) ==")
+    from app.services.storage_cleanup import drain_storage_cleanup  # noqa: E402
+
+    def jpeg_bytes():
+        import io
+        from PIL import Image
+        buffer = io.BytesIO()
+        Image.new("RGB", (24, 24), (30, 120, 60)).save(buffer, "JPEG")
+        return buffer.getvalue()
+
+    JPEG = jpeg_bytes()
+
+    def st(who, method, path, **kw):
+        """A Storage API call as `who` (None = anonymous visitor)."""
+        token = who["tok"] if who else ANON
+        headers = {"apikey": ANON, "Authorization": f"Bearer {token}", **kw.pop("headers", {})}
+        return httpx.request(method, f"{URL}/storage/v1/{path}", headers=headers, timeout=60, **kw)
+
+    def upload(who, path, data=JPEG, content_type="image/jpeg", upsert=False):
+        r = st(who, "POST", f"object/record-photos/{path}", content=data,
+                  headers={"Content-Type": content_type, "x-upsert": "true" if upsert else "false"})
+        if r.status_code == 200:
+            uploaded_paths.append(path)
+        return r
+
+    def objects_in(prefix):
+        """What is really in the bucket under `prefix`, seen with the service key."""
+        r = httpx.post(f"{URL}/storage/v1/object/list/record-photos", headers=ADMIN, json={"prefix": prefix, "limit": 1000}, timeout=60)
+        return [o["name"] for o in r.json()] if r.status_code == 200 else None
+
+    def queued(prefix):
+        return [row["object_path"] for row in svc("GET", f"storage_cleanup_queue?select=object_path&object_path=like.{prefix}*").json()]
+
+    def drain_until_empty(prefix):
+        for _ in range(10):
+            if not queued(prefix):
+                return True
+            drain_storage_cleanup()
+        return not queued(prefix)
+
+    def photo_path(u, record, pid):
+        return f"{u['id']}/maintenance/{record}/{pid}.jpg"
+
+    def new_record(u, item):
+        return svc("POST", "maintenance_records", json={"user_id": u["id"], "item_id": item, "done_on": "2026-10-10"}).json()[0]["id"]
+
+    photo_item = {"name": "Photo test", "interval_months": 6, "baseline_date": "2026-01-01"}
     for u in (A, B):
+        u["pitem"] = svc("POST", "maintenance_items", json={"user_id": u["id"], "car_id": u["car"], **photo_item}).json()[0]["id"]
+        u["prec"] = new_record(u, u["pitem"])
+        u["pexp"] = svc("POST", "car_expenses", json={"user_id": u["id"], "car_id": u["car"], "spent_on": "2026-10-05", "category": "parking", "amount": 5, "currency": "USD"}).json()[0]["id"]
+
+    print("    -- positive controls --")
+    pid = str(uuid.uuid4())
+    a_path = photo_path(A, A["prec"], pid)
+    r = as_(A, "POST", "maintenance_record_photos", json={"id": pid, "user_id": A["id"], "record_id": A["prec"], "slot": 1, "storage_path": a_path})
+    works("A adds a photo row to HIS completion (canonical path)", r.status_code == 201, f"-> {r.status_code} {r.text[:90]}")
+    r = upload(A, a_path)
+    works("A uploads the file for that row", r.status_code == 200, f"-> {r.status_code} {r.text[:90]}")
+    r = st(A, "POST", f"object/sign/record-photos/{a_path}", json={"expiresIn": 300})
+    signed = r.json().get("signedURL") if r.status_code == 200 else None
+    works("A gets a 5-minute signed URL for HIS file", bool(signed), f"-> {r.status_code} {r.text[:90]}")
+    if signed:
+        r = httpx.get(f"{URL}/storage/v1{signed}", timeout=60)
+        works("the signed URL serves the JPEG", r.status_code == 200 and r.content == JPEG, f"-> {r.status_code}")
+    r = st(A, "POST", "object/list/record-photos", json={"prefix": f"{A['id']}/maintenance/{A['prec']}", "limit": 10})
+    works("A lists HIS folder and sees the file", r.status_code == 200 and any(o["name"] == f"{pid}.jpg" for o in r.json()), f"-> {r.status_code} {r.text[:90]}")
+    rid = str(uuid.uuid4())
+    a_receipt = f"{A['id']}/receipts/{A['pexp']}/{rid}.jpg"
+    r = as_(A, "POST", "car_expense_receipts", json={"id": rid, "user_id": A["id"], "expense_id": A["pexp"], "storage_path": a_receipt})
+    works("A adds a receipt row to HIS expense", r.status_code == 201, f"-> {r.status_code} {r.text[:90]}")
+    r = upload(A, a_receipt)
+    works("A uploads the receipt file", r.status_code == 200, f"-> {r.status_code} {r.text[:90]}")
+
+    print("    -- item (a): the owner removes a file AFTER its row is gone --")
+    tmp_rec = new_record(A, A["pitem"])
+    tid = str(uuid.uuid4())
+    t_path = photo_path(A, tmp_rec, tid)
+    as_(A, "POST", "maintenance_record_photos", json={"id": tid, "user_id": A["id"], "record_id": tmp_rec, "slot": 1, "storage_path": t_path})
+    upload(A, t_path)
+    r = as_(A, "DELETE", f"maintenance_record_photos?id=eq.{tid}")
+    works("A deletes the photo row", affected(r) == 1, f"-> {r.status_code}")
+    works("deleting the row queued its path (service role)", t_path in queued(A["id"]), str(queued(A["id"])))
+    r = st(A, "DELETE", "object/record-photos", json={"prefixes": [t_path]})
+    works("A removes the file after the row is gone (the API returns the removed object)", r.status_code == 200 and len(r.json()) == 1, f"-> {r.status_code} {r.text[:90]}")
+    works("the file is really gone (service role)", objects_in(f"{A['id']}/maintenance/{tmp_rec}") == [], str(objects_in(f"{A['id']}/maintenance/{tmp_rec}")))
+
+    print("    -- the database refuses a bad photo row --")
+    for label, path in [
+        ("'..' in the path", f"{A['id']}/maintenance/{A['prec']}/../{pid}.jpg"),
+        ("'//' in the path", f"{A['id']}//maintenance/{A['prec']}/{{id}}.jpg"),
+        ("an encoded slash (%2F)", f"{A['id']}%2Fmaintenance%2F{A['prec']}%2F{{id}}.jpg"),
+        ("an upper-case uuid", f"{A['id'].upper()}/maintenance/{A['prec']}/{{id}}.jpg"),
+        ("a .png extension", f"{A['id']}/maintenance/{A['prec']}/{{id}}.png"),
+        ("another user's id in the path", f"{B['id']}/maintenance/{A['prec']}/{{id}}.jpg"),
+        ("the receipts folder", f"{A['id']}/receipts/{A['prec']}/{{id}}.jpg"),
+    ]:
+        bad_id = str(uuid.uuid4())
+        r = as_(A, "POST", "maintenance_record_photos", json={"id": bad_id, "user_id": A["id"], "record_id": A["prec"], "slot": 2, "storage_path": path.replace("{id}", bad_id)})
+        check(f"A adds a photo row with {label}", r.status_code >= 400, f"-> {r.status_code} (row created!)")
+    for slot in (2, 3):
+        sid = str(uuid.uuid4())
+        r = as_(A, "POST", "maintenance_record_photos", json={"id": sid, "user_id": A["id"], "record_id": A["prec"], "slot": slot, "storage_path": photo_path(A, A["prec"], sid)})
+        works(f"A adds photo {slot} of 3 to the completion", r.status_code == 201, f"-> {r.status_code} {r.text[:90]}")
+    for label, slot in (("a 4th photo (slot 4)", 4), ("a second photo in a used slot", 2)):
+        sid = str(uuid.uuid4())
+        r = as_(A, "POST", "maintenance_record_photos", json={"id": sid, "user_id": A["id"], "record_id": A["prec"], "slot": slot, "storage_path": photo_path(A, A["prec"], sid)})
+        check(f"A adds {label} to one completion", r.status_code >= 400, f"-> {r.status_code}")
+    rid2 = str(uuid.uuid4())
+    r = as_(A, "POST", "car_expense_receipts", json={"id": rid2, "user_id": A["id"], "expense_id": A["pexp"], "storage_path": f"{A['id']}/receipts/{A['pexp']}/{rid2}.jpg"})
+    check("A adds a second receipt to one expense", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(A, "PATCH", f"maintenance_record_photos?id=eq.{pid}", json={"slot": 3})
+    check("even the OWNER cannot edit a photo row", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(A, "PATCH", f"car_expense_receipts?id=eq.{rid}", json={"storage_path": "x"})
+    check("even the OWNER cannot edit a receipt row", affected(r) in (0, None), f"-> {r.status_code}")
+
+    print("    -- user B against user A --")
+    bid = str(uuid.uuid4())
+    r = as_(B, "POST", "maintenance_record_photos", json={"id": bid, "user_id": A["id"], "record_id": A["prec"], "slot": 2, "storage_path": photo_path(A, A["prec"], bid)})
+    check("B adds a photo row with user_id = A", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "POST", "maintenance_record_photos", json={"id": bid, "user_id": B["id"], "record_id": A["prec"], "slot": 2, "storage_path": photo_path(B, A["prec"], bid)})
+    check("B adds HIS photo row to A's completion", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "POST", "car_expense_receipts", json={"id": bid, "user_id": B["id"], "expense_id": A["pexp"], "storage_path": f"{B['id']}/receipts/{A['pexp']}/{bid}.jpg"})
+    check("B adds a receipt to A's expense", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "GET", f"maintenance_record_photos?select=*&id=eq.{pid}")
+    check("B reads A's photo row", affected(r) == 0, f"-> {r.status_code} {r.text[:60]}")
+    r = upload(B, a_path, upsert=True)
+    check("B overwrites A's file", r.status_code >= 400, f"-> {r.status_code}")
+    r = upload(B, photo_path(A, A["prec"], str(uuid.uuid4())))
+    check("B uploads a new file into A's folder", r.status_code >= 400, f"-> {r.status_code}")
+    r = upload(B, photo_path(B, B["prec"], str(uuid.uuid4())))
+    check("B uploads into HIS OWN folder with no matching row", r.status_code >= 400, f"-> {r.status_code}")
+    r = st(B, "POST", "object/list/record-photos", json={"prefix": f"{A['id']}/maintenance/{A['prec']}", "limit": 10})
+    check("B lists A's folder -> nothing", r.status_code != 200 or r.json() == [], f"-> {r.status_code} {r.text[:90]}")
+    r = st(B, "POST", f"object/sign/record-photos/{a_path}", json={"expiresIn": 300})
+    check("B gets a signed URL for A's file", r.status_code >= 400, f"-> {r.status_code} {r.text[:90]}")
+    r = st(B, "GET", f"object/authenticated/record-photos/{a_path}")
+    check("B downloads A's file", r.status_code >= 400, f"-> {r.status_code}")
+    r = st(B, "DELETE", "object/record-photos", json={"prefixes": [a_path]})
+    check("B deletes A's file (API answer)", r.status_code >= 400 or r.json() == [], f"-> {r.status_code} {r.text[:90]}")
+    check("A's file is still there after B's attempts (service role)", f"{pid}.jpg" in (objects_in(f"{A['id']}/maintenance/{A['prec']}") or []))
+
+    print("    -- the owner and the bucket's own limits --")
+    r = upload(A, a_path)
+    check("A uploads over HIS existing file (no overwrite)", r.status_code >= 400, f"-> {r.status_code}")
+    r = upload(A, a_path, upsert=True)
+    check("A upserts over HIS existing file (no UPDATE policy)", r.status_code >= 400, f"-> {r.status_code}")
+    lim_rec = new_record(A, A["pitem"])
+    big_id, png_id = str(uuid.uuid4()), str(uuid.uuid4())
+    for slot, xid in ((1, big_id), (2, png_id)):
+        as_(A, "POST", "maintenance_record_photos", json={"id": xid, "user_id": A["id"], "record_id": lim_rec, "slot": slot, "storage_path": photo_path(A, lim_rec, xid)})
+    r = upload(A, photo_path(A, lim_rec, big_id), data=JPEG + b"\0" * (2 * 1024 * 1024))
+    check("the bucket refuses a file over 2 MB", r.status_code >= 400, f"-> {r.status_code} {r.text[:90]}")
+    r = upload(A, photo_path(A, lim_rec, png_id), content_type="image/png")
+    check("the bucket refuses a non-JPEG file", r.status_code >= 400, f"-> {r.status_code} {r.text[:90]}")
+    r = httpx.get(f"{URL}/storage/v1/object/public/record-photos/{a_path}", timeout=60)
+    check("the bucket's public URL serves nothing (private bucket)", r.status_code >= 400, f"-> {r.status_code}")
+
+    print("    -- anonymous visitors --")
+    r = st(None, "POST", "object/list/record-photos", json={"prefix": A["id"], "limit": 10})
+    check("anon lists the bucket", r.status_code != 200 or r.json() == [], f"-> {r.status_code} {r.text[:60]}")
+    r = st(None, "GET", f"object/authenticated/record-photos/{a_path}")
+    check("anon reads A's file", r.status_code >= 400, f"-> {r.status_code}")
+    r = upload(None, photo_path(A, A["prec"], str(uuid.uuid4())))
+    check("anon uploads a file", r.status_code >= 400, f"-> {r.status_code}")
+    r = st(None, "DELETE", "object/record-photos", json={"prefixes": [a_path]})
+    check("anon deletes A's file", r.status_code >= 400 or r.json() == [], f"-> {r.status_code}")
+    r = as_(None, "POST", "maintenance_record_photos", json={"user_id": A["id"], "record_id": A["prec"], "slot": 2, "storage_path": "x"})
+    check("anon inserts a photo row", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(None, "GET", "car_expense_receipts?select=*")
+    check("anon reads receipt rows", affected(r) in (0, None), f"-> {r.status_code}")
+
+    print("    -- the 100-photo cap (photos + receipts, per user) --")
+    C = make_user("c")
+    extra_users.append(C)
+    C["car"] = svc("POST", "cars", json={"user_id": C["id"], "make": "Kia", "model": "Rio", "year": 2015, "fuel_type": "Gasoline"}).json()[0]["id"]
+    c_item = svc("POST", "maintenance_items", json={"user_id": C["id"], "car_id": C["car"], **photo_item}).json()[0]["id"]
+    c_records = svc("POST", "maintenance_records", json=[{"user_id": C["id"], "item_id": c_item, "done_on": "2026-10-10"} for _ in range(34)]).json()
+    seed = []
+    for n in range(99):
+        record = c_records[n // 3]["id"]
+        cid = str(uuid.uuid4())
+        seed.append({"id": cid, "user_id": C["id"], "record_id": record, "slot": n % 3 + 1, "storage_path": photo_path(C, record, cid)})
+    r = svc("POST", "maintenance_record_photos", json=seed)
+    works("(service role) C is seeded with 99 photo rows", r.status_code == 201, f"-> {r.status_code} {r.text[:90]}")
+    last_record = c_records[33]["id"]
+    for label, slot, ok in (("the 100th photo is accepted", 1, True), ("the 101st photo is refused (soft cap)", 2, False)):
+        cid = str(uuid.uuid4())
+        r = as_(C, "POST", "maintenance_record_photos", json={"id": cid, "user_id": C["id"], "record_id": last_record, "slot": slot, "storage_path": photo_path(C, last_record, cid)})
+        (works if ok else check)(label, (r.status_code == 201) if ok else (r.status_code >= 400), f"-> {r.status_code} {r.text[:90]}")
+
+    print("    -- Undo: undoing a completion queues its files, the drainer removes them --")
+    uid_ = str(uuid.uuid4())
+    b_path = photo_path(B, B["prec"], uid_)
+    as_(B, "POST", "maintenance_record_photos", json={"id": uid_, "user_id": B["id"], "record_id": B["prec"], "slot": 1, "storage_path": b_path})
+    works("B uploads a photo for HIS completion", upload(B, b_path).status_code == 200)
+    r = as_(B, "DELETE", f"maintenance_records?id=eq.{B['prec']}")
+    works("B undoes (deletes) the completion", affected(r) == 1, f"-> {r.status_code}")
+    works("the photo row went with it (cascade) and its path is queued", b_path in queued(B["id"]), str(queued(B["id"])))
+    works("the drainer empties B's queue", drain_until_empty(B["id"]), str(queued(B["id"])))
+    works("B's file is gone from the bucket (service role)", objects_in(f"{B['id']}/maintenance/{B['prec']}") == [], str(objects_in(f"{B['id']}/maintenance/{B['prec']}")))
+
+    print("    -- deleting a car cascades items -> completions -> photos and queues every path --")
+    a_paths = sorted(row["storage_path"] for row in svc("GET", f"maintenance_record_photos?select=storage_path&user_id=eq.{A['id']}").json())
+    a_paths += [row["storage_path"] for row in svc("GET", f"car_expense_receipts?select=storage_path&user_id=eq.{A['id']}").json()]
+    r = as_(A, "DELETE", f"cars?id=eq.{A['car']}")
+    works("A deletes HIS car", affected(r) == 1, f"-> {r.status_code}")
+    left_rows = svc("GET", f"maintenance_record_photos?select=id&user_id=eq.{A['id']}").json() + svc("GET", f"car_expense_receipts?select=id&user_id=eq.{A['id']}").json()
+    works("no photo or receipt rows are left for A", left_rows == [], str(left_rows))
+    works(f"every one of A's {len(a_paths)} paths is queued", sorted(a_paths) == sorted(queued(A["id"])), f"{len(queued(A['id']))} queued")
+    works("the drainer empties A's queue", drain_until_empty(A["id"]), f"{len(queued(A['id']))} still queued")
+    works("A's files are gone from the bucket (service role)", objects_in(f"{A['id']}/maintenance/{A['prec']}") == [] and objects_in(f"{A['id']}/receipts/{A['pexp']}") == [])
+
+finally:
+    for u in (A, B, *extra_users):
         if not u:
             continue
-        for table in ("car_expenses", "maintenance_records", "maintenance_items", "fuel_logs", "advisor_conversations", "trips", "cars"):
+        for table in ("car_expense_receipts", "maintenance_record_photos", "car_expenses", "maintenance_records", "maintenance_items", "fuel_logs", "advisor_conversations", "trips", "cars"):
             svc("DELETE", f"{table}?user_id=eq.{u['id']}")
         svc("DELETE", f"profiles?id=eq.{u['id']}")
         httpx.delete(f"{URL}/auth/v1/admin/users/{u['id']}", headers=ADMIN, timeout=30)
     # section 13's inserts should all have been refused, but clean up defensively anyway
     for table in ("api_usage", "api_usage_global", "api_limits"):
         svc("DELETE", f"{table}?feature=like.rls_probe_*")
+    # section 14: any file still in record-photos, then every queued path for these users
+    if uploaded_paths:
+        httpx.request("DELETE", f"{URL}/storage/v1/object/record-photos", headers=ADMIN, json={"prefixes": uploaded_paths}, timeout=60)
+    for u in (A, B, *extra_users):
+        if u:
+            svc("DELETE", f"storage_cleanup_queue?object_path=like.{u['id']}*")
     # also remove rows created by gap probes that reference the users' cars (cascade handles most)
     print(f"\ncleanup done. RESULT: {passes} blocked as required, {len(gaps)} GAP(S)")
     for g in gaps:

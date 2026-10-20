@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import ALLOWED_ORIGINS
 from app.routers import ai_advisor, car_specs, fuel_camera, health, trip_planner
+from app.services.storage_cleanup import maybe_drain_in_background
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,19 @@ async def hide_unexpected_errors(request: Request, call_next):
     except Exception:  # noqa: BLE001 - this is the last line of defence
         logger.exception("Unhandled error handling %s %s", request.method, request.url.path)
         return JSONResponse(status_code=500, content={"detail": UNEXPECTED_ERROR_MESSAGE})
+
+
+# Step 3: a request from a logged-in user (an Authorization header) may start
+# the photo-file cleanup in a background thread, at most once every 5 minutes
+# (app/services/storage_cleanup.py). Render's free tier has no cron, so live
+# traffic is the clock. It runs after the response is built and never affects it.
+@app.middleware("http")
+async def drain_photo_cleanup_queue(request: Request, call_next):
+    """Runs the request, then maybe starts a background cleanup drain."""
+    response = await call_next(request)
+    if request.headers.get("authorization"):
+        maybe_drain_in_background()
+    return response
 
 
 app.add_middleware(
