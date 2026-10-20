@@ -22,6 +22,10 @@ uses — that:
  12. car_expenses (CAR-64): owner-only read; an expense only on the caller's own car;
      the owner may delete one but nobody can edit one; nothing for anonymous visitors;
      the database's own limits, including the fixed category list.
+ 13. api_limits / api_usage / api_usage_global (AI usage limiting, no Jira task yet):
+     unlike every table above, these have NO owner at all -- RLS is on with zero
+     policies, so a logged-in user gets exactly the same (total) refusal as anon.
+     Only the backend's service-role key, which bypasses RLS, can read or write them.
 It also asserts the key shipped to the browser is the `anon` key.
 Everything it creates is deleted at the end. Exit code is 1 on any gap.
 
@@ -473,6 +477,21 @@ try:
         works(f"category '{category}' is accepted", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
     r = as_(A, "POST", "car_expenses", json={**good_expense, "amount": 0.01, "note": "x" * 300})
     works("boundaries accepted (0.01, a 300-character note)", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+
+    print("\n== 13. api_limits / api_usage / api_usage_global (AI usage limiting) ==")
+    rls_probe_feature = f"rls_probe_{uuid.uuid4().hex[:8]}"
+    for table, body in (
+        ("api_limits", {"feature": rls_probe_feature, "per_user_daily": 1}),
+        ("api_usage", {"user_id": A["id"], "feature": rls_probe_feature, "usage_date": "2026-01-01"}),
+        ("api_usage_global", {"feature": rls_probe_feature, "usage_date": "2026-01-01"}),
+    ):
+        for who, label in ((A, "a logged-in user"), (None, "anon")):
+            r = as_(who, "GET", f"{table}?select=*")
+            check(f"{label} reads {table} -> no rows visible", affected(r) in (0, None), f"-> {r.status_code} {r.text[:60]}")
+            r = as_(who, "POST", table, json=body)
+            check(f"{label} inserts into {table} -> refused", r.status_code >= 400, f"-> {r.status_code}")
+    r = svc("GET", f"api_limits?select=feature&feature=eq.{rls_probe_feature}")
+    check("none of the refused inserts above actually created a row", r.json() == [], str(r.json()))
 finally:
     for u in (A, B):
         if not u:
@@ -481,6 +500,9 @@ finally:
             svc("DELETE", f"{table}?user_id=eq.{u['id']}")
         svc("DELETE", f"profiles?id=eq.{u['id']}")
         httpx.delete(f"{URL}/auth/v1/admin/users/{u['id']}", headers=ADMIN, timeout=30)
+    # section 13's inserts should all have been refused, but clean up defensively anyway
+    for table in ("api_usage", "api_usage_global", "api_limits"):
+        svc("DELETE", f"{table}?feature=like.rls_probe_*")
     # also remove rows created by gap probes that reference the users' cars (cascade handles most)
     print(f"\ncleanup done. RESULT: {passes} blocked as required, {len(gaps)} GAP(S)")
     for g in gaps:

@@ -52,6 +52,7 @@ import {
   getRegistrationImageError,
 } from "../lib/limits.js";
 import { getCarPhotoError, uploadCarPhoto } from "../lib/carPhoto.js";
+import { GEMINI_PRIVACY_NOTICE } from "../lib/geminiPrivacyNotice.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 
 // How long to wait after the user stops typing Make/Model/Year before
@@ -569,6 +570,7 @@ function CarOnboardingPage() {
           disabled={scanLoading}
           onChange={handleScanFile}
         />
+        <p className="camera-privacy-note">{GEMINI_PRIVACY_NOTICE}</p>
       </div>
 
       <div className="form-divider">

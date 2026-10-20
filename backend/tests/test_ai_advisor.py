@@ -24,6 +24,7 @@ from fastapi.testclient import TestClient
 from app.auth import get_current_user_id
 from app.main import app
 from app.services.llm_client import LLMError
+from app.services.usage_limiter import UsageCheckFailed, UsageLimitExceeded
 
 client = TestClient(app)
 
@@ -33,6 +34,16 @@ def _default_no_safety_match():
     with patch(
         "app.routers.ai_advisor.check_safety_data", return_value={"status": "no_match"}
     ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _default_no_usage_limiting():
+    """Every test in this file except TestAdvisorUsageLimiting runs as
+    though the AI-usage-limit check always passes, so the rest of this
+    file's tests exercise exactly the same path they did before that
+    wiring existed."""
+    with patch("app.routers.ai_advisor.enforce_usage"):
         yield
 
 
@@ -708,3 +719,52 @@ class TestIdAndStorageValidation:
         assert response.status_code == 200
         saved_ai_message = [row for row in captured if row["sender"] == "ai"][0]
         assert len(saved_ai_message["message_text"]) == 8000
+
+
+class TestAdvisorUsageLimiting:
+    """The Advisor shares its Gemini quota with the camera/registration-scan
+    features (app/services/usage_limiter.py). A genuine limit hit is a 429
+    like everywhere else; unlike camera/registration-scan, any OTHER usage
+    check failure FAILS OPEN here -- it's logged, and classification still
+    goes ahead, since blocking car-safety advice over a usage-counter
+    hiccup is worse than under-counting it."""
+
+    VALID = "00000000-0000-4000-8000-000000000001"
+
+    def setup_method(self):
+        app.dependency_overrides[get_current_user_id] = lambda: "user-123"
+
+    def teardown_method(self):
+        app.dependency_overrides.pop(get_current_user_id, None)
+
+    def test_a_genuine_limit_hit_is_a_429_and_never_reaches_the_llm(self):
+        mock_supabase, _, _ = _build_mock_supabase({"make": "Toyota"})
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.enforce_usage",
+            side_effect=UsageLimitExceeded("You've reached today's limit of 60 for this feature. It resets at midnight Beirut time."),
+        ), patch("app.routers.ai_advisor.classify_issue") as mock_classify:
+            response = client.post(
+                "/ai-advisor/classify",
+                json={"car_id": self.VALID, "description": "squeaky brakes"},
+            )
+
+        assert response.status_code == 429
+        assert "resets at midnight Beirut time" in response.json()["detail"]
+        mock_classify.assert_not_called()
+
+    def test_the_usage_check_itself_failing_does_not_block_a_classification_FAILS_OPEN(self):
+        mock_supabase, captured, _ = _build_mock_supabase({"make": "Toyota"})
+        with patch("app.routers.ai_advisor.supabase", mock_supabase), patch(
+            "app.routers.ai_advisor.enforce_usage", side_effect=UsageCheckFailed("network blip")
+        ), patch(
+            "app.routers.ai_advisor.classify_issue",
+            return_value={"recommendation": "mechanic", "guidance": "See a mechanic."},
+        ) as mock_classify:
+            response = client.post(
+                "/ai-advisor/classify",
+                json={"car_id": self.VALID, "description": "squeaky brakes"},
+            )
+
+        assert response.status_code == 200
+        mock_classify.assert_called_once()
+        assert response.json()["recommendation"] == "mechanic"

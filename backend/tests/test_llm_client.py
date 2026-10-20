@@ -502,3 +502,113 @@ def test_extract_registration_fields_raises_on_an_unusable_gemini_200():
     with patch("app.services.llm_client.httpx.post", return_value=odd):
         with pytest.raises(LLMError):
             extract_registration_fields(b"fake-image-bytes", "image/jpeg")
+
+
+# --- Step 2: extract_pump_fields / extract_odometer_fields (fuel-log camera) -
+
+from app.services.llm_client import (  # noqa: E402
+    CAMERA_SCAN_FAILURE_MESSAGE,
+    _parse_odometer_fields,
+    _parse_pump_fields,
+    extract_odometer_fields,
+    extract_pump_fields,
+)
+
+
+def test_extract_pump_fields_returns_gemini_result_on_the_normal_path():
+    reply = json.dumps({"readable": True, "liters": 19.6, "total_price": 2_940_000, "currency": "LBP"})
+    with patch("app.services.llm_client.httpx.post", return_value=_gemini_reply(reply)) as mock_post:
+        result = extract_pump_fields(b"fake-image-bytes", "image/jpeg")
+
+    assert result == {"readable": True, "liters": 19.6, "total_price": 2_940_000.0, "currency": "LBP"}
+    sent = mock_post.call_args.kwargs["json"]
+    image_part = next(part for part in sent["contents"][0]["parts"] if "inline_data" in part)
+    assert base64.b64decode(image_part["inline_data"]["data"]) == b"fake-image-bytes"
+
+
+def test_extract_pump_fields_never_falls_back_to_groq(monkeypatch):
+    monkeypatch.setattr("app.services.llm_client.GROQ_API_KEY", "test-groq-key")
+    with patch(
+        "app.services.llm_client.httpx.post", return_value=MagicMock(status_code=429)
+    ) as mock_post:
+        with pytest.raises(LLMError) as excinfo:
+            extract_pump_fields(b"fake-image-bytes", "image/jpeg")
+
+    mock_post.assert_called_once()
+    assert str(excinfo.value) == CAMERA_SCAN_FAILURE_MESSAGE
+
+
+def test_parse_pump_fields_reports_unreadable_when_the_model_says_so():
+    reply = json.dumps({"readable": False, "liters": None, "total_price": None, "currency": None})
+    assert _parse_pump_fields(reply) == {
+        "readable": False, "liters": None, "total_price": None, "currency": None,
+    }
+
+
+@pytest.mark.parametrize("text", ["", "not json", "{broken", "null", "[]", '{"readable": false}'])
+def test_parse_pump_fields_defaults_to_unreadable_on_malformed_replies(text):
+    result = _parse_pump_fields(text)
+    assert result["readable"] is False
+
+
+@pytest.mark.parametrize(
+    "liters, expected",
+    [(19.6, 19.6), (0, None), (-5, None), (501, None), (True, None), ("19.6", None)],
+)
+def test_parse_pump_fields_range_checks_liters(liters, expected):
+    reply = json.dumps({"readable": True, "liters": liters, "total_price": 30, "currency": "USD"})
+    assert _parse_pump_fields(reply)["liters"] == expected
+
+
+@pytest.mark.parametrize("currency, expected", [("LBP", "LBP"), ("USD", "USD"), ("EUR", None), (None, None), (5, None)])
+def test_parse_pump_fields_only_accepts_lbp_or_usd_currency(currency, expected):
+    reply = json.dumps({"readable": True, "liters": 20, "total_price": 30, "currency": currency})
+    assert _parse_pump_fields(reply)["currency"] == expected
+
+
+def test_extract_odometer_fields_returns_gemini_result_on_the_normal_path():
+    reply = json.dumps({"readable": True, "odometer_km": 84610})
+    with patch("app.services.llm_client.httpx.post", return_value=_gemini_reply(reply)):
+        result = extract_odometer_fields(b"fake-image-bytes", "image/jpeg")
+
+    assert result == {"readable": True, "odometer_km": 84610}
+
+
+def test_extract_odometer_fields_never_falls_back_to_groq(monkeypatch):
+    monkeypatch.setattr("app.services.llm_client.GROQ_API_KEY", "test-groq-key")
+    with patch(
+        "app.services.llm_client.httpx.post", return_value=MagicMock(status_code=429)
+    ) as mock_post:
+        with pytest.raises(LLMError) as excinfo:
+            extract_odometer_fields(b"fake-image-bytes", "image/jpeg")
+
+    mock_post.assert_called_once()
+    assert str(excinfo.value) == CAMERA_SCAN_FAILURE_MESSAGE
+
+
+def test_parse_odometer_fields_reports_unreadable_when_the_model_says_so():
+    reply = json.dumps({"readable": False, "odometer_km": None})
+    assert _parse_odometer_fields(reply) == {"readable": False, "odometer_km": None}
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [(84610, 84610), (0, None), (-5, None), (2_000_001, None), (2_000_000, 2_000_000), (True, None), ("84610", None)],
+)
+def test_parse_odometer_fields_range_checks_the_reading(value, expected):
+    reply = json.dumps({"readable": True, "odometer_km": value})
+    assert _parse_odometer_fields(reply)["odometer_km"] == expected
+
+
+@pytest.mark.parametrize("text", ["", "not json", "{broken", "null", "[]", '{"readable": false}'])
+def test_parse_odometer_fields_defaults_to_unreadable_on_malformed_replies(text):
+    assert _parse_odometer_fields(text)["readable"] is False
+
+
+def test_pump_and_odometer_scans_use_the_vision_key_when_configured(monkeypatch):
+    monkeypatch.setattr("app.services.llm_client.GEMINI_VISION_API_KEY", "vision-only-key")
+    reply = json.dumps({"readable": True, "liters": 20, "total_price": 30, "currency": "USD"})
+    with patch("app.services.llm_client.httpx.post", return_value=_gemini_reply(reply)) as mock_post:
+        extract_pump_fields(b"fake-image-bytes", "image/jpeg")
+
+    assert mock_post.call_args.kwargs["params"]["key"] == "vision-only-key"

@@ -17,7 +17,7 @@ import re
 
 import httpx
 
-from app.config import GEMINI_API_KEY, GROQ_API_KEY
+from app.config import GEMINI_API_KEY, GEMINI_VISION_API_KEY, GROQ_API_KEY
 from app.validation import MAX_CAR_YEAR, MIN_CAR_YEAR
 
 logger = logging.getLogger(__name__)
@@ -104,6 +104,50 @@ REGISTRATION_SCAN_FAILURE_MESSAGE = (
     "Could not read that image right now. Please try again or enter details manually."
 )
 
+# Fuel-log camera (CAR-N, Step 2): reads a photo of a pump's display
+# (total liters + total price) or a car's odometer, to prefill the Fuel
+# Log form. Same "readable: false when unrecognizable, individual nulls
+# for a field the model can't make out" contract as the registration scan
+# above — never guesses.
+PUMP_SCAN_SYSTEM_PROMPT = (
+    "You are reading a photograph of a fuel pump's display to help someone "
+    "log a fill-up.\n\n"
+    "Extract ONLY these fields: the total liters dispensed this fill-up, "
+    "the total price charged, and the currency it's shown in if you can "
+    "tell (Lebanese pounds -- shown as \"LBP\" or \"LL\" -- or US dollars "
+    "-- shown as \"$\" or \"USD\").\n\n"
+    "If the photo is not recognizable as a fuel pump display at all (e.g. "
+    "it's blank, unrelated, or too unclear), set \"readable\" to false and "
+    "every field to null. Otherwise set \"readable\" to true, and set any "
+    "individual field you cannot make out to null rather than guessing.\n\n"
+    "Respond with ONLY a JSON object, no other text and no markdown code "
+    "fences, in exactly this shape:\n"
+    '{"readable": true or false, "liters": number or null, "total_price": '
+    'number or null, "currency": "LBP" or "USD" or null}'
+)
+CAMERA_SCAN_FAILURE_MESSAGE = "Can't read photos right now. Please enter it manually."
+MIN_PUMP_LITERS, MAX_PUMP_LITERS = 0.1, 500
+
+ODOMETER_SCAN_SYSTEM_PROMPT = (
+    "You are reading a photograph of a car's odometer (the dashboard "
+    "display showing total distance driven) to help someone log a "
+    "fill-up.\n\n"
+    "Extract ONLY the main total odometer reading, in kilometers, as a "
+    "whole number. If the display shows miles rather than km, convert to "
+    "km (miles x 1.60934), rounded to the nearest whole km. Ignore any "
+    "trip-specific or secondary display -- only the main total odometer "
+    "reading is wanted.\n\n"
+    "If the photo is not recognizable as an odometer display at all (e.g. "
+    "it's blank, unrelated, or too unclear), set \"readable\" to false and "
+    "\"odometer_km\" to null. Otherwise set \"readable\" to true, and set "
+    "\"odometer_km\" to null if you cannot make it out rather than "
+    "guessing.\n\n"
+    "Respond with ONLY a JSON object, no other text and no markdown code "
+    "fences, in exactly this shape:\n"
+    '{"readable": true or false, "odometer_km": integer or null}'
+)
+MAX_ODOMETER_SCAN_KM = 2_000_000
+
 # Returned whenever a response was received but couldn't be parsed into a
 # confident answer — biases toward caution rather than guessing DIY.
 DEFAULT_RESULT = {
@@ -155,6 +199,17 @@ def _build_prompt(description: str, car_context: dict) -> str:
     return f"Vehicle: {vehicle}\nIssue described by the owner: {description}"
 
 
+def _strip_code_fence(text: str) -> str:
+    """Strips a ```/```json markdown code fence a provider sometimes wraps
+    its JSON reply in, despite being told not to."""
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        first_line, _, rest = cleaned.partition("\n")
+        cleaned = rest if first_line.strip().lower() in ("json", "") else cleaned
+    return cleaned
+
+
 def _parse_response(text: str) -> dict:
     """
     Parses a provider's raw reply into {"recommendation", "guidance"}.
@@ -165,11 +220,7 @@ def _parse_response(text: str) -> dict:
     if not text:
         return DEFAULT_RESULT
 
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.strip("`")
-        first_line, _, rest = cleaned.partition("\n")
-        cleaned = rest if first_line.strip().lower() in ("json", "") else cleaned
+    cleaned = _strip_code_fence(text)
 
     try:
         parsed = json.loads(cleaned)
@@ -222,7 +273,12 @@ def _call_gemini(
 
 
 def _call_gemini_vision(
-    image_bytes: bytes, mime_type: str, system_prompt: str, timeout: float = 25.0
+    image_bytes: bytes,
+    mime_type: str,
+    system_prompt: str,
+    prompt_text: str = "Read this vehicle registration document.",
+    failure_message: str = REGISTRATION_SCAN_FAILURE_MESSAGE,
+    timeout: float = 25.0,
 ) -> str:
     """
     Calls Gemini with an image attached (CAR-57), same request shape as
@@ -230,17 +286,18 @@ def _call_gemini_vision(
     Raises LLMError directly on any failure — unlike _call_gemini, this
     never triggers the Groq fallback, since Groq's configured model
     (GROQ_MODEL) has no vision capability and would only ever fail on an
-    image input.
+    image input. Uses GEMINI_VISION_API_KEY when configured, falling back
+    to GEMINI_API_KEY (see that constant's comment in app/config.py).
     """
     try:
         response = httpx.post(
             GEMINI_URL,
-            params={"key": GEMINI_API_KEY},
+            params={"key": GEMINI_VISION_API_KEY or GEMINI_API_KEY},
             json={
                 "contents": [
                     {
                         "parts": [
-                            {"text": "Read this vehicle registration document."},
+                            {"text": prompt_text},
                             {"inline_data": {"mime_type": mime_type, "data": base64.b64encode(image_bytes).decode("ascii")}},
                         ],
                     },
@@ -250,17 +307,17 @@ def _call_gemini_vision(
             timeout=timeout,
         )
     except httpx.HTTPError as error:
-        raise LLMError(REGISTRATION_SCAN_FAILURE_MESSAGE) from error
+        raise LLMError(failure_message) from error
 
     if response.status_code >= 400:
         logger.warning("Gemini vision call returned HTTP %s", response.status_code)
-        raise LLMError(REGISTRATION_SCAN_FAILURE_MESSAGE)
+        raise LLMError(failure_message)
 
     try:
         return response.json()["candidates"][0]["content"]["parts"][0]["text"]
     except (ValueError, KeyError, IndexError, TypeError) as error:
         logger.warning("Gemini vision call returned an unusable response")
-        raise LLMError(REGISTRATION_SCAN_FAILURE_MESSAGE) from error
+        raise LLMError(failure_message) from error
 
 
 def _call_groq(
@@ -414,11 +471,7 @@ def _parse_registration_fields(text: str) -> dict:
     if not text:
         return dict(_EMPTY_REGISTRATION_FIELDS)
 
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.strip("`")
-        first_line, _, rest = cleaned.partition("\n")
-        cleaned = rest if first_line.strip().lower() in ("json", "") else cleaned
+    cleaned = _strip_code_fence(text)
 
     try:
         parsed = json.loads(cleaned)
@@ -469,3 +522,113 @@ def extract_registration_fields(image_bytes: bytes, mime_type: str) -> dict:
     """
     raw_text = _call_gemini_vision(image_bytes, mime_type, REGISTRATION_SCAN_SYSTEM_PROMPT)
     return _parse_registration_fields(raw_text)
+
+
+_EMPTY_PUMP_FIELDS = {"readable": False, "liters": None, "total_price": None, "currency": None}
+
+
+def _parse_pump_fields(text: str) -> dict:
+    """Parses a pump-scan reply into the fixed field shape, dropping any
+    missing/malformed/implausible field to null rather than ever
+    guessing — same defensive posture as _parse_registration_fields."""
+    if not text:
+        return dict(_EMPTY_PUMP_FIELDS)
+
+    try:
+        parsed = json.loads(_strip_code_fence(text))
+    except (json.JSONDecodeError, TypeError):
+        return dict(_EMPTY_PUMP_FIELDS)
+
+    if not isinstance(parsed, dict) or parsed.get("readable") is not True:
+        return dict(_EMPTY_PUMP_FIELDS)
+
+    liters = parsed.get("liters")
+    total_price = parsed.get("total_price")
+    currency = parsed.get("currency")
+    return {
+        "readable": True,
+        "liters": (
+            round(float(liters), 2)
+            if isinstance(liters, (int, float)) and not isinstance(liters, bool) and MIN_PUMP_LITERS <= liters <= MAX_PUMP_LITERS
+            else None
+        ),
+        "total_price": (
+            round(float(total_price), 2)
+            if isinstance(total_price, (int, float)) and not isinstance(total_price, bool) and total_price > 0
+            else None
+        ),
+        "currency": currency if currency in ("LBP", "USD") else None,
+    }
+
+
+def extract_pump_fields(image_bytes: bytes, mime_type: str) -> dict:
+    """
+    Reads a photographed fuel pump display (Step 2's fuel-log camera) and
+    extracts liters/total_price/currency for the Fuel Log form. The image
+    is used only for this one call and is never stored.
+
+    Returns:
+        {"readable": bool, "liters": float|None, "total_price":
+         float|None, "currency": "LBP"|"USD"|None}.
+
+    Raises:
+        LLMError: if Gemini itself couldn't be reached or answered at
+            all (no Groq fallback — see _call_gemini_vision's docstring).
+    """
+    raw_text = _call_gemini_vision(
+        image_bytes,
+        mime_type,
+        PUMP_SCAN_SYSTEM_PROMPT,
+        prompt_text="Read this fuel pump display.",
+        failure_message=CAMERA_SCAN_FAILURE_MESSAGE,
+    )
+    return _parse_pump_fields(raw_text)
+
+
+_EMPTY_ODOMETER_FIELDS = {"readable": False, "odometer_km": None}
+
+
+def _parse_odometer_fields(text: str) -> dict:
+    """Parses an odometer-scan reply into the fixed field shape, same
+    defensive posture as _parse_pump_fields."""
+    if not text:
+        return dict(_EMPTY_ODOMETER_FIELDS)
+
+    try:
+        parsed = json.loads(_strip_code_fence(text))
+    except (json.JSONDecodeError, TypeError):
+        return dict(_EMPTY_ODOMETER_FIELDS)
+
+    if not isinstance(parsed, dict) or parsed.get("readable") is not True:
+        return dict(_EMPTY_ODOMETER_FIELDS)
+
+    value = parsed.get("odometer_km")
+    odometer_km = (
+        int(value)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 < value <= MAX_ODOMETER_SCAN_KM
+        else None
+    )
+    return {"readable": True, "odometer_km": odometer_km}
+
+
+def extract_odometer_fields(image_bytes: bytes, mime_type: str) -> dict:
+    """
+    Reads a photographed odometer display (Step 2's fuel-log camera) and
+    extracts the reading for the Fuel Log form. The image is used only
+    for this one call and is never stored.
+
+    Returns:
+        {"readable": bool, "odometer_km": int|None}.
+
+    Raises:
+        LLMError: if Gemini itself couldn't be reached or answered at
+            all (no Groq fallback — see _call_gemini_vision's docstring).
+    """
+    raw_text = _call_gemini_vision(
+        image_bytes,
+        mime_type,
+        ODOMETER_SCAN_SYSTEM_PROMPT,
+        prompt_text="Read this car's odometer display.",
+        failure_message=CAMERA_SCAN_FAILURE_MESSAGE,
+    )
+    return _parse_odometer_fields(raw_text)

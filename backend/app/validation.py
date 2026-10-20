@@ -42,6 +42,14 @@ ALLOWED_REGISTRATION_IMAGE_TYPES = {
     "image/heif",
 }
 
+# Fuel-log camera (pump / odometer scans). Same byte cap as the
+# registration-card scan; HEIC/HEIF are deliberately NOT included here —
+# unlike that scan, these images are re-encoded by Pillow
+# (app/services/image_validation.py) before reaching Gemini, and Pillow
+# has no built-in HEIC/HEIF decoder.
+MAX_FUEL_PHOTO_BYTES = 8 * 1024 * 1024
+ALLOWED_FUEL_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
 # A place name: surrounding whitespace is stripped, then it must be 1-300
 # characters — so blank / whitespace-only input is refused too.
 PlaceText = Annotated[

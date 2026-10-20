@@ -170,6 +170,16 @@ def test_boundary_years_and_a_60_character_make_are_accepted(year):
 # --- CAR-57: POST /cars/scan-registration -----------------------------------
 
 from app.services.llm_client import LLMError  # noqa: E402
+from app.services.usage_limiter import UsageCheckFailed, UsageLimitExceeded  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _default_no_usage_limiting():
+    """Every test in this file except the usage-limiting ones below runs
+    as though the AI-usage-limit check always passes, so they exercise
+    exactly the same path they did before that wiring existed."""
+    with patch("app.routers.car_specs.enforce_usage"):
+        yield
 
 
 def _fake_image_file(content_type="image/jpeg", size=1024):
@@ -289,3 +299,32 @@ def test_scan_registration_accepts_every_allowed_image_type(content_type):
         )
 
     assert response.status_code == 200
+
+
+# --- registration_scan usage limiting (shares the camera's Gemini quota) ---
+
+
+def test_scan_registration_a_genuine_limit_hit_is_a_429_and_never_calls_gemini():
+    with patch(
+        "app.routers.car_specs.enforce_usage",
+        side_effect=UsageLimitExceeded("You've reached today's limit of 5 for this feature. It resets at midnight Beirut time."),
+    ), patch("app.routers.car_specs.extract_registration_fields") as mock_extract:
+        response = client.post("/cars/scan-registration", files=_fake_image_file())
+
+    assert response.status_code == 429
+    assert "resets at midnight Beirut time" in response.json()["detail"]
+    mock_extract.assert_not_called()
+
+
+def test_scan_registration_FAILS_CLOSED_when_the_usage_check_itself_fails():
+    # Unlike the Advisor, a broken usage counter must not let an unmetered
+    # Gemini call through -- the photo is refused with the same friendly
+    # message as a genuine Gemini failure.
+    with patch(
+        "app.routers.car_specs.enforce_usage", side_effect=UsageCheckFailed("network blip")
+    ), patch("app.routers.car_specs.extract_registration_fields") as mock_extract:
+        response = client.post("/cars/scan-registration", files=_fake_image_file())
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Can't read photos right now. Please enter it manually."
+    mock_extract.assert_not_called()

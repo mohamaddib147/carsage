@@ -44,9 +44,12 @@ import PageShell from "../components/PageShell.jsx";
 import Price from "../components/Price.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { useCurrency } from "../currency/CurrencyContext.jsx";
+import { apiFetch } from "../lib/apiClient.js";
 import { CURRENCIES, formatMoney } from "../lib/currency.js";
 import { supabase } from "../lib/supabaseClient.js";
-import { describeActionError, describeSaveError, LIMITS } from "../lib/limits.js";
+import { describeActionError, describeApiFetchError, describeSaveError, LIMITS } from "../lib/limits.js";
+import { getFuelPhotoError, getPricePerLiterWarning, getTankCapacityWarning } from "../lib/fuelCamera.js";
+import { GEMINI_PRIVACY_NOTICE } from "../lib/geminiPrivacyNotice.js";
 import {
   fillUpChartPoints,
   formatFillDate,
@@ -134,8 +137,10 @@ function carLabel(car) {
  * @returns {JSX.Element}
  */
 function FuelLogPage() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { setActiveCarId } = useActiveCar();
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
   const [cars, setCars] = useState([]);
   const [loadingCars, setLoadingCars] = useState(true);
@@ -154,6 +159,13 @@ function FuelLogPage() {
   // Cleared whenever the reading, the date or the car changes, so a confirmation
   // only ever applies to the exact reading it was shown for.
   const [orderWarning, setOrderWarning] = useState("");
+  // Step 2 camera scans: a scanned price per liter far from today's fuel
+  // price, or liters above the car's own tank capacity. Same "Save
+  // anyway" pattern as orderWarning above -- cleared whenever the field
+  // they're about changes, so a confirmation only ever applies to the
+  // exact values it was shown for.
+  const [priceWarning, setPriceWarning] = useState("");
+  const [tankWarning, setTankWarning] = useState("");
   const { currency: primaryCurrency } = useCurrency();
   // null = the user hasn't chosen here, so the form follows the header toggle.
   const [chosenCurrency, setChosenCurrency] = useState(null);
@@ -163,7 +175,25 @@ function FuelLogPage() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [scanPumpLoading, setScanPumpLoading] = useState(false);
+  const [scanPumpError, setScanPumpError] = useState("");
+  const [scanOdometerLoading, setScanOdometerLoading] = useState(false);
+  const [scanOdometerError, setScanOdometerError] = useState("");
+  // Today's known fuel price (LBP/L), used only to word the price-per-liter
+  // warning above -- null (the warning then never fires) until it loads,
+  // and silently stays null if the lookup fails: this is a plausibility
+  // hint, never something that should block the page.
+  const [currentFuelPriceLbp, setCurrentFuelPriceLbp] = useState(null);
+
   const litersInputRef = useRef(null);
+  const scanPumpInputRef = useRef(null);
+  const scanOdometerInputRef = useRef(null);
+  // Read inside the scan handlers' async success path instead of the
+  // closed-over liters/cost/odometer, so a value the user typed while a
+  // scan was in flight is never clobbered by a stale "was it empty"
+  // check (same pattern as CarOnboardingPage's formRef).
+  const fieldsRef = useRef({ liters, cost, odometer });
+  fieldsRef.current = { liters, cost, odometer };
 
   const selectedCar = cars.find((car) => car.id === selectedCarId) ?? null;
   // null = still loading this car's fill-ups (nothing loaded for it yet).
@@ -185,7 +215,7 @@ function FuelLogPage() {
       setLoadingCars(true);
       const { data } = await supabase
         .from("cars")
-        .select("id, make, model, year, fuel_efficiency")
+        .select("id, make, model, year, fuel_efficiency, fuel_tank_capacity_liters")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
 
@@ -234,6 +264,26 @@ function FuelLogPage() {
     };
   }, [selectedCarId]);
 
+  // Today's fuel price, fetched once, purely to word the pump-scan's
+  // price-per-liter plausibility warning -- a failed lookup just leaves
+  // it null (that warning silently never fires).
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+
+    apiFetch("/trip-planner/fuel-prices", { accessToken: sessionRef.current?.access_token })
+      .then((result) => {
+        if (!cancelled) setCurrentFuelPriceLbp(result?.prices?.["95_octane"]?.lbp_per_liter ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setCurrentFuelPriceLbp(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   /** Switching cars drops any message about the previous car's form; what was
    * typed stays. CAR-55: also makes the picked car the active one for
    * site-wide brand theming. */
@@ -249,16 +299,18 @@ function FuelLogPage() {
   /** @param {import('react').FormEvent} event */
   async function handleSubmit(event) {
     event.preventDefault();
-    await save({ confirmedOrder: false });
+    await save({});
   }
 
   /**
-   * Validates and saves the fill-up. A reading out of order (not higher than the
-   * previous one, or not lower than a later one) first shows a warning with a
-   * "Save anyway" button, which calls this again with `confirmedOrder: true`.
-   * @param {{ confirmedOrder: boolean }} options
+   * Validates and saves the fill-up. A scanned-looking issue (price per liter far
+   * from today's fuel price, liters over the car's tank capacity, or a reading out
+   * of order) first shows a warning with its own "Save anyway" button, which calls
+   * this again with that one `confirmed*: true` -- checked in this fixed order, so
+   * confirming one still re-checks (and can still stop on) the next.
+   * @param {{ confirmedPrice?: boolean, confirmedTank?: boolean, confirmedOrder?: boolean }} options
    */
-  async function save({ confirmedOrder }) {
+  async function save({ confirmedPrice = false, confirmedTank = false, confirmedOrder = false } = {}) {
     setSaveError("");
     setSaved(false);
 
@@ -275,8 +327,28 @@ function FuelLogPage() {
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
       setOrderWarning("");
+      setPriceWarning("");
+      setTankWarning("");
       return;
     }
+
+    if (!confirmedPrice) {
+      const warning = getPricePerLiterWarning(liters, cost, currency, currentFuelPriceLbp);
+      if (warning) {
+        setPriceWarning(warning);
+        return;
+      }
+    }
+    setPriceWarning("");
+
+    if (!confirmedTank) {
+      const warning = getTankCapacityWarning(liters, selectedCar?.fuel_tank_capacity_liters);
+      if (warning) {
+        setTankWarning(warning);
+        return;
+      }
+    }
+    setTankWarning("");
 
     if (odometer !== "" && !confirmedOrder) {
       const warning = getOdometerOrderWarning(odometer, date, entries);
@@ -326,6 +398,103 @@ function FuelLogPage() {
       setSaved(true);
     } finally {
       setSaving(false);
+    }
+  }
+
+  /**
+   * Handles a pump photo picked via the "Scan Pump" button (Step 2). Fills
+   * Liters and Cost (and the currency selector, if a currency was read off
+   * the photo -- needed so the filled Cost number isn't mislabeled) only
+   * when they're currently empty, same merge-if-empty pattern as CAR-57's
+   * registration-card scan. Never saves anything itself -- the user still
+   * reviews and submits the form.
+   * @param {import('react').ChangeEvent<HTMLInputElement>} event
+   */
+  async function handleScanPumpFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setScanPumpError("");
+    const clientError = getFuelPhotoError(file);
+    if (clientError) {
+      setScanPumpError(clientError);
+      if (scanPumpInputRef.current) scanPumpInputRef.current.value = "";
+      return;
+    }
+
+    setScanPumpLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const result = await apiFetch("/fuel-log/scan-pump", {
+        method: "POST",
+        body: formData,
+        accessToken: sessionRef.current?.access_token,
+      });
+
+      if (!result.readable) {
+        setScanPumpError("Couldn't read that as a pump display. Try a clearer photo, or enter it manually below.");
+        return;
+      }
+
+      const current = fieldsRef.current;
+      if (!current.liters && result.liters != null) setLiters(String(result.liters));
+      if (!current.cost && result.total_price != null) {
+        setCost(String(result.total_price));
+        if (result.currency) setChosenCurrency(result.currency);
+      }
+      setPriceWarning("");
+      setTankWarning("");
+    } catch (error) {
+      setScanPumpError(describeApiFetchError(error));
+    } finally {
+      setScanPumpLoading(false);
+      if (scanPumpInputRef.current) scanPumpInputRef.current.value = "";
+    }
+  }
+
+  /**
+   * Handles an odometer photo picked via the "Scan Odometer" button (Step
+   * 2). Fills the Odometer field only when it's currently empty. Never
+   * saves anything itself.
+   * @param {import('react').ChangeEvent<HTMLInputElement>} event
+   */
+  async function handleScanOdometerFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setScanOdometerError("");
+    const clientError = getFuelPhotoError(file);
+    if (clientError) {
+      setScanOdometerError(clientError);
+      if (scanOdometerInputRef.current) scanOdometerInputRef.current.value = "";
+      return;
+    }
+
+    setScanOdometerLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const result = await apiFetch("/fuel-log/scan-odometer", {
+        method: "POST",
+        body: formData,
+        accessToken: sessionRef.current?.access_token,
+      });
+
+      if (!result.readable) {
+        setScanOdometerError("Couldn't read that as an odometer display. Try a clearer photo, or enter it manually below.");
+        return;
+      }
+
+      if (!fieldsRef.current.odometer && result.odometer_km != null) {
+        setOdometer(String(result.odometer_km));
+        setOrderWarning("");
+      }
+    } catch (error) {
+      setScanOdometerError(describeApiFetchError(error));
+    } finally {
+      setScanOdometerLoading(false);
+      if (scanOdometerInputRef.current) scanOdometerInputRef.current.value = "";
     }
   }
 
@@ -415,10 +584,27 @@ function FuelLogPage() {
               placeholder="e.g. 19.6"
               value={liters}
               aria-invalid={fieldErrors.liters ? "true" : undefined}
-              onChange={(event) => setLiters(event.target.value)}
+              onChange={(event) => {
+                setLiters(event.target.value);
+                setPriceWarning("");
+                setTankWarning("");
+              }}
             />
             {fieldErrors.liters && (
               <p role="alert" className="auth-form__error">{fieldErrors.liters}</p>
+            )}
+            {tankWarning && (
+              <div role="alert" className="fuel-log-order-warning">
+                <p>{tankWarning}</p>
+                <button
+                  type="button"
+                  className="fuel-log-order-warning__btn"
+                  disabled={saving}
+                  onClick={() => save({ confirmedTank: true })}
+                >
+                  Save anyway
+                </button>
+              </div>
             )}
           </div>
 
@@ -434,12 +620,18 @@ function FuelLogPage() {
                 placeholder="e.g. 30"
                 value={cost}
                 aria-invalid={fieldErrors.cost ? "true" : undefined}
-                onChange={(event) => setCost(event.target.value)}
+                onChange={(event) => {
+                  setCost(event.target.value);
+                  setPriceWarning("");
+                }}
               />
               <select
                 aria-label="Currency of the cost"
                 value={currency}
-                onChange={(event) => setChosenCurrency(event.target.value)}
+                onChange={(event) => {
+                  setChosenCurrency(event.target.value);
+                  setPriceWarning("");
+                }}
               >
                 {CURRENCIES.map((code) => (
                   <option key={code} value={code}>
@@ -451,6 +643,51 @@ function FuelLogPage() {
             {fieldErrors.cost && (
               <p role="alert" className="auth-form__error">{fieldErrors.cost}</p>
             )}
+            {priceWarning && (
+              <div role="alert" className="fuel-log-order-warning">
+                <p>{priceWarning}</p>
+                <button
+                  type="button"
+                  className="fuel-log-order-warning__btn"
+                  disabled={saving}
+                  onClick={() => save({ confirmedPrice: true })}
+                >
+                  Save anyway
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="scan-card scan-card--compact">
+            <span className="scan-card__icon" aria-hidden="true">📷</span>
+            <div className="scan-card__text">
+              <p className="scan-card__title">Scan the Pump</p>
+              <p className="scan-card__desc">Fills in Liters and Cost from a photo of the pump's display.</p>
+              {scanPumpLoading && (
+                <p role="status" className="spec-loading">
+                  <span className="spec-loading__spinner" aria-hidden="true" />
+                  Reading pump photo…
+                </p>
+              )}
+              {scanPumpError && <p role="alert" className="auth-form__error">{scanPumpError}</p>}
+            </div>
+            <label
+              className={`btn-accent scan-card__button${scanPumpLoading ? " btn-accent--loading" : ""}`}
+              htmlFor="scanPumpFile"
+            >
+              {scanPumpLoading ? "Reading…" : "Scan Pump"}
+            </label>
+            <input
+              id="scanPumpFile"
+              ref={scanPumpInputRef}
+              className="sr-only"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              capture="environment"
+              disabled={scanPumpLoading}
+              onChange={handleScanPumpFile}
+            />
+            <p className="camera-privacy-note">{GEMINI_PRIVACY_NOTICE}</p>
           </div>
 
           <div className="form-field">
@@ -494,6 +731,38 @@ function FuelLogPage() {
                 Optional. The total km on your dashboard, used to work out your real km/L.
               </p>
             )}
+          </div>
+
+          <div className="scan-card scan-card--compact">
+            <span className="scan-card__icon" aria-hidden="true">📷</span>
+            <div className="scan-card__text">
+              <p className="scan-card__title">Scan the Odometer</p>
+              <p className="scan-card__desc">Fills in the Odometer field from a photo of your dashboard.</p>
+              {scanOdometerLoading && (
+                <p role="status" className="spec-loading">
+                  <span className="spec-loading__spinner" aria-hidden="true" />
+                  Reading odometer photo…
+                </p>
+              )}
+              {scanOdometerError && <p role="alert" className="auth-form__error">{scanOdometerError}</p>}
+            </div>
+            <label
+              className={`btn-accent scan-card__button${scanOdometerLoading ? " btn-accent--loading" : ""}`}
+              htmlFor="scanOdometerFile"
+            >
+              {scanOdometerLoading ? "Reading…" : "Scan Odometer"}
+            </label>
+            <input
+              id="scanOdometerFile"
+              ref={scanOdometerInputRef}
+              className="sr-only"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              capture="environment"
+              disabled={scanOdometerLoading}
+              onChange={handleScanOdometerFile}
+            />
+            <p className="camera-privacy-note">{GEMINI_PRIVACY_NOTICE}</p>
           </div>
 
           {saveError && (

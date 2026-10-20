@@ -15,10 +15,25 @@ import FuelLogPage from "./FuelLogPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import CurrencyToggle from "../components/CurrencyToggle.jsx";
 import { CurrencyProvider } from "../currency/CurrencyContext.jsx";
+import { apiFetch } from "../lib/apiClient.js";
 import { CURRENCY_STORAGE_KEY } from "../lib/currency.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { todayLocal } from "../lib/fuelLog.js";
 import { unconvertedMoney } from "../test/priceText.js";
+
+// Step 2's camera scans and the price-per-liter warning both call the
+// backend (GET /trip-planner/fuel-prices, POST /fuel-log/scan-pump,
+// POST /fuel-log/scan-odometer) through apiFetch — mocked so no real
+// network call ever happens in a test. The fuel-prices lookup fires on
+// every render once logged in, so it always needs a default reply.
+vi.mock("../lib/apiClient.js", () => ({
+  apiFetch: vi.fn(),
+}));
+
+const FUEL_PRICES_REPLY = {
+  prices: { "95_octane": { lbp_per_liter: 150_000, usd_per_liter: 1.67 }, "98_octane": { lbp_per_liter: 155_000, usd_per_liter: 1.73 }, diesel: { lbp_per_liter: 140_000, usd_per_liter: 1.56 } },
+  lbp_per_usd: 89_700,
+};
 
 const USER = { id: "user-123", email: "driver@example.com" };
 const CAR_1 = { id: "car-1", make: "Mercedes-Benz", model: "C230 Kompressor", year: 2005 };
@@ -148,6 +163,7 @@ async function fillForm(user, { liters, cost }) {
 beforeEach(() => {
   vi.clearAllMocks();
   supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER } } });
+  apiFetch.mockResolvedValue(FUEL_PRICES_REPLY);
 });
 
 describe("FuelLogPage — viewing", () => {
@@ -1169,5 +1185,169 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
     await waitFor(() => expect(calls.inserts).toHaveLength(1));
     expect(calls.inserts[0]).toMatchObject({ car_id: "car-2", odometer_km: 10900 });
+  });
+});
+
+describe("FuelLogPage — camera scans (Step 2)", () => {
+  function scanFile(name = "pump.jpg") {
+    return new File(["x"], name, { type: "image/jpeg" });
+  }
+
+  it("fills Liters, Cost and currency from a readable pump scan, leaving the form for review", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    apiFetch.mockImplementation((path) =>
+      path === "/fuel-log/scan-pump"
+        ? Promise.resolve({ readable: true, liters: 19.6, total_price: 2_940_000, currency: "LBP" })
+        : Promise.resolve(FUEL_PRICES_REPLY),
+    );
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+
+    await user.upload(document.getElementById("scanPumpFile"), scanFile());
+
+    await waitFor(() => expect(screen.getByLabelText("Liters *")).toHaveValue(19.6));
+    expect(screen.getByLabelText("Cost *")).toHaveValue(2_940_000);
+    expect(screen.getByLabelText("Currency of the cost")).toHaveValue("LBP");
+    // Never auto-saved: the user still has to submit it themselves.
+    expect(screen.queryByText("Fill-up logged.")).not.toBeInTheDocument();
+  });
+
+  it("does not overwrite a Liters/Cost value the user already typed", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    apiFetch.mockImplementation((path) =>
+      path === "/fuel-log/scan-pump"
+        ? Promise.resolve({ readable: true, liters: 19.6, total_price: 30, currency: "USD" })
+        : Promise.resolve(FUEL_PRICES_REPLY),
+    );
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    await fillForm(user, { liters: "40" });
+
+    await user.upload(document.getElementById("scanPumpFile"), scanFile());
+
+    await waitFor(() => expect(screen.getByLabelText("Cost *")).toHaveValue(30));
+    expect(screen.getByLabelText("Liters *")).toHaveValue(40); // untouched
+  });
+
+  it("shows a message and changes nothing when the pump photo isn't readable", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    apiFetch.mockImplementation((path) =>
+      path === "/fuel-log/scan-pump"
+        ? Promise.resolve({ readable: false, liters: null, total_price: null, currency: null })
+        : Promise.resolve(FUEL_PRICES_REPLY),
+    );
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    await user.upload(document.getElementById("scanPumpFile"), scanFile());
+
+    expect(await screen.findByText(/Couldn't read that as a pump display/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Liters *")).toHaveValue(null);
+  });
+
+  it("fills Odometer from a readable scan, but never overwrites an already-typed reading", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    apiFetch.mockImplementation((path) =>
+      path === "/fuel-log/scan-odometer"
+        ? Promise.resolve({ readable: true, odometer_km: 84610 })
+        : Promise.resolve(FUEL_PRICES_REPLY),
+    );
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    await user.upload(document.getElementById("scanOdometerFile"), scanFile("odo.jpg"));
+
+    await waitFor(() => expect(screen.getByLabelText("Odometer (km)")).toHaveValue("84,610"));
+  });
+
+  it("surfaces a capped/503 scan error from the backend as plain text", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    apiFetch.mockImplementation((path) =>
+      path === "/fuel-log/scan-pump"
+        ? Promise.reject(new Error("You've reached today's limit of 20 for this feature. It resets at midnight Beirut time."))
+        : Promise.resolve(FUEL_PRICES_REPLY),
+    );
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    await user.upload(document.getElementById("scanPumpFile"), scanFile());
+
+    expect(await screen.findByText(/reached today's limit of 20/)).toBeInTheDocument();
+  });
+
+  it("shows a privacy notice beside both the pump and odometer scan buttons", async () => {
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    renderPage();
+    await screen.findByLabelText("Liters *");
+
+    const notices = screen.getAllByText(/sent to Google's Gemini API/);
+    expect(notices).toHaveLength(2);
+  });
+});
+
+describe("FuelLogPage — price-per-liter and tank-capacity warnings (Step 2)", () => {
+  it("warns when the price per liter is far from today's fuel price, and 'Save anyway' submits it as typed", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    // 20 L for $300 is far above today's mocked 150,000 LBP/L price.
+    await fillForm(user, { liters: "20", cost: "300" });
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    expect(await screen.findByText(/far from today's fuel price/)).toBeInTheDocument();
+    expect(calls.inserts).toHaveLength(0);
+
+    await user.click(screen.getByRole("button", { name: "Save anyway" }));
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(calls.inserts[0]).toMatchObject({ liters: 20, cost_amount: 300 });
+  });
+
+  it("warns when liters exceed the car's tank capacity, naming it", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({
+      cars: [{ ...CAR_1, fuel_tank_capacity_liters: 60 }],
+      logsByCar: { "car-1": { data: [], error: null } },
+    });
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    // 65 L at a normal price (so the price warning doesn't also fire).
+    await fillForm(user, { liters: "65", cost: "9750000" });
+    await user.selectOptions(screen.getByLabelText("Currency of the cost"), "LBP");
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    expect(await screen.findByText(/more than your car's tank capacity \(60 L\)/)).toBeInTheDocument();
+    expect(calls.inserts).toHaveLength(0);
+
+    await user.click(screen.getByRole("button", { name: "Save anyway" }));
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+  });
+
+  it("says nothing for a normal fill-up within the tank and close to today's price", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({
+      cars: [{ ...CAR_1, fuel_tank_capacity_liters: 60 }],
+      logsByCar: { "car-1": { data: [], error: null } },
+    });
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    // 45 L at 150,000 LBP/L = 6,750,000 LBP, exactly today's mocked price.
+    await fillForm(user, { liters: "45", cost: "6750000" });
+    await user.selectOptions(screen.getByLabelText("Currency of the cost"), "LBP");
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(screen.queryByText(/far from today's fuel price/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/tank capacity/)).not.toBeInTheDocument();
   });
 });
