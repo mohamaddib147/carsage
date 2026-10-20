@@ -158,7 +158,7 @@ export function PrivacyPage() {
             described car issue and generate AI Advisor guidance. The issue
             description you type is sent to whichever of these is available.
             Gemini also reads the photos you choose to scan; see
-            &quot;Photo scans and Google Gemini&quot; below.
+            &quot;What goes to Google Gemini&quot; below.
           </li>
           <li>
             <strong>YouTube Data API</strong>: used to find a relevant tutorial video
@@ -175,31 +175,26 @@ export function PrivacyPage() {
           request.
         </p>
 
-        <h2>Photo scans and Google Gemini</h2>
-        <p>
-          Some features let you take or upload a photo instead of typing. Today
-          these photos are sent to Google&apos;s Gemini API to be read:
-        </p>
+        <h2>What goes to Google Gemini</h2>
+        <p>These features send what you give them to Google&apos;s Gemini API:</p>
         <ul>
           <li>
-            <strong>Registration card</strong> (Add a car): to read your car&apos;s
-            make, model, year, VIN and license plate. A registration card can also
-            show the owner&apos;s name and address; CarSage asks Gemini not to
-            extract them and never saves them, but they are part of the photo
-            Google receives.
+            <strong>AI Advisor</strong>: the problem description you type. If Gemini
+            is unavailable, the same text goes to Groq instead.
           </li>
           <li>
-            <strong>Fuel pump display</strong> (Fuel Log): to read the liters and
-            total price of a fill-up.
+            <strong>Fuel pump display photo</strong> (Fuel Log): to read the liters
+            and total price of a fill-up.
           </li>
           <li>
-            <strong>Odometer</strong> (Fuel Log): to read your car&apos;s total
+            <strong>Odometer photo</strong> (Fuel Log): to read your car&apos;s total
             distance.
           </li>
         </ul>
         <p>
-          Later features may add more photo scans. Each will be listed here before
-          it is released.
+          Later features may add more. For example, a photo of a dashboard warning
+          light for the AI Advisor may be added. Each will be listed here before it
+          is released.
         </p>
         <p>
           CarSage uses Google&apos;s free (unpaid) tier of the Gemini API. Under
@@ -208,18 +203,19 @@ export function PrivacyPage() {
           reviewers may read it. Google states that it disconnects this data from
           the Google account, API key and project before reviewers see it, and asks
           that sensitive or personal information not be submitted. Please keep that
-          in mind when you choose what to photograph. See Google&apos;s{" "}
+          in mind when you choose what to type or photograph. See Google&apos;s{" "}
           <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener noreferrer">
             Gemini API Additional Terms of Service
           </a>{" "}
           (&quot;Unpaid Services&quot;, &quot;How Google Uses Your Data&quot;).
         </p>
         <p>
-          What CarSage stores: only the values a scan reads (for example the liters
-          and cost of a fill-up), and only after you have reviewed them and pressed
-          save. Nothing is saved automatically. What CarSage does not store: the
-          photo itself. It is read for that one request and then discarded; it is
-          never written to our database, to file storage, or to our server&apos;s disk.
+          What CarSage stores: your AI Advisor conversations, saved to your account,
+          and the values a photo scan reads (for example the liters and cost of a
+          fill-up), only after you have reviewed them and pressed save. Nothing from
+          a scan is saved automatically. What CarSage does not store: the photo
+          itself. It is read for that one request and then discarded; it is never
+          written to our database, to file storage, or to our server&apos;s disk.
           Scanning is always optional, and every field can be typed in by hand
           instead.
         </p>

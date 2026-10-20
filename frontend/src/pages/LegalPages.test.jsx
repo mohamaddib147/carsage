@@ -136,21 +136,29 @@ describe("legal pages", () => {
     expect(screen.getByText(/NHTSA/)).toBeInTheDocument();
   });
 
-  it("Privacy Policy discloses every photo scan sent to Gemini, the free-tier terms, and what is stored", async () => {
+  it("Privacy Policy lists what goes to Gemini (Advisor text, pump and odometer photos), the free-tier terms, and what is stored", async () => {
     renderAt("/privacy");
 
-    expect(await screen.findByRole("heading", { name: "Photo scans and Google Gemini" })).toBeInTheDocument();
-    for (const scan of ["Registration card", "Fuel pump display", "Odometer"]) {
-      expect(screen.getByText(scan)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "What goes to Google Gemini" })).toBeInTheDocument();
+    for (const item of ["AI Advisor", "Fuel pump display photo", "Odometer photo"]) {
+      expect(screen.getByText(item)).toBeInTheDocument();
     }
-    expect(screen.getByText(/Later features may add more photo scans/)).toBeInTheDocument();
+    expect(screen.getByText(/dashboard warning light for the AI Advisor may be added/)).toBeInTheDocument();
     expect(screen.getByText(/free \(unpaid\) tier of the Gemini API/)).toBeInTheDocument();
-    expect(screen.getByText(/provide, improve and develop its products and services, and human\s+reviewers may read it/)).toBeInTheDocument();
-    expect(screen.getByText(/does not store: the\s+photo itself/)).toBeInTheDocument();
+    expect(screen.getByText(/provide, improve and develop its products and services, and human reviewers may read it/)).toBeInTheDocument();
+    expect(screen.getByText(/does not store: the photo itself/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Gemini API Additional Terms of Service" })).toHaveAttribute(
       "href",
       "https://ai.google.dev/gemini-api/terms",
     );
+  });
+
+  it("Privacy Policy no longer mentions a registration card or its owner name/address", async () => {
+    renderAt("/privacy");
+
+    await screen.findByRole("heading", { name: "What goes to Google Gemini" });
+    expect(document.body.textContent).not.toMatch(/registration card/i);
+    expect(document.body.textContent).not.toMatch(/name and address/i);
   });
 
   it("each page carries its own last-updated date (the policy change doesn't move the Terms date)", async () => {
