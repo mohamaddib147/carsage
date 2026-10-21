@@ -207,7 +207,7 @@ function ItemFields({ idPrefix, values, errors, onChange, today }) {
  */
 function MaintenancePage() {
   const { user } = useAuth();
-  const { setActiveCarId } = useActiveCar();
+  const { setActiveCarId, selectInitialCar } = useActiveCar();
   const [searchParams] = useSearchParams();
   const { hash } = useLocation();
   const today = todayInBeirut();
@@ -263,8 +263,11 @@ function MaintenancePage() {
       if (cancelled) return;
       const list = data ?? [];
       setCars(list);
-      const requested = searchParams.get("car");
-      setSelectedCarId(list.some((car) => car.id === requested) ? requested : (list[0]?.id ?? ""));
+      // ?car= (a link from elsewhere) wins; otherwise start on the active car (else the first). CAR-70: either way
+      // the car shown is reported, so the theme matches.
+      const requested = list.find((car) => car.id === searchParams.get("car"));
+      if (requested) setActiveCarId(requested.id, requested.make);
+      setSelectedCarId(requested ? requested.id : selectInitialCar(list));
       setLoadingCars(false);
     }
 
@@ -274,7 +277,7 @@ function MaintenancePage() {
     };
     // searchParams is only read for the initial car; later changes are the selector's.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, selectInitialCar, setActiveCarId]);
 
   // Load the selected car's items (with their history) and its fill-up readings. A
   // reply that arrives after the user picked another car is ignored.
@@ -323,7 +326,7 @@ function MaintenancePage() {
   /** CAR-55: the picked car also becomes the active one for brand theming. */
   function handleCarChange(carId) {
     setSelectedCarId(carId);
-    setActiveCarId(carId);
+    setActiveCarId(carId, cars.find((car) => car.id === carId)?.make);
     resetPanels();
     setAdding(false);
     setNotice("");

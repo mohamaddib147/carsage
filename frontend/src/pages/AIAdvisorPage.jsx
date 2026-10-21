@@ -124,7 +124,7 @@ function youtubeVideoId(videoUrl) {
  */
 function AIAdvisorPage() {
   const { user, session } = useAuth();
-  const { setActiveCarId } = useActiveCar();
+  const { setActiveCarId, selectInitialCar } = useActiveCar();
 
   const [cars, setCars] = useState([]);
   const [loadingCars, setLoadingCars] = useState(true);
@@ -175,7 +175,8 @@ function AIAdvisorPage() {
       if (cancelled) return;
       const loadedCars = data ?? [];
       setCars(loadedCars);
-      setSelectedCarId(loadedCars[0]?.id ?? "");
+      // CAR-70: start on the active car (else the first) and report it, so the theme matches.
+      setSelectedCarId(selectInitialCar(loadedCars));
       setLoadingCars(false);
     }
 
@@ -183,7 +184,7 @@ function AIAdvisorPage() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, selectInitialCar]);
 
   useEffect(() => {
     if (!user || !selectedCarId) return;
@@ -407,7 +408,7 @@ function AIAdvisorPage() {
                 value={selectedCarId}
                 onChange={(event) => {
                   setSelectedCarId(event.target.value);
-                  setActiveCarId(event.target.value);
+                  setActiveCarId(event.target.value, cars.find((car) => car.id === event.target.value)?.make);
                 }}
               >
                 {cars.map((car) => (

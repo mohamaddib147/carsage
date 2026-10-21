@@ -157,6 +157,12 @@ These tickets are ready to copy into Jira (project CAR). The findings behind the
 - **Could break:** `ActiveCarContext.test.jsx`, `providerWiring.test.js`, and the five page tests that assert the first car is pre-selected.
 - **Model:** Opus 5.5, cross-page state with a race condition and per-page tests.
 - **Estimate:** 6 h
+- **Implementation note (CAR-70, 2026-10-21): where the build differs from the plan above, and why.**
+  - **Error handling follows the Jira ticket, not item 5 above.** Jira says: if the lookup fails, fall back to the default theme and retry on the next auth event. A stored but unconfirmed brand is therefore not trusted while the lookup is failing (default theme); a screen's own report still counts, because it came from a successful query; the retry fires when the session's access token changes after a failure (never in a loop, and never on a normal refresh).
+  - **`/cars/mine` still opens the user's default car** (then the oldest), not the active car as item 3 said. Car Profile has a user-chosen "default car" setting; opening the active car first would override it for good. Car Profile still reports the car it shows, so the theme follows it and the other screens then start on that car.
+  - **The screens report their first selection through `selectInitialCar(list)`** (it returns the active car if the list has it, else the first, and reports it) instead of each screen repeating that rule; picks pass the car's `make` so the theme doesn't wait for the lookup.
+  - **One flash on the first visit after the update.** The old stored preference holds only a car id, not its brand, so that visit paints the default theme until the lookup answers. The brand is stored from then on, and every later load paints the right theme at once.
+  - **Stored shape:** `carsage.activeCar.<userId>` = `{ carId, make }`, plus `carsage.activeCarUser` (whose entry applies before login state is known; removed on sign-out). The old `carsage.activeCarId.<userId>` is still read.
 
 ### T5. Redirect signed-in users away from /login and /signup (not /reset-password)
 - **Acceptance criteria:**

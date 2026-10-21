@@ -140,7 +140,7 @@ function carLabel(car) {
  */
 function FuelLogPage() {
   const { user, session } = useAuth();
-  const { setActiveCarId } = useActiveCar();
+  const { setActiveCarId, selectInitialCar } = useActiveCar();
   const sessionRef = useRef(session);
   sessionRef.current = session;
 
@@ -224,7 +224,8 @@ function FuelLogPage() {
       if (cancelled) return;
       const loaded = data ?? [];
       setCars(loaded);
-      setSelectedCarId(loaded[0]?.id ?? "");
+      // CAR-70: start on the active car (else the first) and report it, so the theme matches.
+      setSelectedCarId(selectInitialCar(loaded));
       setLoadingCars(false);
     }
 
@@ -232,7 +233,7 @@ function FuelLogPage() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, selectInitialCar]);
 
   // Load the selected car's fill-ups. The cleanup flags this run as stale, so a
   // response that arrives after the user picked another car is ignored.
@@ -295,7 +296,7 @@ function FuelLogPage() {
     setSaveError("");
     setSaved(false);
     setOrderWarning("");
-    setActiveCarId(carId);
+    setActiveCarId(carId, cars.find((car) => car.id === carId)?.make);
   }
 
   /** @param {import('react').FormEvent} event */

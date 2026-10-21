@@ -283,7 +283,7 @@ function CarProfilePage() {
   // CAR-55: viewing a car's profile makes it the active car for site-wide
   // brand theming, same as picking it in a car selector elsewhere.
   useEffect(() => {
-    if (car) setActiveCarId(car.id);
+    if (car) setActiveCarId(car.id, car.make);
   }, [car, setActiveCarId]);
 
   // CAR-58: (re)loads the signed URL whenever the car's stored photo path

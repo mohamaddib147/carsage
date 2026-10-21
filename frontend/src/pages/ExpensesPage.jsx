@@ -112,7 +112,7 @@ function MonthTooltip({ active, payload, currency }) {
  */
 function ExpensesPage() {
   const { user } = useAuth();
-  const { setActiveCarId } = useActiveCar();
+  const { setActiveCarId, selectInitialCar } = useActiveCar();
   const { currency: primaryCurrency } = useCurrency();
   const today = todayInBeirut();
   const thisMonth = monthOf(today);
@@ -160,7 +160,8 @@ function ExpensesPage() {
       if (cancelled) return;
       const list = data ?? [];
       setCars(list);
-      setSelectedCarId(list[0]?.id ?? "");
+      // CAR-70: start on the active car (else the first) and report it, so the theme matches.
+      setSelectedCarId(selectInitialCar(list));
       setLoadingCars(false);
     }
 
@@ -168,7 +169,7 @@ function ExpensesPage() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, selectInitialCar]);
 
   useEffect(() => {
     if (!selectedCarId) return undefined;
@@ -190,7 +191,7 @@ function ExpensesPage() {
   /** CAR-55: the picked car also becomes the active one for brand theming. */
   function handleCarChange(carId) {
     setSelectedCarId(carId);
-    setActiveCarId(carId);
+    setActiveCarId(carId, cars.find((car) => car.id === carId)?.make);
     setFieldErrors({});
     setActionError("");
     setNotice("");

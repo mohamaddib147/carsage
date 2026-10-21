@@ -162,7 +162,7 @@ function tankInputFor(car) {
  */
 function TripPlannerPage() {
   const { user, session } = useAuth();
-  const { setActiveCarId } = useActiveCar();
+  const { setActiveCarId, selectInitialCar } = useActiveCar();
 
   const [cars, setCars] = useState([]);
   const [loadingCar, setLoadingCar] = useState(true);
@@ -204,8 +204,10 @@ function TripPlannerPage() {
       if (cancelled) return;
       const loadedCars = data ?? [];
       setCars(loadedCars);
-      setSelectedCarId(loadedCars[0]?.id ?? "");
-      setTankSizeInput(tankInputFor(loadedCars[0]));
+      // CAR-70: start on the active car (else the first) and report it, so the theme matches.
+      const startId = selectInitialCar(loadedCars);
+      setSelectedCarId(startId);
+      setTankSizeInput(tankInputFor(loadedCars.find((car) => car.id === startId)));
       setLoadingCar(false);
     }
 
@@ -213,7 +215,7 @@ function TripPlannerPage() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, selectInitialCar]);
 
   // CAR-41: fetch the current default fuel prices once, to prefill the
   // editable fuel price field — non-critical, so a failure here just
@@ -255,7 +257,7 @@ function TripPlannerPage() {
   function handleCarChange(carId) {
     setSelectedCarId(carId);
     setTankSizeInput(tankInputFor(cars.find((car) => car.id === carId)));
-    setActiveCarId(carId);
+    setActiveCarId(carId, cars.find((car) => car.id === carId)?.make);
   }
 
   // Prefills the fuel price for the selected car's fuel grade, but never
