@@ -1,320 +1,359 @@
 # CarSage UI Tickets
 
-These tickets are ready to copy into Jira (project CAR). The findings behind them are in `docs/UI_AUDIT.md`, and the IDs in brackets (X1, S4 and so on) point there.
+These tickets are ready to copy into Jira (project CAR). The findings behind them are in `docs/UI_AUDIT.md`, and the IDs in brackets (X1, §4 and so on) point there. This version applies the decisions of 2026-10-21 and is ordered by value and risk.
 
 **Rules for every ticket:**
-- Presentation only. Do not change logic, data fetching, camera or photo code, usage limits, Privacy and Terms wording, the database or `.env`.
+- Presentation only, except T4 (an approved behaviour fix) and T5 (an approved routing change).
+- **Never touch:** logic, data fetching, camera or photo code, usage limits, Privacy and Terms wording, the database or `.env`.
 - One ticket per commit.
-- Run the full frontend suite before each commit.
+- Run the full frontend suite at default settings before each commit, and never push on a red run.
 - Show the result at 1280 px and 390 px before committing.
 - Keep WCAG AA, keyboard focus and `prefers-reduced-motion`.
-- **Bundle budget:** initial JS never grows. Library code lives only in route chunks.
 
-**Bundle costs:**
-- **"Measured":** isolated builds with React external (see the audit).
-- **"Estimate":** source size of a hand-written component, minified and gzipped.
+**Bundle rules:**
+- Initial JS never grows. Today it is 1,053.32 kB min / 304.70 kB gzip in one chunk.
+- After T1, the Landing entry chunk budget is ≤ 480 kB min / ≤ 150 kB gzip, then locked at the measured value plus 2%.
+- Route chunks are ≤ 60 kB gzip, not counting the shared recharts chunk.
 
-## Shortlist: the components the whole app uses
+**Libraries:**
+- No Aceternity or Componentry component is planned. A ticket may add one only after it proves a need that plain CSS can't meet, and states the bundle cost and licence.
+- No `lucide-react`. Icons are copied SVGs in one file.
+- `motion` is not used.
 
-Eight in total. Anything not on this list is plain CSS.
+## Decisions applied (2026-10-21)
 
-| # | Component | Source | Cost (gzip) | Used on |
+| Topic | Decision | Where |
+|---|---|---|
+| Icons | No `lucide-react`. Copy the needed SVGs into `src/components/icons.jsx`. | T10 |
+| Libraries | `@componentry` line reverted. Bento layouts are plain CSS Grid. | all |
+| Fonts | Self-hosted Space Grotesk and Manrope. WOFF2, latin subset, `font-display: swap`, only the main weights preloaded, no Google Fonts request. | T2 |
+| Theme | Separate behaviour-fix ticket against CAR-55: "theme follows the car currently shown". | T4 |
+| Text gold | Darker gold for text only; `#C9A24B` stays for fills and icons. | T3 |
+| Auth redirect | Signed-in users leave `/login` and `/signup`, but **not** `/reset-password`. | T5 |
+| Sign Up consent line | Left out. | n/a |
+| Landing preview | Yes, static, labelled "Example". | T13 |
+| Advisor starter chips | Last, optional. | T21 |
+
+### Fonts: licence and size
+- **Licence:**
+  - Space Grotesk (Florian Karsten) and Manrope (Mikhail Sharanda) are both under the **SIL Open Font License 1.1**.
+  - OFL allows bundling and self-hosting in a web app.
+  - Requirement: ship the `OFL.txt` licence text next to the font files, and do not sell the fonts on their own.
+- **Recommended: variable latin files.** Two files cover every weight from 300 to 700:
+
+| File | Size |
+|---|---|
+| `space-grotesk-latin-wght-normal.woff2` | 21.8 kB |
+| `manrope-latin-wght-normal.woff2` | 24.3 kB |
+| **Total (both preloaded)** | **46.1 kB** |
+
+- **Alternative: static latin files.** Manrope 400 / 600 / 700 and Space Grotesk 600 / 700 are 13.8 + 13.8 + 13.9 + 13.0 + 12.5 = **67.0 kB in 5 files**. Only Manrope 400 and Space Grotesk 700 (27.7 kB) would be preloaded.
+- **Source:** sizes measured from the Fontsource 5.3.0 packages. Fontsource is only the download source: the files are copied into the repo, with no npm dependency and no request to `fonts.googleapis.com` or `fonts.gstatic.com`.
+- **Why self-hosting matters:** a Google Fonts request would add a third party the Privacy page doesn't list, and that wording must not change.
+
+### Text tokens: contrast-checked values
+`--color-accent` stays the fill colour. The new `--color-accent-text` is used only for text. Each value below is ≥ 4.5:1 (the target was 4.6 for rounding margin) on the theme's page background, on white cards, on the input fill `#f1ede4` and on cream `#f5f1e8`.
+
+| Theme | Fill (unchanged) | Fill contrast as text (bg / white / input / cream) | **Text token** | Text token contrast |
 |---|---|---|---|---|
-| 1 | `Button` (primary, secondary, ghost, danger; `loading` and `success` states) | In-house, built on the state pattern of Aceternity `stateful-button` but CSS-only. The Aceternity original wraps `onClick`, hard-codes `bg-green-500` and needs `motion`. | ~0.6 kB est. | every screen |
-| 2 | `Card` + `BentoGrid` | `Card` in-house. `BentoGrid` is Aceternity `bento-grid` (free, no motion, no real dependency), restyled to brand tokens, with the hover shift disabled under reduced motion. | ~0.5 kB est. | Landing, Dashboard, Car Profile, Trip results |
-| 3 | `Field` (label, control, hint, error) | In-house. Aceternity `input` rejected: blue `#3b82f6` hover glow, needs `motion`. | ~0.4 kB est. | Auth, Onboarding, Fuel, Expenses, Maintenance, Trip |
-| 4 | `Skeleton` | In-house, extends the existing `.skeleton-bar` | ~0.2 kB est. | all data screens |
-| 5 | `EmptyState` (icon, title, one line, one action) | In-house. The Aceternity empty-state blocks are Pro-only. | ~0.3 kB est. | Dashboard, Maintenance, Expenses, Trip, Advisor, 404 |
-| 6 | `StatusMessage` (success, error, info; `role="status"` or `"alert"`) | In-house. No toast library. | ~0.3 kB est. | every form |
-| 7 | `Icon` (single-colour line icons replacing emoji) | `lucide-react` 1.61 (ISC), named imports. **It is a third package, outside Aceternity and Componentry, so it needs your OK.** Zero-dependency alternative: copy the ~20 SVG paths into one `icons.jsx` (lucide's ISC licence allows it). | 2.9 kB for 10 icons, measured | Landing, Dashboard, Car Profile, Fuel, Expenses |
-| 8 | `SiteHeader` with mobile menu | In-house. Extends the existing accessible `NavMenu` (arrow keys, Escape). Aceternity `resizable-navbar` rejected: its toggle is an SVG with `onClick`, not a button. | ~0.5 kB est. | every screen |
+| default (gold) | `#c9a24b` | 2.13 / 2.40 / 2.05 / 2.13 | **`#826627`** | 4.80 / 5.41 / 4.63 / 4.80 |
+| toyota | `#c8102e` | 5.30 / 5.88 / 5.04 / 5.22 | `#c8102e` (no change) | same |
+| honda | `#e4002b` | 4.31 / 4.85 / 4.15 / 4.30 | **`#d50028`** | 4.84 / 5.44 / 4.66 / 4.83 |
+| mercedes-benz | `#00a0dc` | 2.63 / 2.97 / 2.55 / 2.64 | **`#00729c`** | 4.78 / 5.40 / 4.62 / 4.79 |
+| ferrari | `#ffd900` | 1.22 / 1.38 / 1.18 / 1.23 | **`#7a6800`** | 4.86 / 5.52 / 4.72 / 4.89 |
+| bmw | `#6ab2e7` | 2.06 / 2.30 / 1.97 / 2.04 | **`#1b6da9`** | 4.95 / 5.52 / 4.72 / 4.89 |
+| audi | `#bb0a30` | 5.86 / 6.56 / 5.62 / 5.82 | `#bb0a30` (no change) | same |
+| volkswagen | `#00b1eb` | 2.16 / 2.47 / 2.12 / 2.19 | **`#007297`** | 4.76 / 5.45 / 4.66 / 4.83 |
+| tesla | `#e82127` | 4.08 / 4.49 / 3.84 / 3.98 | **`#d2161b`** | 4.93 / 5.43 / 4.64 / 4.81 |
 
-**Total UI library code: ~0 kB from the two registries' runtime** (`bento-grid` is copied source), plus 2.9 kB if `lucide-react` is approved. **`motion` is not needed.**
+- **How the values were chosen:** each is the same hue and saturation as the fill, darkened in HSL until the minimum across the four surfaces reaches 4.6:1.
+- **Dark surfaces:** on primary-coloured backgrounds (Advisor reply bubbles, header), accent text is replaced by white or cream text, not by this token.
 
 ---
 
-## Foundations
+## Release batches
 
-### F1. Design tokens and Tailwind theme mapped to the brand
-- **Summary:** One token source for colour, type, spacing, radius and shadow, exposed both as CSS variables (for `index.css`) and as Tailwind v4 `@theme` values (for components). Self-hosted Space Grotesk (headings) and Manrope (body). [X1, X10]
-- **Acceptance criteria:**
-  1. `src/tailwind.css` `@theme` maps `primary`, `accent`, `cream`, `graphite`, `muted`, `danger`, `border` and the radii to the existing `--color-*` variables. `bg-primary` therefore follows the car theme exactly as `.btn-primary` does today.
-  2. Headings compute to `Space Grotesk` and body text to `Manrope` on every screen. Fonts are served from the app's own origin, not `fonts.googleapis.com`: a Google Fonts request would add a third party that the Privacy page does not list. Use `font-display: swap`, at most 2 woff2 files, ≤ 80 kB total, and preload the body font.
-  3. A new `--color-accent-ink` token exists for each car theme, so any accent-coloured *text* is ≥ 4.5:1 on white and on cream. The existing `--color-accent` stays for fills.
-  4. The watermark opacity is reduced (or the watermark is hidden) behind long-text pages and form cards, so axe can compute contrast and reports no "incomplete" contrast nodes on Privacy, Terms or Reset.
-  5. Visual diff: before and after screenshots at both widths, with no layout shift other than the font change.
-- **Fix:** plain CSS plus Tailwind `@theme`. Fonts come from `@fontsource-variable/space-grotesk` and `@fontsource-variable/manrope` (OFL), or the woff2 files copied into `public/fonts`.
-- **Bundle:** JS +0. CSS +~1 kB. Fonts ≤ 80 kB, cached.
-- **Could break:** `index.html.test.js` (if `<link rel="preload">` is added to `index.html`), `noEmDash.test.js` (scans `index.html`). Text-width changes may wrap headings differently.
-- **Model:** Opus 5.5, because every later ticket inherits these token decisions.
-- **Estimate:** 4 h
+| Batch | Tickets | Hours | Ships on its own? |
+|---|---|---|---|
+| **1 (proposed first)** | T1 to T8 | **24.5 h** | Yes. Each ticket is independent and touches no camera, photo or limits code. |
+| 2 | T9 to T16 | 37 h | Yes, after T10 (shared components) |
+| 3 (photo-adjacent markup, each needs your OK) | T17 to T20 | 9 h | Yes, one at a time |
+| Last (optional) | T21 | 2 h | Yes |
+| **Total** | 21 tickets | **72.5 h** | |
 
-### F2. Brand theme safety (contrast and first paint)
-- **Summary:** Keep per-car brand colours but stop them causing contrast failures. Stop the green-to-graphite flash. [X2, X3]
-- **Acceptance criteria:**
-  1. Every accent-coloured text (Recharts legend, `.advisor-fix-feedback__change`, eyebrows) uses `--color-accent-ink`. For all 8 brand themes, contrast is measured ≥ 4.5:1 in a unit test that loops over `carBrandThemes.js`.
-  2. The Recharts legend on Expenses and Fuel Log renders its text in `--color-text`, with the colour shown only in the swatch (via the Legend `formatter`).
-  3. Car Onboarding (`/cars/new`) always renders in `DEFAULT_THEME`.
-  4. **Needs your decision:** whether the theme should follow the car selected on the page (Fuel Log, Maintenance, Expenses, Advisor) instead of the default car. That changes `ActiveCarContext` behaviour, so it is not done without approval.
-  5. With reduced motion on, the theme change is instant. Otherwise it is a 150 ms colour transition, not a jump.
-- **Fix:** plain CSS, a Recharts `formatter` prop, and one theme override on the onboarding route.
-- **Bundle:** +0.
-- **Could break:** `carBrandThemes` tests, `ActiveCarContext` tests, `ExpensesPage.test.jsx` (legend text), `CarOnboardingPage.test.jsx`.
-- **Model:** Opus 5.5, because it touches theming rules across screens.
-- **Estimate:** 4 h
+---
 
-### F3. Route-level code splitting
-- **Summary:** Lazy-load each screen so a visitor downloads only the screen they open. Recharts goes only to Fuel Log and Expenses. [Performance baseline]
+## Batch 1: high value, low coupling (24.5 h)
+
+### T1. Route-level code splitting
+- **Why first:** largest win for slow phone connections, zero visual change, and later bundle reports become meaningful.
 - **Acceptance criteria:**
-  1. Every page in `App.jsx` except Landing and Auth is loaded with `React.lazy`, inside one `Suspense` whose fallback is the shared `Skeleton` page shell. There is no blank flash.
-  2. The build shows a separate chunk per lazy route, and `recharts` appears only in the chunks for Fuel Log and Expenses (or a shared chunk they alone import).
-  3. The Landing entry chunk is ≤ 480 kB min / ≤ 150 kB gzip (today 1,053 / 305). A `scripts/check-bundle.mjs` (or a vitest test over `dist/`) fails if the entry chunk grows past the recorded budget.
-  4. All 55 test files still pass. Tests that render pages directly are unaffected; `App.test.jsx` awaits lazy routes with `findBy*`.
-  5. On a throttled "Slow 4G" profile, Landing is interactive faster than before (record both numbers in the commit message).
-- **Fix:** plain React (`lazy`, `Suspense`). No library.
-- **Bundle:** entry −50% or more (estimate from the measured recharts 545 kB min).
-- **Could break:** `App.test.jsx` (synchronous route assertions), `currencyToggle.integration.test.jsx`.
-- **Model:** Opus 5.5, because it is an app-wide structural change with test fallout.
+  1. Every page in `App.jsx` except Landing and Auth loads with `React.lazy` inside one `Suspense`. The fallback is a page-shaped skeleton (plain CSS, reusing `.skeleton-bar`), never a blank screen.
+  2. The build emits one chunk per lazy route. `recharts` appears only in chunks imported by Fuel Log and Expenses.
+  3. The Landing entry chunk is ≤ 480 kB min / ≤ 150 kB gzip. A `frontend/scripts/check-bundle.mjs` exits non-zero if the entry chunk exceeds the recorded budget.
+  4. `App.test.jsx` still classifies every route correctly. It parses `App.jsx` source for `<ProtectedRoute>` (lines 133-143), so lazy imports must keep that pattern readable. Route render tests use `findBy*`.
+  5. The commit message records entry-chunk size before and after, and Landing time-to-interactive on Chrome's "Slow 4G" profile.
+- **Fix:** plain React `lazy` / `Suspense`. No library.
+- **Bundle:** entry chunk drops by at least 545 kB min / 134 kB gzip (recharts alone, measured).
+- **Could break:** `App.test.jsx`, `currencyToggle.integration.test.jsx`.
+- **Model:** Opus 5.5, an app-wide structural change with test fallout.
 - **Estimate:** 3 h
 
-### F4. Shared components: Button, Card, BentoGrid, Field, Skeleton, EmptyState, StatusMessage, Icon
-- **Summary:** Build shortlist items 1 to 7 in `src/components/ui/` as `.jsx`, styled with brand tokens, then migrate **no** screens yet. Screens adopt them in their own tickets.
+### T2. Self-hosted brand fonts and type tokens [X1]
 - **Acceptance criteria:**
-  1. Each component has a `.test.jsx` covering its states. `Button` keeps the native `type` and `disabled`, sets `aria-busy` while loading, and announces "Saved" through a polite live region on success.
-  2. Every interactive part shows a 2 px focus ring that is visible on every theme (contrast ≥ 3:1 against its background).
-  3. Under `prefers-reduced-motion: reduce`, the spinner, shimmer and hover shift are static. A test asserts the CSS rule exists.
-  4. `BentoGrid` comes from `npx shadcn@latest add @aceternity/bento-grid` and is converted to JSX. The commit message reports the bundle before and after. No `@tabler/icons-react` gets installed (the component does not import it).
-  5. A hidden `/__ui` route is **not** added. Components are shown to you through screenshots of a test render.
-- **Fix:** in-house plus Aceternity `bento-grid`, plus `lucide-react` only if approved.
-- **Bundle:** ~2.3 kB gzip est., plus 2.9 kB measured for icons. Nothing lands in the entry chunk until a screen uses it.
-- **Could break:** nothing existing (new files only).
-- **Model:** Fable 5.1, because it is the one ticket whose visual and API choices every screen ticket inherits.
-- **Estimate:** 8 h
+  1. Headings compute to Space Grotesk and body text to Manrope on all 13 screens (checked with `getComputedStyle` in a Playwright run).
+  2. `public/fonts/` holds the two variable latin WOFF2 files (46.1 kB total) plus `OFL.txt`. `@font-face` uses `font-display: swap` and `unicode-range` for latin.
+  3. `index.html` preloads exactly those two files (`<link rel="preload" as="font" type="font/woff2" crossorigin>`).
+  4. The network log on a cold load shows **no** request to any Google domain.
+  5. `--font-heading` and `--font-body` tokens are added to `:root` and mapped in `src/tailwind.css` `@theme`, and `--font-family-base` points to the body font with the current system stack as fallback.
+- **Fix:** plain CSS plus 2 copied font files. No npm dependency.
+- **Bundle:** JS +0. Fonts 46.1 kB, cached after the first visit.
+- **Could break:** `index.html.test.js` (it checks `index.html` content), `noEmDash.test.js` (scans `index.html`). Wider glyphs may wrap long headings at 390 px, so check every screen.
+- **Model:** Sonnet 5.5, well specified.
+- **Estimate:** 3 h
 
-### F5. Header and My Car menu: mobile disclosure
-- **Summary:** At ≤ 860 px, collapse the links, currency switch and Log Out into a "Menu" button. The header becomes one 56 to 64 px row. [X4, X7]
+### T3. Text-only accent tokens and chart legend contrast [X3]
 - **Acceptance criteria:**
-  1. At 390 px the header is ≤ 64 px tall, logged in and out.
-  2. The Menu button is a real `<button>` with `aria-expanded` and `aria-controls`. Escape closes it and returns focus to it, and focus moves into the panel on open.
-  3. The existing "My Car" submenu keeps its keyboard behaviour (arrow keys, Home, End, Escape) inside the mobile panel.
-  4. Every header and footer link is ≥ 44 px tall on touch and ≥ 24 px on desktop.
-  5. The logo link has the accessible name "CarSage home".
-- **Fix:** in-house (shortlist #8) and plain CSS.
-- **Bundle:** ~0.5 kB est.
-- **Could break:** `SiteNav.test.jsx` (31 queries, 4 by selector), `currencyToggle.integration.test.jsx`.
-- **Model:** Sonnet 5.5, because it follows a well-known pattern already partly in the codebase.
-- **Estimate:** 4 h
-
-### F6. Global accessibility CSS: motion, focus, targets
-- **Summary:** Close the reduced-motion gaps and make hidden file inputs show focus on their visible label. [X5, X7]
-- **Acceptance criteria:**
-  1. `cold-start-spin` and `advisor-typing-bounce` stop under `prefers-reduced-motion: reduce`. A Playwright check records no running CSS animations with reduce on.
-  2. When a visually hidden file input (`.sr-only` in RecordPhotos, PhotoScan, OdometerScanButton, PendingPhotos, CarProfile, CarOnboarding, FuelLog) has focus, its label shows the focus ring (`:has(:focus-visible)` or a sibling selector). The Tab walk shows no `NO-RING` entries.
-  3. `.fuel-log-table-wrap` gets `tabindex="0"`, `role="region"` and an `aria-label`, which clears axe `scrollable-region-focusable`.
-  4. The "Forgot password?", "Change" and footer links reach a 24 px minimum target.
-- **Fix:** plain CSS plus 3 attributes.
+  1. `:root` and every entry in `carBrandThemes.js` define `--color-accent-text` with the values in the table above. `--color-accent` is unchanged and still used for fills and icons.
+  2. A unit test loops over `DEFAULT_THEME` and every brand theme and asserts `--color-accent-text` is ≥ 4.5:1 against the theme background, `#ffffff`, `#f1ede4` and `#f5f1e8`.
+  3. Every rule that uses `var(--color-accent)` as a text `color` switches to `--color-accent-text`: `.landing-section-header__eyebrow` and `.advisor-fix-feedback__change`. The Advisor reply link sits on a dark bubble, so it uses white or cream instead.
+  4. The Recharts legends on Expenses and Fuel Log render label text in `--color-text`, with the series colour only in the swatch (Legend `formatter`).
+- **Fix:** plain CSS, one Recharts prop.
 - **Bundle:** +0.
-- **Could break:** `FuelLogPage.test.jsx` (table queries), `RecordPhotos.test.jsx`.
-- **Model:** Sonnet 5.5, a small but cross-file change.
+- **Could break:**
+  - `carBrandThemes.test.js:35` requires every palette to define exactly `DEFAULT_THEME`'s keys. Adding `--color-accent-text` to `DEFAULT_THEME` *and* every brand keeps it green.
+  - `ActiveCarContext` already removes all `DEFAULT_THEME` keys on unmount, so the new key is cleaned up for free.
+  - `ExpensesPage.test.jsx`, `FuelLogPage.test.jsx`.
+- **Model:** Haiku 5.5, mechanical once the values are fixed.
 - **Estimate:** 2 h
 
-### F7. Per-route page titles
-- **Summary:** Each route sets `document.title` ("Fuel Log · CarSage"). [X8]
+### T4. Behaviour fix (CAR-55): theme follows the car currently shown [X2]
+- **Type:** behaviour fix against CAR-55's criterion "theme follows the car currently shown". It changes `ActiveCarContext` and the initial car selection on five pages, but no data writes and no camera, photo or limits code.
+- **Root cause (read from the code):**
+  1. **Car shown and theme disagree.** Trip Planner, AI Advisor, Fuel Log, Maintenance and Expenses pre-select `loadedCars[0]` on load (`FuelLogPage.jsx:227`, `TripPlannerPage.jsx:207`, `AIAdvisorPage.jsx:178`, `ExpensesPage.jsx:151`, `MaintenancePage.jsx:267`). They call `setActiveCarId` only when the dropdown changes. The theme meanwhile uses the stored last-reported car (`ActiveCarContext.jsx:97-99`). Car Profile opens the profile's `default_car_id` and reports it on view (`CarProfilePage.jsx:286`). So viewing the Mercedes profile themes every other page graphite while those pages show the Honda. This is "last car reported", not "default car".
+  2. **Green-to-graphite flash.** `activeCarId` starts as `null`, and the car list (with makes) is fetched after first paint. The first frame always paints the default green, then switches.
+  3. **Relation to the 401 after login: likely the same weak spot, not yet reproduced.**
+     - The only theme lookup is the Supabase `cars` select at `ActiveCarContext.jsx:87-91`. Its `error` is discarded (`const { data } = await ...`).
+     - If that request gets a 401 (for example, it fires in the window right after sign-in before the new session is used, or with an expired token), `cars` becomes `[]` and the theme silently stays green.
+     - The theme then switches later when another auth event creates a new `user` object and re-runs the effect (the effect depends on `user` identity, so every `SIGNED_IN` or `TOKEN_REFRESHED` event refetches).
+     - My audit run started from an established session and did not record HTTP status codes, so the 401 itself was not observed.
 - **Acceptance criteria:**
-  1. All 13 screens have distinct titles.
-  2. The title updates on client-side navigation.
-  3. No em dash appears in any title (`noEmDash` rule).
-- **Fix:** a 10-line `useDocumentTitle` hook. No library.
-- **Bundle:** +0.1 kB.
-- **Could break:** none expected. `index.html.test.js` checks only the static title.
-- **Model:** Haiku 5.5, mechanical and well specified.
-- **Estimate:** 1 h
-
----
-
-## Screens
-
-### S1. Landing
-- **Summary:** Match the Stitch landing style: line icons, a readable wordmark and lifted cards, plus an optional static product preview. [Audit §1]
-- **Acceptance criteria:**
-  1. Feature, How-it-works and trust rows use `Icon` and `BentoGrid`/`Card`, with no emoji.
-  2. The header shows the "CarSage" wordmark as text next to the mark, readable at 1280 px and 390 px.
-  3. The visible headline "Everything about your car, in one place" is the page's H1. The `.sr-only` H1 is removed.
-  4. Cards lift on hover and focus by ≤ 2 px. There is no movement under reduced motion.
-  5. **Optional, needs your OK:** a static, clearly illustrative preview card under the CTAs (car name, monthly fuel, next service). It uses no live data and shows no telemetry.
-- **Fix:** shortlist 2 and 7, plain CSS.
-- **Bundle:** +0 entry if Landing stays eager and icons are tree-shaken (~1 kB).
-- **Could break:** `LandingPage.test.jsx` (heading queries), `Logo.test.jsx`.
-- **Model:** Sonnet 5.5
-- **Estimate:** 4 h
-
-### S2. Sign Up / Log In
-- **Summary:** Polish the auth card and stop showing the login form to a signed-in user. [Audit §2]
-- **Acceptance criteria:**
-  1. A signed-in user who opens `/login` or `/signup` is redirected to `/dashboard`. **This is routing behaviour, so it needs your OK.**
-  2. The submit button uses `Button` `loading` while the request runs. Errors use `StatusMessage` `role="alert"`.
-  3. The card icon is a neutral CarSage mark, not a house.
-  4. Inputs use `Field`, and the 390 px layout has no horizontal scroll.
-- **Fix:** shortlist 1, 3 and 6.
-- **Bundle:** +0 (shared components only).
-- **Could break:** `AuthPage.test.jsx` (29 queries), `App.test.jsx` (route test for `/login`).
-- **Model:** Sonnet 5.5
-- **Estimate:** 3 h
-
-### S3. Reset password
-- **Summary:** Remove the dead end on an expired link. [Audit §3]
-- **Acceptance criteria:**
-  1. The expired or invalid state shows an `EmptyState` with a primary `Button` "Back to Log In" that links to `/login` (the existing forgot-password flow lives there).
-  2. The success state uses `StatusMessage` `role="status"`.
-  3. Copy stays the same apart from the button label.
-- **Fix:** shortlist 1, 5 and 6.
+  1. **Reproduce first:** log in from a clean profile with the network log open, and record whether the `cars?select=id,make` request returns 401 and when. Put the finding in the commit message.
+  2. **Pre-select the active car:** each of the five pages initialises its selection from `activeCarId` when that car is in its list, and falls back to `loadedCars[0]` only otherwise. The theme and the dropdown always show the same car.
+  3. **Car Profile stays consistent:** Car Profile keeps reporting the car it shows. `/cars/mine` with no id opens the active car when one exists, else the default car.
+  4. **No flash:** the provider stores `{ carId, make }` per user (as today, plus the make). On reload it applies that make's theme in a `useLayoutEffect` before first paint, then reconciles once the fetch returns. A first paint on a themed page shows the final theme.
+  5. **The query error is handled:** on error the provider keeps the last stored theme (no fallback to green) and retries once when the session changes. The effect depends on `user?.id`, not the `user` object, so token refreshes don't refetch.
+  6. **Unthemed routes:** `UNTHEMED_PATHS` adds `/reset-password` (a recovery session must not theme the reset page) and `/cars/new` (a new car has no brand yet).
+  7. **Tests per page:** each of Trip Planner, AI Advisor, Fuel Log, Maintenance, Expenses and Car Profile gets a test proving that "with active car B stored, the page pre-selects B and the provider theme is B's". `ActiveCarContext.test.jsx` covers the no-flash path (theme set before first paint), the 401/error path (stored theme kept), and `user?.id` stability.
+- **Fix:** React only (`ActiveCarContext.jsx`, five pages' initial-selection lines). No library.
 - **Bundle:** +0.
-- **Could break:** `ResetPasswordPage.test.jsx`.
-- **Model:** Haiku 5.5
-- **Estimate:** 1 h
-
-### S4. Dashboard
-- **Summary:** Give the default car a hero and make the page lead with one clear action. [Audit §4]
-- **Acceptance criteria:**
-  1. The default car renders as a larger hero `Card` (name, plate, 3 to 4 key specs, photo if any). Other cars render as compact cards below it.
-  2. One primary action per page ("Plan a trip" or "Add your first car" when there are no cars). "Add Another Car" becomes secondary.
-  3. Spec values are formatted for display only: drivetrain uppercased ("RWD"), and transmission "a" or "m" shown as "Automatic" or "Manual". Stored values are unchanged, and a unit test covers the formatter.
-  4. "All cars, this month" and "Maintenance" empty states use `EmptyState` with one button each.
-  5. Numbers (60% and the cost totals) render as plain text in the same type scale as other stats, with no count-up animation.
-- **Fix:** shortlist 2, 4 and 5.
-- **Bundle:** +0 (shared).
-- **Could break:** `DashboardPage.test.jsx` (23 queries, 3 by selector).
-- **Model:** Sonnet 5.5
-- **Estimate:** 5 h
-
-### S5. Car Onboarding
-- **Summary:** Shorten the perceived form and make it brand-neutral. [Audit §5]
-- **Acceptance criteria:**
-  1. At ≥ 860 px the fields lay out in two columns. At 390 px they stay in one column with grouped sections (Basics, Performance, Identification, Photo) as `Card`s.
-  2. The page always uses the CarSage default theme (from F2).
-  3. The photo picker label shows a focus ring when its hidden input is focused (from F6).
-  4. The primary "Add Car" `Button` shows `loading` while saving. The existing save logic is untouched.
-  5. Drivetrain stays a text field. **Turning it into a select is flagged, not done.**
-- **Fix:** shortlist 1, 2 and 3, plain CSS grid.
-- **Bundle:** +0.
-- **Could break:** `CarOnboardingPage.test.jsx` (51 queries).
-- **Model:** Sonnet 5.5
-- **Estimate:** 4 h
-
-### S6. Car Profile
-- **Summary:** Fix the definition-list semantics and tighten the spec layout. [Audit §6]
-- **Acceptance criteria:**
-  1. Axe reports 0 `definition-list` and `dlitem` violations: each `dt`/`dd` pair is wrapped in a single `div` directly inside the `dl`.
-  2. Specs use line `Icon`s and a two-column grid at ≥ 860 px. Empty values read "Not set".
-  3. The page order is H1 (car name) first, then the car switcher.
-  4. "Delete Car" moves into a separate, labelled "Danger zone" card with a `danger` `Button`. The existing confirm flow is unchanged.
-- **Fix:** shortlist 1, 2 and 7.
-- **Bundle:** +0 (icons shared).
-- **Could break:** `CarProfilePage.test.jsx` (48 queries).
-- **Model:** Sonnet 5.5
-- **Estimate:** 4 h
-
-### S7. Trip Planner
-- **Summary:** Use the empty right column for an estimate placeholder, and give the route inputs one rail. [Audit §7]
-- **Acceptance criteria:**
-  1. At ≥ 860 px the layout is two columns: the form, and a results `Card`. Before a trip is planned, the results card shows an `EmptyState` ("Your fuel cost and travel time will appear here").
-  2. While planning, the results card shows a `Skeleton`, and the Plan Trip `Button` is in `loading`.
-  3. The origin and destination markers share one vertical rail in brand colours, not cyan and black.
-  4. Result numbers are static text with no animation.
-- **Fix:** shortlist 1, 2, 4 and 5.
-- **Bundle:** +0.
-- **Could break:** `TripPlannerPage.test.jsx` (77 queries, 13 by selector), so this is the highest test risk.
-- **Model:** Sonnet 5.5
-- **Estimate:** 5 h
-
-### S8. AI Advisor
-- **Summary:** Make the safety recommendation the most visible element and dock the composer. [Audit §8]
-- **Acceptance criteria:**
-  1. The recommendation shows as a labelled banner at the top of each reply: an icon plus "See a mechanic" or "Safe to check yourself" in at least 16 px. Badge colours pass 4.5:1 on every theme.
-  2. The conversation scrolls inside a panel, and the composer stays docked at the bottom of the viewport at 390 px and 1280 px. On narrow screens the docked area stays above the keyboard.
-  3. The three photo notes are grouped under one "About photo scanning" block with the **unchanged** wording. "Scan a photo" uses a secondary `Button`, so it no longer looks disabled.
-  4. The typing indicator respects reduced motion (from F6).
-  5. **Optional, needs your OK:** 3 to 4 starter chips that only fill the input without sending.
-- **Fix:** shortlist 1, 2, 6 and 7, plain CSS.
-- **Bundle:** +0.
-- **Could break:** `AIAdvisorPage.test.jsx` (54 queries), `advisorPhoto.test.js` (only if text nodes move).
-- **Model:** Opus 5.5, because it touches safety advice presentation where hierarchy matters.
+- **Could break:** `ActiveCarContext.test.jsx`, `providerWiring.test.js`, and the five page tests that assert the first car is pre-selected.
+- **Model:** Opus 5.5, cross-page state with a race condition and per-page tests.
 - **Estimate:** 6 h
 
-### S9. Fuel Log
-- **Summary:** Shorten the phone form and make the history table usable at 390 px. [Audit §9]
+### T5. Redirect signed-in users away from /login and /signup (not /reset-password)
 - **Acceptance criteria:**
-  1. At ≤ 520 px, fill-ups render as stacked rows (date, litres, cost, LBP) instead of a 962 px table. At ≥ 520 px the table stays. Both views have the same data and order.
-  2. The two scan cards share one privacy notice block with the **unchanged** wording, shown once.
-  3. The duplicate headings are merged into one "Fill-ups for {car}" with the chart and table under it.
-  4. The table wrapper is focusable (from F6), and the axe run is clean.
-- **Fix:** plain CSS (`@container` or media query), shortlist 2 and 6.
-- **Bundle:** +0 (Recharts already in this chunk after F3).
-- **Could break:** `FuelLogPage.test.jsx` (66 queries, table-based), `fuelLog.test.js` (logic, should not change).
+  1. A signed-in user who opens `/login` or `/signup` is redirected (`replace`) to `/dashboard`.
+  2. `/reset-password` is **not** redirected. A Supabase recovery link creates a session, and the user must still reach the form.
+  3. While auth status is `"loading"`, nothing redirects. The auth card renders its normal skeleton, so signed-out users never see a flicker.
+  4. **Tests:**
+     - `/login` and `/signup` redirect when signed in.
+     - Both render the form when signed out.
+     - **`/reset-password` renders the reset form with a signed-in (recovery) session and does not redirect.**
+     - No redirect while loading.
+  5. `App.test.jsx`'s public-route classification (it parses `App.jsx` for `<ProtectedRoute>`, lines 133-143) still lists `/login`, `/signup` and `/reset-password` as public.
+- **Fix:** a small `RedirectIfSignedIn` wrapper around the two routes. No library.
+- **Bundle:** +0.1 kB.
+- **Could break:** `App.test.jsx`, `AuthPage.test.jsx`, `ResetPasswordPage.test.jsx`.
+- **Model:** Sonnet 5.5
+- **Estimate:** 1.5 h
+
+### T6. Accessibility fixes that don't touch photo code [X5, §6, §9]
+- **Acceptance criteria:**
+  1. `cold-start-spin` and `advisor-typing-bounce` stop under `prefers-reduced-motion: reduce`. A Playwright check finds no running CSS animations on Dashboard or Advisor with reduce on.
+  2. Car Profile: each `dt`/`dd` pair sits in one `div` directly inside the `dl`, and axe reports 0 `definition-list` / `dlitem` violations.
+  3. Fuel Log: `.fuel-log-table-wrap` gets `tabindex="0"`, `role="region"` and `aria-label="Fill-up history"`, so axe `scrollable-region-focusable` is clear and the region shows a focus ring.
+  4. The "Forgot password?" and footer links reach a 24 px minimum target height.
+- **Fix:** plain CSS plus markup attributes. Fuel Log's table only; its scan cards are not touched.
+- **Bundle:** +0.
+- **Could break:** `CarProfilePage.test.jsx` (`dt`/`dd` queries), `FuelLogPage.test.jsx` (table queries), `AuthPage.test.jsx`.
+- **Model:** Haiku 5.5
+- **Estimate:** 2 h
+
+### T7. Reset password dead end and 404 actions [§3, §13]
+- **Acceptance criteria:**
+  1. The expired or invalid reset link state shows a primary "Back to Log In" button linking to `/login`. The rest of the copy is unchanged.
+  2. 404 shows "Go to Dashboard" when signed in and "Back to Home" when signed out, as a primary button.
+  3. Both pages reach their button within 3 Tab stops after the header.
+  4. Both use plain CSS cards for now. They move to the shared components in T10 later, and no visual change is expected then.
+- **Fix:** plain CSS and markup.
+- **Bundle:** +0.
+- **Could break:** `ResetPasswordPage.test.jsx`, `App.test.jsx` (not-found route).
+- **Model:** Haiku 5.5
+- **Estimate:** 2 h
+
+### T8. Mobile header and My Car menu [X4, X7]
+- **Acceptance criteria:**
+  1. At ≤ 860 px the header is one row ≤ 64 px tall (logo, "Menu" button), logged in and out.
+  2. "Menu" is a real `<button>` with `aria-expanded` and `aria-controls`. Focus moves into the panel on open, and Escape closes it and returns focus to the button.
+  3. The existing My Car submenu keeps its keyboard behaviour (arrow keys, Home, End, Escape) inside the panel. The currency switch and Log Out are inside the panel.
+  4. Panel links are ≥ 44 px tall. The logo link's accessible name is "CarSage home".
+  5. Panel open and close is a 150 ms transform, instant under reduced motion.
+- **Fix:** plain CSS plus a small state hook in `SiteNav.jsx`. Aceternity `resizable-navbar` stays rejected (its toggle is an SVG with `onClick`, not a button).
+- **Bundle:** ~0.5 kB est.
+- **Could break:** `SiteNav.test.jsx` (31 queries, 4 by selector), `currencyToggle.integration.test.jsx`.
 - **Model:** Sonnet 5.5
 - **Estimate:** 5 h
 
-### S10. Maintenance
-- **Summary:** Fix the stray odometer note and use the full column. [Audit §10]
-- **Acceptance criteria:**
-  1. The "No odometer reading yet" note sits under the car selector, aligned with it.
-  2. At ≥ 860 px, "Add an item" and the item list sit side by side. At 390 px they stack.
-  3. "+ Custom item" is a solid secondary chip, not dashed.
-  4. Due-soon and overdue badges pass 4.5:1 on every theme.
-- **Fix:** plain CSS, shortlist 2.
-- **Bundle:** +0.
-- **Could break:** `MaintenancePage.test.jsx` (49 queries).
-- **Model:** Haiku 5.5
-- **Estimate:** 2 h
+---
 
-### S11. Expenses
-- **Summary:** Bring the form and chart in line with Fuel Log. [Audit §11]
-- **Acceptance criteria:**
-  1. The legend text is graphite, with colour only in the swatches (from F2).
-  2. "Add a photo" is a secondary `Button` with the same look as the Fuel Log scan buttons.
-  3. The month empty state uses `EmptyState` with an "Add an expense" action that focuses the form.
-  4. Amounts use the existing currency helper with no change.
-- **Fix:** shortlist 1 and 5.
-- **Bundle:** +0.
-- **Could break:** `ExpensesPage.test.jsx` (31 queries, 6 by selector), `RecordPhotos.test.jsx`.
-- **Model:** Sonnet 5.5
-- **Estimate:** 3 h
+## Batch 2: shared components and screens (37 h)
 
-### S12. Privacy and Terms
-- **Summary:** Make the long text easier to read **without changing a word**. [Audit §12]
+### T9. Per-route page titles [X8]
 - **Acceptance criteria:**
-  1. The text column is centred, ≤ 70 characters wide, on a plain cream background with no watermark behind it.
-  2. A table of contents is generated from the existing H2s, with anchors for each.
-  3. `LegalPages.test.jsx` still passes. A test asserts that the rendered text is byte-identical to before (snapshot of `innerText`).
-- **Fix:** plain CSS plus a TOC built from the headings.
+  1. All 13 screens have distinct titles ("Fuel Log · CarSage").
+  2. The title updates on client-side navigation.
+  3. There are no em dashes (`noEmDash` rule).
+- **Fix:** a 10-line `useDocumentTitle` hook.
 - **Bundle:** +0.1 kB.
-- **Could break:** `LegalPages.test.jsx` (17 queries, 6 by selector).
-- **Model:** Haiku 5.5
-- **Estimate:** 2 h
-
-### S13. 404
-- **Summary:** Give lost users a way back. [Audit §13]
-- **Acceptance criteria:**
-  1. The page shows an `EmptyState` with an icon, "Page not found", and a primary `Button`: "Go to Dashboard" when signed in, "Back to Home" when signed out.
-  2. The title is "Page not found · CarSage" (from F7).
-  3. A focusable control appears within the first 3 Tab stops after the header.
-- **Fix:** shortlist 1 and 5.
-- **Bundle:** +0.
-- **Could break:** `App.test.jsx` (not-found route), `NotFoundPage` tests if any are added.
+- **Could break:** none expected.
 - **Model:** Haiku 5.5
 - **Estimate:** 1 h
 
+### T10. Shared components and `icons.jsx` [X6, X9, X11]
+- **Summary:** in-house `.jsx` components styled with tokens: `Button` (primary, secondary, ghost, danger; `loading` with `aria-busy`, and `success` announced in a polite live region), `Card`, `Field`, `Skeleton`, `EmptyState`, `StatusMessage`. Plus `src/components/icons.jsx` with copied SVGs.
+- **Icon set:** car, route, chat, fuel, wrench, receipt, lock, camera, calendar, gauge, chevron-down, check, alert, info, menu, close, arrow-right, map-pin, plus. That's about 19 paths, each `aria-hidden` by default, with `currentColor` strokes.
+- **Icon licence:** copy from Lucide (ISC) or Tabler (MIT). Both allow copying, provided the licence notice stays in the file header. **Pick one set so the stroke style matches.**
+- **Acceptance criteria:**
+  1. Each component has a `.test.jsx` covering its states.
+  2. Focus rings are visible (≥ 3:1) on every theme.
+  3. Spinner and shimmer are static under reduced motion.
+  4. `icons.jsx` carries the source licence notice and adds no npm dependency.
+  5. No screen is migrated in this ticket.
+- **Bundle:** ~2.3 kB components + ~2.5 kB icons (gzip, estimate). Only in the route chunks that use them.
+- **Could break:** nothing existing (new files).
+- **Model:** Fable 5.1, because every later screen ticket inherits these APIs and visuals.
+- **Estimate:** 7 h
+
+### T11. Dashboard [§4]
+- **Acceptance criteria:**
+  1. The active car (from T4) renders as a hero card. Other cars are compact cards in a CSS Grid.
+  2. One primary action ("Plan a trip", or "Add your first car" when there are none).
+  3. Drivetrain and transmission are formatted for display only ("RWD", "Automatic"), with a unit test. Stored values are unchanged.
+  4. The month and maintenance empty states use `EmptyState`.
+  5. Numbers are plain text with no animation.
+- **Fix:** T10 components, CSS Grid.
+- **Bundle:** +0.
+- **Could break:** `DashboardPage.test.jsx`.
+- **Model:** Sonnet 5.5
+- **Estimate:** 5 h
+
+### T12. Car Profile layout [§6]
+- **Acceptance criteria:**
+  1. H1 (car name) comes first, then the switcher.
+  2. Specs use `icons.jsx` and a 2-column grid at ≥ 860 px.
+  3. Empty values read "Not set".
+  4. "Delete Car" sits in a separate "Danger zone" card with a danger `Button`. The confirm flow is unchanged.
+- **Not touched:** the photo upload and remove code.
+- **Bundle:** +0.
+- **Could break:** `CarProfilePage.test.jsx`.
+- **Model:** Sonnet 5.5
+- **Estimate:** 4 h
+
+### T13. Landing, including a static "Example" preview [§1]
+- **Acceptance criteria:**
+  1. Emoji are replaced with `icons.jsx`. Feature and step cards use a plain CSS Grid bento layout.
+  2. The visible headline is the H1, and the `.sr-only` H1 is removed.
+  3. The wordmark "CarSage" is text beside the logo in the header.
+  4. A static preview card sits under the CTAs with a visible **"Example"** label: car name, monthly fuel, next service, all hard-coded. No live data, no telemetry wording. It is `aria-label="Example of the CarSage dashboard"`.
+  5. Cards lift ≤ 2 px on hover and focus, with no movement under reduced motion.
+- **Bundle:** Landing is in the entry chunk, so ≤ +1.5 kB gzip, inside the T1 budget.
+- **Could break:** `LandingPage.test.jsx`, `Logo.test.jsx`.
+- **Model:** Sonnet 5.5
+- **Estimate:** 5 h
+
+### T14. Trip Planner layout [§7]
+- **Acceptance criteria:**
+  1. Two columns at ≥ 860 px: the form, and a results card. Before planning, the results card shows `EmptyState`.
+  2. While planning, the results card shows `Skeleton` and the button is in `loading`.
+  3. Origin and destination markers share one rail in brand colours.
+  4. Results are static text.
+- **Bundle:** +0.
+- **Could break:** `TripPlannerPage.test.jsx` (77 queries, 13 by selector), the highest test risk.
+- **Model:** Sonnet 5.5
+- **Estimate:** 5 h
+
+### T15. Maintenance, Privacy and Terms, and Car Onboarding layout [§10, §12, §5]
+- **Acceptance criteria:**
+  1. Maintenance: the odometer note sits under the car selector. "Add an item" and the list are side by side at ≥ 860 px. "+ Custom item" is a solid chip.
+  2. Legal: the text column is centred, ≤ 70 characters wide, with no watermark behind it, and a TOC built from the existing H2s. A test asserts the rendered `innerText` is unchanged.
+  3. Onboarding: two columns at ≥ 860 px, grouped cards at 390 px. The default theme comes from T4, and the button shows `loading`. **The photo picker is not touched.**
+- **Bundle:** +0.1 kB.
+- **Could break:** `MaintenancePage.test.jsx`, `LegalPages.test.jsx`, `CarOnboardingPage.test.jsx`.
+- **Model:** Haiku 5.5 for Maintenance and Legal, Sonnet 5.5 for Onboarding. Three commits, one per screen.
+- **Estimate:** 5 h (Maintenance 1.5 h, Legal 1.5 h, Onboarding 2 h)
+
+### T16. AI Advisor layout, non-photo parts [§8]
+- **Acceptance criteria:**
+  1. The recommendation is a banner at the top of each reply: icon plus "See a mechanic" or "Safe to check yourself", ≥ 16 px, ≥ 4.5:1 on every theme.
+  2. The conversation scrolls in a panel, and the composer stays docked at the bottom at 390 px and 1280 px.
+  3. The "Change" link reaches 24 px target height and uses white or cream on the dark bubble.
+- **Not touched:** `PhotoScan.jsx` and the photo notes.
+- **Bundle:** +0.
+- **Could break:** `AIAdvisorPage.test.jsx`.
+- **Model:** Opus 5.5, because the safety-advice hierarchy needs care.
+- **Estimate:** 5 h *(was 6 h. The photo-notes part moved to T18.)*
+
 ---
 
-## Suggested order and total
+## Batch 3: photo-adjacent markup (9 h, each needs your explicit OK)
 
-1. F3 (split first, so later bundle reports are meaningful)
-2. F1
-3. F2
-4. F6
-5. F7
-6. F4
-7. F5
-8. Then the screens by severity: S8, S9, S6, S3, S13, S2, S4, S7, S11, S5, S10, S1, S12
+These change only layout and CSS around the camera and photo components. No camera, photo, upload or limits logic changes, but the markup sits inside those files, so each needs approval first.
 
-**Total estimate:** 26 h foundations + 45 h screens = **71 h**.
+### T17. Fuel Log: one privacy notice for both scan cards, and stacked rows on phones [§9]
+- **Acceptance criteria:**
+  1. The Gemini notice appears once above both scan cards, with **unchanged** wording.
+  2. At ≤ 520 px, fill-ups render as stacked rows instead of the 962 px table, with the same data and order.
+  3. The duplicate headings are merged.
+- **Could break:** `FuelLogPage.test.jsx`.
+- **Model:** Sonnet 5.5
+- **Estimate:** 3 h
+
+### T18. AI Advisor photo notes grouped [§8]
+- **Acceptance criteria:**
+  1. The three notes sit under one "About photo scanning" block with **unchanged** wording.
+  2. "Scan a photo" uses the secondary `Button` style, so it no longer looks disabled.
+- **Could break:** `AIAdvisorPage.test.jsx`, `advisorPhoto.test.js`.
+- **Model:** Sonnet 5.5
+- **Estimate:** 2 h
+
+### T19. Focus ring for hidden file inputs [§5, §9, §11]
+- **Acceptance criteria:**
+  1. In `index.css` only, labels whose visually hidden file input has focus show the focus ring (`label:has(input:focus-visible)`). This covers RecordPhotos, PhotoScan, OdometerScanButton, PendingPhotos, Car Profile and Onboarding.
+  2. A Tab walk logs no `NO-RING`. No JSX in those components changes.
+- **Could break:** none expected (CSS only).
+- **Model:** Haiku 5.5
+- **Estimate:** 1 h
+
+### T20. Expenses "Add a photo" as a secondary button, and empty state [§11]
+- **Acceptance criteria:**
+  1. "Add a photo" looks like a secondary button, consistent with Fuel Log.
+  2. The month empty state uses `EmptyState` with an action that focuses the form.
+  3. Upload behaviour is unchanged.
+- **Could break:** `ExpensesPage.test.jsx`, `RecordPhotos.test.jsx`.
+- **Model:** Sonnet 5.5
+- **Estimate:** 3 h
+
+---
+
+## Last, optional
+
+### T21. Advisor starter chips
+- **Acceptance criteria:**
+  1. 3 or 4 chips appear only in an empty conversation.
+  2. Clicking a chip fills the input and moves focus to it, **without sending**.
+  3. Chips are real buttons, ≥ 44 px tall on touch.
+- **Bundle:** +0.2 kB.
+- **Could break:** `AIAdvisorPage.test.jsx`.
+- **Model:** Haiku 5.5
+- **Estimate:** 2 h
