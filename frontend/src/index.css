@@ -1140,6 +1140,12 @@ textarea:focus {
   margin-top: calc(var(--spacing-unit) * 3);
 }
 
+/* CAR-67: the <Suspense> fallback while a lazy screen's code downloads.
+   Holds roughly a screen's height so the footer doesn't jump up and back. */
+.route-loading {
+  min-height: 60vh;
+}
+
 .skeleton-bar--w-25 { width: 25%; }
 .skeleton-bar--w-40 { width: 40%; }
 .skeleton-bar--w-55 { width: 55%; }

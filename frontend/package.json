@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:bundle": "node scripts/check-bundle.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

@@ -64,11 +64,32 @@ describe("App routing — public screens", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the Not Found screen for an unknown route (invalid input case)", () => {
+  it("renders the Not Found screen for an unknown route (invalid input case)", async () => {
     renderAtPath("/this-route-does-not-exist");
+    // CAR-67: Not Found is lazily loaded, so wait for its chunk.
     expect(
-      screen.getByRole("heading", { name: "Page Not Found" }),
+      await screen.findByRole("heading", { name: "Page Not Found" }),
     ).toBeInTheDocument();
+  });
+
+  it("wraps the route table in one Suspense whose fallback is the loading skeleton, never a blank screen (CAR-67)", () => {
+    // Checked on the source: React caches a lazy screen once loaded, so a
+    // render-based check would depend on test order. RouteLoading.test.jsx
+    // covers what the skeleton itself shows.
+    expect(appSource.match(/<Suspense/g)).toHaveLength(1);
+    expect(appSource).toMatch(/<Suspense fallback=\{<RouteLoading \/>\}>\s*<Routes>/);
+  });
+
+  it("keeps Landing and Log In / Sign Up in the entry bundle, and lazy-loads every other screen (CAR-67)", () => {
+    expect(appSource).toMatch(/^import LandingPage from "\.\/pages\/LandingPage\.jsx";$/m);
+    expect(appSource).toMatch(/^import AuthPage from "\.\/pages\/AuthPage\.jsx";$/m);
+    for (const page of [
+      "ResetPasswordPage", "DashboardPage", "CarOnboardingPage", "CarProfilePage", "TripPlannerPage",
+      "AIAdvisorPage", "FuelLogPage", "MaintenancePage", "ExpensesPage", "LegalPages", "NotFoundPage",
+    ]) {
+      expect(appSource).toContain(`import("./pages/${page}.jsx")`);
+      expect(appSource).not.toMatch(new RegExp(`^import .* from "\\./pages/${page}\\.jsx";$`, "m"));
+    }
   });
 
   it("logged out: the nav is only the brand, the two marketing anchors and Sign Up / Log In", async () => {
