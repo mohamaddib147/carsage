@@ -49,6 +49,18 @@ import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 const EXPENSE_COLUMNS = "id, spent_on, category, amount, currency, note, created_at";
 const FUEL_COST_COLUMNS = "id, filled_at, cost_amount, cost_currency";
 
+/**
+ * Chart legend label (CAR-69). Recharts draws a legend's text in the series colour, and the
+ * "Other costs" accent colour is far too light to read as text on most themes (1.2 to 3:1).
+ * The coloured square beside the label still shows which series is which; the words use the
+ * normal text colour.
+ * @param {string} value the series name
+ * @returns {JSX.Element}
+ */
+function legendLabel(value) {
+  return <span style={{ color: "var(--color-text)" }}>{value}</span>;
+}
+
 /** "2005 Mercedes-Benz C230" — the car as the user knows it. */
 function carLabel(car) {
   return [car.year, car.make, car.model].filter(Boolean).join(" ");
@@ -448,7 +460,7 @@ function ExpensesPage() {
                 <XAxis dataKey="label" tick={{ fontSize: 12, fill: "var(--color-text-muted)" }} />
                 <YAxis width={76} tickFormatter={(value) => formatAxisMoney(value, primaryCurrency)} tick={{ fontSize: 12, fill: "var(--color-text-muted)" }} />
                 <Tooltip content={(tooltipProps) => <MonthTooltip {...tooltipProps} currency={primaryCurrency} />} cursor={{ fill: "var(--color-border)", opacity: 0.4 }} />
-                <Legend />
+                <Legend formatter={legendLabel} />
                 <Bar dataKey="fuel" name="Fuel" stackId="cost" fill="var(--color-primary)" />
                 <Bar dataKey="other" name="Other costs" stackId="cost" fill="var(--color-accent)" radius={[4, 4, 0, 0]} />
               </BarChart>

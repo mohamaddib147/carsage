@@ -126,6 +126,13 @@ These tickets are ready to copy into Jira (project CAR). The findings behind the
   - `ExpensesPage.test.jsx`, `FuelLogPage.test.jsx`.
 - **Model:** Haiku 5.5, mechanical once the values are fixed.
 - **Estimate:** 2 h
+- **Implementation note (CAR-69, 2026-10-21): what the numeric check found beyond the criteria above.**
+  - Every `--color-accent-text` value in the table verified (lowest 4.62:1 across the four surfaces).
+  - **Graphite text on accent fills failed on four brands** (Toyota 2.41, Honda 2.92, Audi 2.16, Tesla 3.15:1): `btn-accent`, the nav Sign Up / Log In button, the cold-start banner, the DIY badge and the "due soon" badge. Added a second token, `--color-on-accent` (white on Toyota, Honda and Audi; black on Tesla, the only option that passes; graphite elsewhere).
+  - **White text at 85% opacity on Ferrari's red primary was 4.19:1** (nav links, menu button, Advisor prompt and answered text, Landing closing paragraph). Raised to 92% (4.78:1 on Ferrari, the worst case).
+  - The Landing eyebrow's accent rule is dead code today: `.landing-section-header p` (higher specificity) makes it grey, so it passes by accident. The rule now names `--color-accent-text` but is still overridden. Making the eyebrow actually gold, as in the Stitch design, is a visible change and was left for a decision.
+  - Fuel Log's chart has no legend, so only Expenses needed the legend fix.
+  - Not changed, reported only: non-text elements below 3:1 (accent focus rings on four brands, the accent chart bar on white, borderless input fields at 1.17:1, card and grid borders at 1.51:1).
 
 ### T4. Behaviour fix (CAR-55): theme follows the car currently shown [X2]
 - **Type:** behaviour fix against CAR-55's criterion "theme follows the car currently shown". It changes `ActiveCarContext` and the initial car selection on five pages, but no data writes and no camera, photo or limits code.
