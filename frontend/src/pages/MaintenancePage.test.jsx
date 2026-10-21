@@ -192,7 +192,10 @@ describe("MaintenancePage — adding an item", () => {
     const calls = mockDatabase({ readingsByCar: { "car-1": [reading("car-1", 84610)] } });
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: "Oil change" }));
+    // The presets show while the car's items and fuel-log readings are still loading, and a
+    // preset fills the odometer from the readings loaded AT THAT MOMENT: wait for them.
+    await screen.findByText("Nothing tracked yet");
+    await user.click(screen.getByRole("button", { name: "Oil change" }));
     expect(screen.getByLabelText("Name *")).toHaveValue("Oil change");
     expect(screen.getByLabelText("Every (km)")).toHaveValue("5,000");
     expect(screen.getByLabelText("Every (months)")).toHaveValue("6");
@@ -262,7 +265,8 @@ describe("MaintenancePage — adding an item", () => {
     const calls = mockDatabase(); // no reading, so the field starts empty
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: "Tire rotation" }));
+    await screen.findByText("Nothing tracked yet");
+    await user.click(screen.getByRole("button", { name: "Tire rotation" }));
     await user.click(screen.getByRole("button", { name: "Save item" }));
 
     expect(await screen.findByText(/Enter the odometer when it was last done/)).toBeInTheDocument();

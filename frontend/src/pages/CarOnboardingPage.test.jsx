@@ -165,8 +165,13 @@ describe("CarOnboardingPage", () => {
     supabase.from.mockReturnValue({ insert });
 
     renderPage();
-    await user.type(screen.getByLabelText("Make *"), "A".repeat(300));
-    await user.type(screen.getByLabelText("Model *"), "B".repeat(300));
+    // One paste each (not 600 keystrokes): the input's maxLength still truncates it.
+    await user.click(screen.getByLabelText("Make *"));
+    await user.paste("A".repeat(300));
+    await user.click(screen.getByLabelText("Model *"));
+    await user.paste("B".repeat(300));
+    expect(screen.getByLabelText("Make *")).toHaveValue("A".repeat(60));
+    expect(screen.getByLabelText("Model *")).toHaveValue("B".repeat(60));
     await user.type(screen.getByLabelText("Year *"), "2020");
     await user.selectOptions(screen.getByLabelText("Fuel Type *"), "Gasoline");
     await user.click(screen.getByRole("button", { name: "Add Car" }));
@@ -579,7 +584,8 @@ describe("CarOnboardingPage — input limits (CAR-23)", () => {
     await fillRequiredFields(user);
 
     await user.clear(screen.getByLabelText("Make *"));
-    await user.type(screen.getByLabelText("Make *"), "M".repeat(60));
+    await user.click(screen.getByLabelText("Make *"));
+    await user.paste("M".repeat(60));
     await user.type(screen.getByLabelText("Fuel Efficiency (km/L)"), "100");
     await user.type(screen.getByLabelText("Cylinders"), "16");
     await user.click(screen.getByRole("button", { name: "Add Car" }));
