@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import ALLOWED_ORIGINS
-from app.routers import ai_advisor, car_specs, fuel_camera, health, trip_planner
+from app.routers import advisor_camera, ai_advisor, car_specs, fuel_camera, health, trip_planner
 from app.services.storage_cleanup import maybe_drain_in_background
 
 logger = logging.getLogger(__name__)
@@ -99,3 +99,4 @@ app.include_router(trip_planner.router)
 app.include_router(car_specs.router)
 app.include_router(ai_advisor.router)
 app.include_router(fuel_camera.router)
+app.include_router(advisor_camera.router)

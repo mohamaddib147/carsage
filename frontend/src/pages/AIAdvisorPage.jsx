@@ -42,6 +42,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
+import WarningLightScan from "../components/WarningLightScan.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
 import { supabase } from "../lib/supabaseClient.js";
@@ -137,6 +138,14 @@ function AIAdvisorPage() {
   const nextMessageId = useRef(0);
   const conversationIdRef = useRef(null);
   const transcriptEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // The warning-light scan only FILLS the input (after anything already typed); the user edits
+  // it and presses Send. Nothing is sent automatically.
+  function handleLightSentence(sentence) {
+    setDescription((previous) => (previous.trim() ? `${previous.trim()} ${sentence}` : sentence).slice(0, 1000));
+    inputRef.current?.focus();
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -571,6 +580,7 @@ function AIAdvisorPage() {
 
       <form onSubmit={handleSubmit} className="advisor-input-row">
         <input
+          ref={inputRef}
           type="text"
           placeholder="Describe your issue, e.g. grinding noise when braking"
           // Same cap as the backend (MAX_DESCRIPTION_CHARS in ai_advisor.py).
@@ -591,6 +601,7 @@ function AIAdvisorPage() {
       <p id="advisorInputHint" className="form-hint">
         Don&apos;t include personal details such as names, license plates or phone numbers.
       </p>
+      <WarningLightScan onSentence={handleLightSentence} disabled={submitting} />
       <p className="advisor-disclaimer">
         AI-generated guidance, not a substitute for a professional
         inspection.

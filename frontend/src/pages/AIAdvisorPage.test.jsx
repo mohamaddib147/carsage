@@ -18,7 +18,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import AIAdvisorPage from "./AIAdvisorPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
+import { scanPhoto } from "../lib/scanPhoto.js";
 import { supabase } from "../lib/supabaseClient.js";
+
+// The warning-light scan sends a photo to the backend: mocked, so no network call happens.
+vi.mock("../lib/scanPhoto.js", () => ({ scanPhoto: vi.fn() }));
 
 const LOGGED_IN_USER = { id: "user-123", email: "driver@example.com" };
 const SESSION = { user: LOGGED_IN_USER, access_token: "test-access-token" };
@@ -908,5 +912,112 @@ describe("AIAdvisorPage — Find a mechanic near me (CAR-65)", () => {
     for (const leaked of ["Toyota", "Corolla", "Hamra", "oil", "evil", "javascript"]) {
       expect(href).not.toContain(leaked);
     }
+  });
+});
+
+describe("AIAdvisorPage — warning-light camera", () => {
+  const INPUT = "Describe your issue, e.g. grinding noise when braking";
+  const CAR = { id: "car-1", make: "Toyota", model: "Corolla", year: 2020 };
+  const photo = () => new File([new Uint8Array(10)], "light.jpg", { type: "image/jpeg" });
+
+  it("shows the three notices under the button before any scan: only the light, Google's free tier, a guess to edit", async () => {
+    mockSupabaseTables({ cars: [CAR] });
+    renderPage();
+
+    await screen.findByPlaceholderText(INPUT);
+    expect(screen.getByText("Scan a warning light")).toBeInTheDocument();
+    expect(screen.getByText("Photograph only the warning light: no people, license plates, VINs or documents.")).toBeInTheDocument();
+    expect(screen.getByText(/sent to Google's Gemini API to read it, then discarded; it's never saved by CarSage\. On Google's free tier/)).toBeInTheDocument();
+    expect(screen.getByText("The result is a guess. Edit it before you send.")).toBeInTheDocument();
+  });
+
+  it("a scan FILLS the input with the fixed sentence and sends nothing", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    scanPhoto.mockResolvedValue({ light: "brake_system", sentence: "The brake warning light is on." });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await user.upload(document.getElementById("scanWarningLightFile"), photo());
+
+    await waitFor(() => expect(input).toHaveValue("The brake warning light is on."));
+    expect(scanPhoto).toHaveBeenCalledWith("/ai-advisor/scan-warning-light", expect.any(File), "test-access-token");
+    expect(apiFetch).not.toHaveBeenCalledWith("/ai-advisor/classify", expect.anything()); // never auto-sent
+    expect(screen.queryByText("DIY Fixable")).not.toBeInTheDocument();
+  });
+
+  it("appends to what the user already typed, and the user can edit it before Send", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    scanPhoto.mockResolvedValue({ light: "check_engine", sentence: "The check engine light is on." });
+    apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await user.type(input, "It started after fuel-up.");
+    await user.upload(document.getElementById("scanWarningLightFile"), photo());
+    await waitFor(() => expect(input).toHaveValue("It started after fuel-up. The check engine light is on."));
+
+    await user.type(input, " It is flashing.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("See a mechanic.")).toBeInTheDocument();
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/ai-advisor/classify",
+      expect.objectContaining({
+        body: { car_id: "car-1", description: "It started after fuel-up. The check engine light is on. It is flashing." },
+      }),
+    );
+  });
+
+  it("an unknown light says so and leaves the input untouched", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    scanPhoto.mockResolvedValue({ light: "unknown", sentence: null });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await user.type(input, "Something is on");
+    await user.upload(document.getElementById("scanWarningLightFile"), photo());
+
+    expect(await screen.findByText("Couldn't tell which light that is. Describe it in words instead.")).toBeInTheDocument();
+    expect(input).toHaveValue("Something is on");
+  });
+
+  it("shows the backend's plain message when the scan is refused (e.g. the daily limit)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    scanPhoto.mockRejectedValue(new Error("You've reached today's limit of 20 for this feature. It resets at midnight Beirut time."));
+    renderPage();
+
+    await screen.findByPlaceholderText(INPUT);
+    await user.upload(document.getElementById("scanWarningLightFile"), photo());
+
+    expect(await screen.findByText(/reached today's limit of 20/)).toBeInTheDocument();
+  });
+
+  it("refuses a non-image without sending it", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    mockSupabaseTables({ cars: [CAR] });
+    renderPage();
+
+    await screen.findByPlaceholderText(INPUT);
+    await user.upload(document.getElementById("scanWarningLightFile"), new File(["x"], "a.pdf", { type: "application/pdf" }));
+
+    expect(await screen.findByText(/Please choose a photo/)).toBeInTheDocument();
+    expect(scanPhoto).not.toHaveBeenCalled();
+  });
+
+  it("the scan cannot be used while a message is being sent", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    apiFetch.mockReturnValue(new Promise(() => {})); // never answers
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await user.type(input, "Squeaky brakes");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(document.getElementById("scanWarningLightFile")).toBeDisabled());
   });
 });

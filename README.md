@@ -234,6 +234,7 @@ The FastAPI service is used by the frontend; it is not meant to be called by han
 | `POST /ai-advisor/classify` | Sends a described problem to the AI Advisor and saves the conversation. |
 | `POST /fuel-log/scan-pump` | Reads a photographed fuel pump display and extracts liters, total price and currency. |
 | `POST /fuel-log/scan-odometer` | Reads a photographed odometer display and extracts the reading. |
+| `POST /ai-advisor/scan-warning-light` | Names the dashboard warning light in a photo (one of a fixed list, or unknown) as a sentence for you to edit before sending. |
 
 Errors are always short, plain messages; the service never returns stack traces or internal details.
 

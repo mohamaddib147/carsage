@@ -192,14 +192,19 @@ export function PrivacyPage() {
             and total price of a fill-up.
           </li>
           <li>
-            <strong>Odometer photo</strong> (Fuel Log): to read your car&apos;s total
-            distance.
+            <strong>Odometer photo</strong> (Fuel Log and Maintenance): to read your
+            car&apos;s total distance.
+          </li>
+          <li>
+            <strong>Dashboard warning light photo</strong> (AI Advisor): to name which
+            warning light is on. CarSage turns the answer into a short sentence in the
+            Advisor&apos;s input box, which you can edit before sending. It is a
+            guess, and you choose whether to send it.
           </li>
         </ul>
         <p>
-          Later features may add more. For example, a photo of a dashboard warning
-          light for the AI Advisor may be added. Each will be listed here before it
-          is released.
+          Later features may add more. Each will be listed here before it is
+          released.
         </p>
         <p>
           CarSage uses Google&apos;s free (unpaid) tier of the Gemini API. Under
@@ -217,8 +222,9 @@ export function PrivacyPage() {
         <p>
           What CarSage stores: your AI Advisor conversations, saved to your account,
           and the values a photo scan reads (for example the liters and cost of a
-          fill-up), only after you have reviewed them and pressed save. Nothing from
-          a scan is saved automatically. What CarSage does not store: the photo
+          fill-up, or an odometer reading), only after you have reviewed them and
+          pressed save. A warning light sentence is saved only if you send it, like
+          any text you type. Nothing from a scan is saved automatically. What CarSage does not store: the photo
           itself. It is read for that one request and then discarded; it is never
           written to our database, to file storage, or to our server&apos;s disk.
           Scanning is always optional, and every field can be typed in by hand

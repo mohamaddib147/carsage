@@ -23,8 +23,6 @@ const UNREADABLE = "Couldn't read that as an odometer display. Try a clearer pho
  */
 function OdometerScanButton({ id, label = "", onReading }) {
   const { session } = useAuth();
-  const sessionRef = useRef(session);
-  sessionRef.current = session;
   const inputRef = useRef(null);
   const mountedRef = useRef(true);
   const [loading, setLoading] = useState(false);
@@ -51,7 +49,7 @@ function OdometerScanButton({ id, label = "", onReading }) {
 
     setLoading(true);
     try {
-      const result = await scanPhoto("/fuel-log/scan-odometer", file, sessionRef.current?.access_token);
+      const result = await scanPhoto("/fuel-log/scan-odometer", file, session?.access_token);
       if (!mountedRef.current) return;
       if (!result.readable || result.odometer_km == null) {
         setError(UNREADABLE);

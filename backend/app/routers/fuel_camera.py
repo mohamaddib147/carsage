@@ -45,8 +45,8 @@ router = APIRouter(
 )
 
 
-async def _read_and_validate_upload(file: UploadFile) -> bytes:
-    """Shared size/type pre-check for both endpoints (422s before any
+async def read_and_validate_upload(file: UploadFile) -> bytes:
+    """Shared size/type pre-check for every camera endpoint (422s before any
     usage is counted or any work happens), returning the raw bytes."""
     if file.content_type not in ALLOWED_FUEL_PHOTO_TYPES:
         raise HTTPException(status_code=422, detail="Please upload a JPEG, PNG or WEBP photo.")
@@ -59,8 +59,8 @@ async def _read_and_validate_upload(file: UploadFile) -> bytes:
     return image_bytes
 
 
-def _enforce_camera_usage(user_id: str) -> None:
-    """Fail-closed camera usage check, shared by both endpoints: a
+def enforce_camera_usage(user_id: str) -> None:
+    """Fail-closed camera usage check, shared by every camera endpoint: a
     genuine limit hit, or any failure of the limiting mechanism itself,
     both refuse the request rather than letting it through unmetered."""
     try:
@@ -87,8 +87,8 @@ async def scan_pump_endpoint(
     """Reads a photo of a fuel pump's display and returns whatever of
     liters/total_price/currency could be extracted, for the Fuel Log form
     to prefill (never auto-saved — the user still reviews and submits)."""
-    image_bytes = await _read_and_validate_upload(file)
-    _enforce_camera_usage(user_id)
+    image_bytes = await read_and_validate_upload(file)
+    enforce_camera_usage(user_id)
 
     try:
         sanitized_bytes, mime_type = validate_and_sanitize_image(image_bytes)
@@ -114,8 +114,8 @@ async def scan_odometer_endpoint(
     """Reads a photo of a car's odometer display and returns the reading
     if it could be extracted, for the Fuel Log form to prefill (never
     auto-saved)."""
-    image_bytes = await _read_and_validate_upload(file)
-    _enforce_camera_usage(user_id)
+    image_bytes = await read_and_validate_upload(file)
+    enforce_camera_usage(user_id)
 
     try:
         sanitized_bytes, mime_type = validate_and_sanitize_image(image_bytes)

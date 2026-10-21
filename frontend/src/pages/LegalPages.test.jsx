@@ -140,10 +140,14 @@ describe("legal pages", () => {
     renderAt("/privacy");
 
     expect(await screen.findByRole("heading", { name: "What goes to Google Gemini" })).toBeInTheDocument();
-    for (const item of ["AI Advisor", "Fuel pump display photo", "Odometer photo"]) {
+    for (const item of ["AI Advisor", "Fuel pump display photo", "Odometer photo", "Dashboard warning light photo"]) {
       expect(screen.getByText(item)).toBeInTheDocument();
     }
-    expect(screen.getByText(/dashboard warning light for the AI Advisor may be added/)).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/Odometer photo\s*\(Fuel Log and Maintenance\)/);
+    expect(document.body.textContent).toMatch(/Dashboard warning light photo\s*\(AI Advisor\)/);
+    expect(document.body.textContent).toMatch(/A warning light sentence is saved only if you send it/);
+    expect(document.body.textContent).not.toMatch(/may be added/);
+    expect(screen.getByText(/Later features may add more\. Each will be listed here before it is\s+released/)).toBeInTheDocument();
     expect(screen.getByText(/free \(unpaid\) tier of the Gemini API/)).toBeInTheDocument();
     expect(screen.getByText(/provide, improve and develop its products and services, and human reviewers may read it/)).toBeInTheDocument();
     expect(screen.getByText(/does not store: the photo itself/)).toBeInTheDocument();

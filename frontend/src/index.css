@@ -2180,6 +2180,28 @@ textarea:focus {
   color: #ffb4a9;
 }
 
+.advisor-scan {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.advisor-scan__btn {
+  cursor: pointer;
+}
+
+.advisor-scan__btn--disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.advisor-scan__note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
 .advisor-input-row {
   display: flex;
   gap: calc(var(--spacing-unit) * 1.5);
