@@ -196,6 +196,12 @@ These tickets are ready to copy into Jira (project CAR). The findings behind the
 - **Could break:** `CarProfilePage.test.jsx` (`dt`/`dd` queries), `FuelLogPage.test.jsx` (table queries), `AuthPage.test.jsx`.
 - **Model:** Haiku 5.5
 - **Estimate:** 2 h
+- **Implementation note (CAR-72, 2026-10-22): where the build differs from the plan above, and why.**
+  - **Axe before and after:** 52 violating nodes on 3 screens (Car Profile 25 at each width, Fuel Log 1 at each width) became 0, across all 15 routes at 1280 and 390 px; axe's best-practice rules are also clean on the two touched pages. Axe was loaded into the test browser the way the audit did (axe-core 4.10.2), so nothing was added to the project.
+  - **Car Profile:** the violation was `dl > div > (span icon, div > dt + dd)`: the inner div left every `dt`/`dd` without a valid `dl` parent. A row is now `div > dt + dd`, and the icon box is the row's `::before` from a `data-icon` attribute, in a two-column grid. Before and after screenshots of the card and the whole page at both widths differ in 0 pixels.
+  - **Fuel Log label:** the region is named "Fill-up history table", not "Fill-up history" as item 3 said, because the section around it already has `aria-label="Fill-up history"` and two landmarks with one name are confusing in a landmark list.
+  - **Static equivalents under reduced motion:** the spinner becomes three static dots (the banner keeps its text and `role="status"`); the typing dots stop at opacities 0.5, 0.75 and 1 (the bubble keeps "Thinking...").
+  - **Touched in the two big pages:** `AIAdvisorPage.jsx` is not touched (its dots are pure CSS). `FuelLogPage.jsx`: only the table wrapper's opening tag, plus a comment.
 
 ### T7. Reset password dead end and 404 actions [§3, §13]
 - **Acceptance criteria:**

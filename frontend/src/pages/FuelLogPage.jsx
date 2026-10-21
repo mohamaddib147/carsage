@@ -824,7 +824,9 @@ function FuelLogPage() {
             </button>
           </div>
         ) : (
-          <div className="fuel-log-table-wrap">
+          // CAR-72: a scrolling region must be reachable by keyboard, with a name
+          // (not "Fill-up history": the section around it already has that one).
+          <div className="fuel-log-table-wrap" role="region" aria-label="Fill-up history table" tabIndex={0}>
             <table className="fuel-log-table">
               <caption className="sr-only">Fill-ups for {label}, newest first</caption>
               <thead>

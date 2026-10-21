@@ -4,7 +4,7 @@
 // exist) renders the same safe "not found" state rather than leaking
 // anything about it or crashing.
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -158,6 +158,28 @@ describe("CarProfilePage — viewing", () => {
     expect(screen.getByText("55")).toBeInTheDocument();
     expect(screen.getByText("ABC-123")).toBeInTheDocument();
     expect(screen.getByText("1HGCM82633A004352")).toBeInTheDocument();
+  });
+
+  it("builds the spec list as a valid description list: each row is one div holding only its term and value (CAR-72)", async () => {
+    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+
+    renderAt("/cars/mine");
+    await screen.findByText("Toyota");
+
+    const list = document.querySelector("dl.car-profile__fields");
+    expect(list.children).toHaveLength(12);
+    for (const row of list.children) {
+      expect(row.tagName).toBe("DIV");
+      expect([...row.children].map((child) => child.tagName)).toEqual(["DT", "DD"]);
+      expect(row.dataset.icon).toBeTruthy();
+    }
+    // Every term and value sits directly in a row, and every row directly in the list (what axe checks).
+    expect(list.querySelectorAll("dt, dd")).toHaveLength(24);
+    for (const item of list.querySelectorAll("dt, dd")) {
+      expect(item.parentElement.parentElement).toBe(list);
+    }
+    expect(within(list.children[0]).getByText("Make").tagName).toBe("DT");
+    expect(within(list.children[0]).getByText("Toyota").tagName).toBe("DD");
   });
 
   it("shows a placeholder dash for spec-autofill fields that were never set (edge case)", async () => {

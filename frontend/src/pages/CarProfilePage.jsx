@@ -801,16 +801,13 @@ function CarProfilePage() {
         <h2 className="profile-specs-card__title">Vehicle Specifications</h2>
         <dl className="car-profile__fields">
           {Object.entries(FIELD_LABELS).map(([field, label]) => (
-            <div key={field} className="car-profile__field">
-              <span className="car-profile__field-icon" aria-hidden="true">
-                {FIELD_ICONS[field]}
-              </span>
-              <div>
-                <dt>{label}</dt>
-                <dd>
-                  {car[field] == null || car[field] === "" ? "-" : car[field]}
-                </dd>
-              </div>
+            // CAR-72: a <dl> row is a <div> holding only its <dt> and <dd> (the
+            // icon is drawn by CSS from data-icon), so every term/value pair is valid.
+            <div key={field} className="car-profile__field" data-icon={FIELD_ICONS[field]}>
+              <dt>{label}</dt>
+              <dd>
+                {car[field] == null || car[field] === "" ? "-" : car[field]}
+              </dd>
             </div>
           ))}
         </dl>

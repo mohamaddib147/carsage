@@ -859,10 +859,14 @@ textarea:focus {
   margin: calc(var(--spacing-unit) * 2) 0 0;
 }
 
+/* CAR-72: a row is <div><dt/><dd/></div>, the only structure a <dl> allows. The
+   icon box is the row's ::before (from data-icon), in the first grid column and
+   spanning both lines, so the row looks exactly as it did with a separate icon. */
 .car-profile__field {
-  display: flex;
-  align-items: flex-start;
-  gap: calc(var(--spacing-unit) * 2);
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: start;
+  column-gap: calc(var(--spacing-unit) * 2);
   padding: calc(var(--spacing-unit) * 1.5) 0;
   border-bottom: 1px solid var(--color-border);
 }
@@ -871,16 +875,25 @@ textarea:focus {
   border-bottom: none;
 }
 
-.car-profile__field-icon {
+.car-profile__field::before {
+  content: attr(data-icon);
+  /* Decorative: an empty alternative text keeps the emoji out of speech where supported. */
+  content: attr(data-icon) / "";
+  grid-column: 1;
+  grid-row: 1 / span 2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 36px;
   height: 36px;
-  flex-shrink: 0;
   border-radius: var(--radius-base);
   background-color: var(--color-input-bg);
   font-size: 1rem;
+}
+
+.car-profile__field dt,
+.car-profile__field dd {
+  grid-column: 2;
 }
 
 .car-profile__field dt {
@@ -2578,6 +2591,13 @@ textarea:focus {
   box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
 }
 
+/* CAR-72: the scroll area takes keyboard focus (tabindex 0), so it shows a ring
+   in the brand colour, like the other focusable controls. */
+.fuel-log-table-wrap:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .fuel-log-chart__caption {
   margin: 0 0 var(--spacing-unit);
   color: var(--color-text-muted);
@@ -3342,6 +3362,34 @@ textarea:focus {
 @media (prefers-reduced-motion: reduce) {
   .spec-loading__spinner {
     animation: none;
+  }
+
+  /* CAR-72: both indicators stop moving but are still shown, as static dots, so
+     "something is happening" survives. The banner and the "Thinking..." bubble
+     keep their own words (and the banner its role="status"). */
+  .cold-start-banner__spinner {
+    animation: none;
+    width: 18px;
+    height: 4px;
+    border: 0;
+    border-radius: 0;
+    background: radial-gradient(circle, var(--color-on-accent) 1.75px, transparent 2px) 0 0 / 6px 4px repeat-x;
+  }
+
+  .advisor-typing span {
+    animation: none;
+  }
+
+  .advisor-typing span:nth-child(1) {
+    opacity: 0.5;
+  }
+
+  .advisor-typing span:nth-child(2) {
+    opacity: 0.75;
+  }
+
+  .advisor-typing span:nth-child(3) {
+    opacity: 1;
   }
 
   .skeleton-bar {

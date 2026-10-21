@@ -192,6 +192,24 @@ describe("FuelLogPage — viewing", () => {
     ]);
   });
 
+  it("puts the table in a keyboard-focusable, labelled scroll region with a name of its own (CAR-72)", async () => {
+    mockDatabase({ logsByCar: { "car-1": { data: [ROW_A, ROW_B], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    const region = screen.getByRole("region", { name: "Fill-up history table" });
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(region).toContainElement(screen.getByRole("table"));
+    region.focus();
+    expect(region).toHaveFocus();
+    // The section around it is already a landmark named "Fill-up history"; two with one name would confuse a landmark list.
+    expect(screen.getAllByRole("region", { name: /^Fill-up history/ }).map((el) => el.getAttribute("aria-label"))).toEqual(
+      expect.arrayContaining(["Fill-up history", "Fill-up history table"]),
+    );
+    expect(screen.getAllByRole("region", { name: "Fill-up history table" })).toHaveLength(1);
+  });
+
   it("asks only for the signed-in user's cars, and each car's log by that car's id", async () => {
     const calls = mockDatabase({ logsByCar: { "car-1": { data: [ROW_B], error: null } } });
 
