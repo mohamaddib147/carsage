@@ -52,15 +52,16 @@ describe("App routing — public screens", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the Log In screen at /login", () => {
+  // CAR-71: the form shows once the first session check ends (a signed-in user is redirected instead).
+  it("renders the Log In screen at /login", async () => {
     renderAtPath("/login");
-    expect(screen.getByRole("heading", { name: "Log In" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Log In" })).toBeInTheDocument();
   });
 
-  it("renders the Sign Up screen at /signup", () => {
+  it("renders the Sign Up screen at /signup", async () => {
     renderAtPath("/signup");
     expect(
-      screen.getByRole("heading", { name: "Sign Up" }),
+      await screen.findByRole("heading", { name: "Sign Up" }),
     ).toBeInTheDocument();
   });
 

@@ -180,6 +180,10 @@ These tickets are ready to copy into Jira (project CAR). The findings behind the
 - **Could break:** `App.test.jsx`, `AuthPage.test.jsx`, `ResetPasswordPage.test.jsx`.
 - **Model:** Sonnet 5.5
 - **Estimate:** 1.5 h
+- **Implementation note (CAR-71, 2026-10-22): where the build differs from the plan above, and why.**
+  - **No skeleton while loading.** The auth card has no skeleton of its own. While the first session check runs, the form stays mounted in place but invisible and `inert`, so a signed-in user never sees it and a signed-out user sees it appear without a layout jump or a remount. In a real browser that is about one frame (10–15 ms).
+  - **The destination is the one a log-in already uses:** the protected screen that sent the user to log in (`ProtectedRoute`'s router state `from`), else `/dashboard`. It is not a URL parameter, and no `next` parameter was added. It is now validated (`auth/loginDestination.js`): a single leading slash, no `//`, no backslash or control characters, and never `/login` or `/signup`. The log-in form uses the same check.
+  - **Recovery links use the implicit flow.** supabase-js 2.116 defaults to `flowType: 'implicit'` and the client does not override it, so a recovery link arrives as `#access_token=…&type=recovery`, not `?code=`. Both shapes are tested anyway.
 
 ### T6. Accessibility fixes that don't touch photo code [X5, §6, §9]
 - **Acceptance criteria:**

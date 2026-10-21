@@ -24,6 +24,7 @@ import ScreenLoadingBar from "./components/ScreenLoadingBar.jsx";
 import SiteFooter from "./components/SiteFooter.jsx";
 import SiteNav from "./components/SiteNav.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import RedirectIfSignedIn from "./components/RedirectIfSignedIn.jsx";
 import { lazyScreen } from "./lib/screenLoading.js";
 import { useSlowScreenLoad } from "./lib/useSlowScreenLoad.js";
 import LandingPage from "./pages/LandingPage.jsx";
@@ -79,8 +80,10 @@ function App() {
           <Suspense fallback={<RouteLoading />}>
             <Routes>
               <Route path="/" element={<LandingPage />} />
-              <Route path="/login" element={<AuthPage />} />
-              <Route path="/signup" element={<AuthPage />} />
+              {/* CAR-71: signed-in users skip Log In / Sign Up. Never the
+                  reset page: a recovery link signs the user in first. */}
+              <Route path="/login" element={<RedirectIfSignedIn><AuthPage /></RedirectIfSignedIn>} />
+              <Route path="/signup" element={<RedirectIfSignedIn><AuthPage /></RedirectIfSignedIn>} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/terms" element={<TermsPage />} />
               <Route path="/privacy" element={<PrivacyPage />} />

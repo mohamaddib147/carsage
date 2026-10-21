@@ -11,6 +11,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
+import { loginDestination } from "../auth/loginDestination.js";
 import { LIMITS, describeAuthError } from "../lib/limits.js";
 
 /** The standard multi-color Google "G" mark, per Google's own Sign In
@@ -149,8 +150,7 @@ function AuthPage() {
         return;
       }
 
-      const redirectTo = location.state?.from?.pathname ?? "/dashboard";
-      navigate(redirectTo, { replace: true });
+      navigate(loginDestination(location), { replace: true });
     } finally {
       setSubmitting(false);
     }
