@@ -227,6 +227,11 @@ These tickets are ready to copy into Jira (project CAR). The findings behind the
 - **Could break:** `SiteNav.test.jsx` (31 queries, 4 by selector), `currencyToggle.integration.test.jsx`.
 - **Model:** Sonnet 5.5
 - **Estimate:** 5 h
+- **Implementation note (CAR-74, 2026-10-22): where the build differs from the plan above, and why.**
+  - **Breakpoint kept at 860 px**, so 768 px also gets the compact row (it had the old stacked header, 167 px). Above 860 px the bar is pixel-identical before and after at 1280 and 1024 px, signed in (with and without the currency switch) and signed out.
+  - **Height:** 64 px from the first paint at 860 px and below; while the session is restored a same-sized, silent placeholder stands in for the Menu button (the CAR-71 `useAuthStatus().status === "loading"`).
+  - **Focus:** the panel closes when focus Tabs out of it (no focus trap). A click outside on plain content returns focus to the Menu button; a click on another control keeps focus there.
+  - **Layout shift was not only the header.** On Dashboard at 390 px it also came from `ProtectedRoute` rendering nothing while the session was checked (the footer painted at the top, then jumped) and from the car-list skeleton being shorter than the real list. `ProtectedRoute` now shows the existing `RouteLoading` skeleton (at least 100vh tall), and the Dashboard sections after "Your Cars" are invisible while its skeleton shows. Production build, 5 runs each: Dashboard 390 px 0.68 -> 0 (320 px 0.69 -> 0, 1280 px 0.24 -> 0); Landing 390 px 0.1223 (4 of 5 runs) -> 0.0229.
 
 ---
 

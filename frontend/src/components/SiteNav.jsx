@@ -7,6 +7,13 @@
 // Fuel Log, Maintenance, Expenses (CAR-64) and Add a car, Trip Planner, AI Advisor). The auth control — "Sign Up / Log In" when
 // signed out, "Log Out" when signed in, never both (and neither while the
 // session is still being restored, so nothing flashes the wrong state).
+//
+// CAR-74: at 860 px and below the bar is one fixed 64 px row: the logo and a
+// "Menu" button (a same-sized placeholder while the session is restored, so
+// nothing jumps). The links and the auth control sit in one panel element: on
+// wide screens it is `display: contents`, so the desktop bar is unchanged; on
+// narrow ones it drops down under the bar when the button opens it. Escape,
+// a click outside, Tab-ing out of it and any navigation close it.
 
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -89,7 +96,9 @@ function NavMenu({ label, links }) {
       setOpen(true);
       // The list renders on the next paint; focus its first link then.
       requestAnimationFrame(() => focusLink(0));
-    } else if (event.key === "Escape") {
+    } else if (event.key === "Escape" && open) {
+      // Handled here: the header's mobile panel (CAR-74) must not close too.
+      event.preventDefault();
       setOpen(false);
     }
   }
@@ -167,9 +176,59 @@ const MARKETING_LINKS = [
 function SiteNav() {
   const { status, signOut } = useAuthStatus();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, key: locationKey } = useLocation();
   // The USD | LBP switch only appears on screens that show prices (Trip Planner, Fuel Log).
   const showCurrencyToggle = PRICE_PAGES.includes(pathname.replace(/\/+$/, ""));
+
+  // CAR-74: the narrow-screen panel. Like NavMenu, it is open only on the
+  // location it was opened on, so any navigation (a hash link too) closes it.
+  const [panelOpenOn, setPanelOpenOn] = useState(null);
+  const panelOpen = panelOpenOn === locationKey;
+  const navRef = useRef(null);
+  const toggleRef = useRef(null);
+  const panelRef = useRef(null);
+
+  useEffect(() => {
+    if (!panelOpen) return undefined;
+    function handlePointerDown(event) {
+      if (navRef.current?.contains(event.target)) return;
+      setPanelOpenOn(null);
+      // A click on plain page content would drop focus to <body>; send it back
+      // to the Menu button instead. A click on a control keeps its focus.
+      if (!event.target.closest?.("a, button, input, select, textarea, [tabindex]")) {
+        event.preventDefault();
+        toggleRef.current?.focus();
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [panelOpen]);
+
+  function togglePanel() {
+    if (panelOpen) {
+      setPanelOpenOn(null);
+      return;
+    }
+    setPanelOpenOn(locationKey);
+    // The panel shows on the next paint; move focus to its first control then,
+    // unless it was closed again in the meantime (focus must never go into a hidden panel).
+    requestAnimationFrame(() => {
+      if (panelRef.current?.classList.contains("is-open")) panelRef.current.querySelector("a, button")?.focus();
+    });
+  }
+
+  function handleNavKeyDown(event) {
+    if (event.key === "Escape" && panelOpen && !event.defaultPrevented) {
+      event.preventDefault();
+      setPanelOpenOn(null);
+      toggleRef.current?.focus();
+    }
+  }
+
+  // Tab-ing out of the bar (past the last item in the panel) closes the panel.
+  function handleNavBlur(event) {
+    if (panelOpen && !navRef.current?.contains(event.relatedTarget)) setPanelOpenOn(null);
+  }
 
   async function handleLogOut() {
     await signOut();
@@ -177,52 +236,71 @@ function SiteNav() {
   }
 
   return (
-    <nav className="site-nav">
-      <NavLink to="/" end className="site-nav__brand">
+    <nav className="site-nav" ref={navRef} onKeyDown={handleNavKeyDown} onBlur={handleNavBlur}>
+      <NavLink to="/" end className="site-nav__brand" aria-label="CarSage home">
         <Logo onDark size={48} />
       </NavLink>
 
-      <ul className="site-nav__links">
-        {status === "signedIn" &&
-          CENTER_LINKS.map((link) =>
-            link.menu ? (
-              <li key={link.menu}>
-                <NavMenu label={link.menu} links={link.links} />
-              </li>
-            ) : (
-              <li key={link.to}>
-                <NavLink to={link.to}>{link.label}</NavLink>
-              </li>
-            ),
-          )}
-        {status === "signedOut" &&
-          MARKETING_LINKS.map((link) => (
-            <li key={link.hash}>
-              {/* Works from any screen: goes to the Landing page and the
-                  page scrolls to the section (see LandingPage). */}
-              <Link to={{ pathname: "/", hash: link.hash }}>{link.label}</Link>
-            </li>
-          ))}
-      </ul>
+      {status === "loading" ? (
+        // Same size as the button, so the bar never changes when the session is known.
+        <span className="site-nav__toggle site-nav__toggle--pending" aria-hidden="true" />
+      ) : (
+        <button
+          ref={toggleRef}
+          type="button"
+          className="site-nav__toggle"
+          aria-expanded={panelOpen}
+          aria-controls="site-nav-panel"
+          onClick={togglePanel}
+        >
+          <span className="site-nav__toggle-icon" aria-hidden="true" />
+          Menu
+        </button>
+      )}
 
-      <div className="site-nav__actions">
-        {status === "signedOut" && (
-          <NavLink to="/login" className="site-nav__auth-link">
-            Sign Up / Log In
-          </NavLink>
-        )}
-        {status === "signedIn" && (
-          <>
-            {showCurrencyToggle && <CurrencyToggle />}
-            <button
-              type="button"
-              className="site-nav__logout"
-              onClick={handleLogOut}
-            >
-              Log Out
-            </button>
-          </>
-        )}
+      <div id="site-nav-panel" ref={panelRef} className={`site-nav__panel${panelOpen ? " is-open" : ""}`}>
+        <ul className="site-nav__links">
+          {status === "signedIn" &&
+            CENTER_LINKS.map((link) =>
+              link.menu ? (
+                <li key={link.menu}>
+                  <NavMenu label={link.menu} links={link.links} />
+                </li>
+              ) : (
+                <li key={link.to}>
+                  <NavLink to={link.to}>{link.label}</NavLink>
+                </li>
+              ),
+            )}
+          {status === "signedOut" &&
+            MARKETING_LINKS.map((link) => (
+              <li key={link.hash}>
+                {/* Works from any screen: goes to the Landing page and the
+                    page scrolls to the section (see LandingPage). */}
+                <Link to={{ pathname: "/", hash: link.hash }}>{link.label}</Link>
+              </li>
+            ))}
+        </ul>
+
+        <div className="site-nav__actions">
+          {status === "signedOut" && (
+            <NavLink to="/login" className="site-nav__auth-link">
+              Sign Up / Log In
+            </NavLink>
+          )}
+          {status === "signedIn" && (
+            <>
+              {showCurrencyToggle && <CurrencyToggle />}
+              <button
+                type="button"
+                className="site-nav__logout"
+                onClick={handleLogOut}
+              >
+                Log Out
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </nav>
   );
