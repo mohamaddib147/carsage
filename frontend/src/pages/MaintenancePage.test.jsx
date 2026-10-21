@@ -12,11 +12,15 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MaintenancePage from "./MaintenancePage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
+import { addPhoto } from "../lib/recordPhotos.js";
 import { scanPhoto } from "../lib/scanPhoto.js";
 import { supabase } from "../lib/supabaseClient.js";
 
 // The odometer scan sends a photo to the backend: mocked, so no network call happens.
 vi.mock("../lib/scanPhoto.js", () => ({ scanPhoto: vi.fn() }));
+
+// Photos attach to a saved completion through lib/recordPhotos.js: addPhoto is mocked (no storage call).
+vi.mock("../lib/recordPhotos.js", async (importOriginal) => ({ ...(await importOriginal()), addPhoto: vi.fn() }));
 
 const USER = { id: "user-123", email: "driver@example.com" };
 const CAR_1 = { id: "car-1", make: "Mercedes-Benz", model: "C230", year: 2005 };
@@ -107,9 +111,10 @@ function mockDatabase({ cars = [CAR_1], itemsByCar = {}, readingsByCar = {}, ite
     }
     if (table === "maintenance_records") {
       return {
+        // insert(...).select("id").single() -> the new completion's id (photos attach to it after saving).
         insert: vi.fn((row) => {
           calls.recordInserts.push(row);
-          return Promise.resolve(reply);
+          return { select: () => ({ single: () => Promise.resolve({ data: { id: "rec-new" }, error: reply.error }) }) };
         }),
         delete: vi.fn(() => ({
           eq: vi.fn((column, id) => {
@@ -694,5 +699,173 @@ describe("MaintenancePage — odometer scan", () => {
     await waitFor(() => expect(screen.getByLabelText("Odometer when last done (km)")).toHaveValue("80,000"));
     expect(screen.queryByText(/Lower than your latest reading/)).not.toBeInTheDocument();
     expect(calls.itemInserts).toEqual([]); // nothing saved
+  });
+});
+
+describe("MaintenancePage — photos or a receipt on Mark as done", () => {
+  const ONE_ITEM = { itemsByCar: { "car-1": [item()] }, readingsByCar: { "car-1": [reading("car-1", 89100, "2026-10-10")] } };
+  const photo = (name = "receipt.jpg") => new File([new Uint8Array(10)], name, { type: "image/jpeg" });
+  const addInput = () => screen.getByLabelText("Add a photo for Oil change");
+
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => "blob:preview");
+    URL.revokeObjectURL = vi.fn();
+    addPhoto.mockResolvedValue({ id: "p", storage_path: "x", slot: 1 });
+  });
+
+  async function openMarkAsDone(user) {
+    await user.click(await screen.findByRole("button", { name: "Mark as done" }));
+  }
+
+  it("shows the optional photo row under Note, with the stored-only line", async () => {
+    const user = userEvent.setup();
+    mockDatabase(ONE_ITEM);
+    renderPage();
+
+    await openMarkAsDone(user);
+    expect(screen.getByText("Photos or receipt (optional, up to 3)")).toBeInTheDocument();
+    expect(screen.getByText("Kept in your private storage with this completion. Never sent to Google.")).toBeInTheDocument();
+    expect(addPhoto).not.toHaveBeenCalled();
+  });
+
+  it("nothing is uploaded when a photo is picked; photos attach only AFTER the completion is saved, to its new id", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase(ONE_ITEM);
+    renderPage();
+
+    await openMarkAsDone(user);
+    await user.upload(addInput(), photo("a.jpg"));
+    await user.upload(addInput(), photo("b.jpg"));
+    expect(screen.getAllByRole("img")).toHaveLength(2);
+    expect(addPhoto).not.toHaveBeenCalled(); // choosing is not saving
+    expect(calls.recordInserts).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(addPhoto).toHaveBeenCalledTimes(2));
+    expect(addPhoto).toHaveBeenNthCalledWith(1, "maintenance", expect.objectContaining({ userId: "user-123", parentId: "rec-new", slot: 1 }));
+    expect(addPhoto).toHaveBeenNthCalledWith(2, "maintenance", expect.objectContaining({ userId: "user-123", parentId: "rec-new", slot: 2 }));
+    expect(calls.recordInserts).toHaveLength(1);
+    expect(await screen.findByRole("status")).toHaveTextContent("Oil change marked as done.");
+  });
+
+  it("a photo is never sent to the backend or Google (stored only)", async () => {
+    const user = userEvent.setup();
+    mockDatabase(ONE_ITEM);
+    renderPage();
+
+    await openMarkAsDone(user);
+    await user.upload(addInput(), photo());
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(addPhoto).toHaveBeenCalledTimes(1));
+    expect(scanPhoto).not.toHaveBeenCalled();
+  });
+
+  it("stops offering the add control at 3 photos", async () => {
+    const user = userEvent.setup();
+    mockDatabase(ONE_ITEM);
+    renderPage();
+
+    await openMarkAsDone(user);
+    for (const name of ["1.jpg", "2.jpg", "3.jpg"]) await user.upload(addInput(), photo(name));
+
+    expect(screen.getAllByRole("img")).toHaveLength(3);
+    expect(screen.queryByLabelText("Add a photo for Oil change")).not.toBeInTheDocument();
+  });
+
+  it("a photo can be removed before saving", async () => {
+    const user = userEvent.setup();
+    mockDatabase(ONE_ITEM);
+    renderPage();
+
+    await openMarkAsDone(user);
+    await user.upload(addInput(), photo("a.jpg"));
+    await user.upload(addInput(), photo("b.jpg"));
+    await user.click(screen.getByRole("button", { name: "Remove photo 1 for Oil change" }));
+    expect(screen.getAllByRole("img")).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(addPhoto).toHaveBeenCalledTimes(1));
+    expect(addPhoto.mock.calls[0][1].file.name).toBe("b.jpg");
+  });
+
+  it("if one photo fails, the completion stays saved and the notice says so", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase(ONE_ITEM);
+    addPhoto.mockResolvedValueOnce({ id: "p1", storage_path: "x", slot: 1 }).mockRejectedValueOnce(new Error("upload failed"));
+    renderPage();
+
+    await openMarkAsDone(user);
+    await user.upload(addInput(), photo("a.jpg"));
+    await user.upload(addInput(), photo("b.jpg"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Saved, but 1 photo couldn't be attached. You can add it from History.");
+    expect(calls.recordInserts).toHaveLength(1);
+    expect(addPhoto).toHaveBeenCalledTimes(2); // the second still tried after the first
+  });
+
+  it("several failures are counted in the notice", async () => {
+    const user = userEvent.setup();
+    mockDatabase(ONE_ITEM);
+    addPhoto.mockRejectedValue(new Error("down"));
+    renderPage();
+
+    await openMarkAsDone(user);
+    await user.upload(addInput(), photo("a.jpg"));
+    await user.upload(addInput(), photo("b.jpg"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Saved, but 2 photos couldn't be attached. You can add them from History.");
+  });
+
+  it("if the completion itself fails to save, no photo is attempted and the form keeps its photos", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ ...ONE_ITEM, writeError: { code: "42501", message: "row-level security" } });
+    renderPage();
+
+    await openMarkAsDone(user);
+    await user.upload(addInput(), photo("a.jpg"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("You don't have permission to do that.")).toBeInTheDocument();
+    expect(addPhoto).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("img")).toHaveLength(1);
+  });
+
+  it("closing the form drops the chosen photos (nothing was uploaded)", async () => {
+    const user = userEvent.setup();
+    mockDatabase(ONE_ITEM);
+    renderPage();
+
+    await openMarkAsDone(user);
+    await user.upload(addInput(), photo("a.jpg"));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await openMarkAsDone(user);
+
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(addPhoto).not.toHaveBeenCalled();
+  });
+
+  it("refuses a non-image without keeping it", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    mockDatabase(ONE_ITEM);
+    renderPage();
+
+    await openMarkAsDone(user);
+    await user.upload(addInput(), new File(["x"], "a.pdf", { type: "application/pdf" }));
+
+    expect(await screen.findByText(/Please choose a photo/)).toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("the new-item and edit forms have no photo row (Mark as done only)", async () => {
+    const user = userEvent.setup();
+    mockDatabase(ONE_ITEM);
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "+ Custom item" }));
+    expect(screen.queryByText(/Photos or receipt/)).not.toBeInTheDocument();
   });
 });

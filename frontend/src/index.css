@@ -2848,6 +2848,19 @@ textarea:focus {
   text-align: center;
 }
 
+.pending-photos {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.pending-photos__label {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
 .odometer-scan {
   display: flex;
   flex-direction: column;

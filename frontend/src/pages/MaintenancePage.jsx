@@ -23,12 +23,14 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import FormattedNumberInput from "../components/FormattedNumberInput.jsx";
 import OdometerScanButton from "../components/OdometerScanButton.jsx";
 import PageShell from "../components/PageShell.jsx";
+import PendingPhotos from "../components/PendingPhotos.jsx";
 import RecordPhotos from "../components/RecordPhotos.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { describeActionError, describeSaveError, LIMITS } from "../lib/limits.js";
 import { formatFillDate } from "../lib/fuelLog.js";
 import { formatKm, latestOdometer } from "../lib/odometer.js";
+import { addPhoto, MAX_MAINTENANCE_PHOTOS } from "../lib/recordPhotos.js";
 import {
   describeDue,
   describeRemaining,
@@ -224,6 +226,8 @@ function MaintenancePage() {
   const [panelValues, setPanelValues] = useState({});
   const [panelErrors, setPanelErrors] = useState({});
   const [confirmUndoId, setConfirmUndoId] = useState(null);
+  // Photos chosen on the open Mark as done form; attached only after the completion is saved.
+  const [pendingPhotos, setPendingPhotos] = useState([]);
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -308,6 +312,7 @@ function MaintenancePage() {
 
   /** Closes every open form/confirmation and clears messages. */
   function resetPanels() {
+    setPendingPhotos([]);
     setPanel(null);
     setPanelValues({});
     setPanelErrors({});
@@ -371,6 +376,7 @@ function MaintenancePage() {
     resetPanels();
     setNotice("");
     setAdding(false);
+    setPendingPhotos([]);
     if (panel && panel.itemId === item.id && panel.kind === kind) return; // toggle closed
     setPanel({ itemId: item.id, kind });
     if (kind === "done") {
@@ -414,18 +420,47 @@ function MaintenancePage() {
     if (Object.keys(errors).length > 0) return;
     const odometer = String(panelValues.odometer ?? "").trim();
     const note = String(panelValues.note ?? "").trim();
-    await runWrite(
-      () =>
-        // One insert: the item's schedule restarts from its latest completion.
-        supabase.from("maintenance_records").insert({
+    setBusy(true);
+    setActionError("");
+    try {
+      // One insert: the item's schedule restarts from its latest completion.
+      const { data, error } = await supabase
+        .from("maintenance_records")
+        .insert({
           user_id: user.id,
           item_id: item.id,
           done_on: panelValues.doneOn,
           odometer_km: odometer === "" ? null : Number(odometer),
           note: note === "" ? null : note,
-        }),
-      `${item.name} marked as done.`,
-    );
+        })
+        .select("id")
+        .single();
+      if (error) {
+        setActionError(describeSaveError(error));
+        return;
+      }
+
+      // Photos attach only AFTER the completion is saved (row first, then file). A photo that
+      // fails never undoes the completion: it stays saved, and the notice says so.
+      let failed = 0;
+      for (const [index, file] of pendingPhotos.entries()) {
+        try {
+          await addPhoto("maintenance", { userId: user.id, parentId: data.id, slot: index + 1, file });
+        } catch {
+          failed += 1;
+        }
+      }
+
+      await reload(selectedCarId);
+      resetPanels();
+      setNotice(
+        failed === 0
+          ? `${item.name} marked as done.`
+          : `Saved, but ${failed === 1 ? "1 photo couldn't" : `${failed} photos couldn't`} be attached. You can add ${failed === 1 ? "it" : "them"} from History.`,
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleEdit(event, item) {
@@ -662,6 +697,14 @@ function MaintenancePage() {
                         />
                         {panelErrors.note && <p role="alert" className="auth-form__error">{panelErrors.note}</p>}
                       </div>
+                      <PendingPhotos
+                        id={`done-photos-${item.id}`}
+                        label={item.name}
+                        files={pendingPhotos}
+                        max={MAX_MAINTENANCE_PHOTOS}
+                        disabled={busy}
+                        onChange={setPendingPhotos}
+                      />
                       <div className="maintenance-form-actions">
                         <button className="btn-primary" type="submit" disabled={busy}>
                           {busy ? "Saving..." : "Save"}

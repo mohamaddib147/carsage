@@ -148,14 +148,18 @@ describe("deletePhoto", () => {
 });
 
 describe("stored only (source-scan guard)", () => {
-  const sources = import.meta.glob(["/src/lib/recordPhotos.js", "/src/components/RecordPhotos.jsx"], {
+  const sources = import.meta.glob(["/src/lib/recordPhotos.js", "/src/components/RecordPhotos.jsx", "/src/components/PendingPhotos.jsx"], {
     query: "?raw",
     import: "default",
     eager: true,
   });
 
-  it("scanned both photo files", () => {
-    expect(Object.keys(sources).sort()).toEqual(["/src/components/RecordPhotos.jsx", "/src/lib/recordPhotos.js"]);
+  it("scanned every photo file", () => {
+    expect(Object.keys(sources).sort()).toEqual([
+      "/src/components/PendingPhotos.jsx",
+      "/src/components/RecordPhotos.jsx",
+      "/src/lib/recordPhotos.js",
+    ]);
   });
 
   it.each(Object.keys(sources))("%s never imports the API client or calls fetch", (path) => {
