@@ -10,7 +10,7 @@
 // redirect to /login before it finishes instead of waiting it out.
 
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { LIMITS, describeAuthError } from "../lib/limits.js";
 
@@ -72,9 +72,21 @@ function ResetPasswordPage() {
         {loading ? (
           <p className="auth-card__subtitle">Loading...</p>
         ) : !user ? (
-          <p className="auth-card__subtitle">
-            This reset link has expired or was already used. Request a new one from the Log In page.
-          </p>
+          <>
+            <p className="auth-card__subtitle">
+              This reset link has expired or was already used. Request a new one from the Log In page.
+            </p>
+            {/* CAR-73: a way forward instead of a dead end. "Request a new link"
+                opens Log In on its "Forgot password?" form. */}
+            <div className="auth-card__actions">
+              <Link className="btn-primary" to="/login">
+                Back to Log In
+              </Link>
+              <Link className="btn-secondary" to="/login" state={{ mode: "forgot" }}>
+                Request a new link
+              </Link>
+            </div>
+          </>
         ) : done ? (
           <p role="status" className="auth-form__info">
             Password updated. Taking you to your dashboard...

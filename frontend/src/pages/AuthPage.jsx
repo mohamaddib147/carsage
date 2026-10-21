@@ -62,8 +62,10 @@ function AuthPage() {
   const [submitting, setSubmitting] = useState(false);
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
   // "auth" is the normal Sign Up / Log In form; "forgot" swaps in a
-  // one-field "email a reset link" form (login mode only).
-  const [mode, setMode] = useState("auth");
+  // one-field "email a reset link" form (login mode only). CAR-73: the expired
+  // reset-link page opens Log In straight on it, via router state (not a URL
+  // parameter).
+  const [mode, setMode] = useState(!isSignUp && location.state?.mode === "forgot" ? "forgot" : "auth");
 
   /** Starts the Google redirect. Works the same for both Sign Up and Log
    * In — Supabase creates the account on first sign-in, same as any other

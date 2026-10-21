@@ -1703,6 +1703,15 @@ textarea:focus {
   font-size: 0.875rem;
 }
 
+/* CAR-73: the expired reset-link page's two ways forward, side by side when
+   they fit and stacked on a phone. */
+.auth-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: calc(var(--spacing-unit) * 1.5);
+}
+
 /* Mentor feedback (no Jira task): "Continue with Google" button and its
    divider, styled per Google's own Sign In branding guidelines (white
    background, dark text, light border, real logo mark — not recolored to

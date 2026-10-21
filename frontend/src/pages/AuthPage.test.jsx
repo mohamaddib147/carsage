@@ -290,6 +290,17 @@ describe("AuthPage — show/hide password (professional-polish pass, no Jira tas
 });
 
 describe("AuthPage — Forgot password (professional-polish pass, no Jira task)", () => {
+  it("opens straight on the reset form when sent from an expired reset link (CAR-73), but not on Sign Up", async () => {
+    renderAuthPage({ pathname: "/login", state: { mode: "forgot" } });
+    expect(await screen.findByRole("heading", { name: "Reset your password" })).toBeInTheDocument();
+  });
+
+  it("ignores that request on Sign Up (the reset form is Log In only) (CAR-73)", async () => {
+    renderAuthPage({ pathname: "/signup", state: { mode: "forgot" } });
+    expect(await screen.findByRole("heading", { name: "Sign Up" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Reset your password" })).not.toBeInTheDocument();
+  });
+
   it("shows the link on Log In", () => {
     renderAuthPage("/login");
     expect(screen.getByRole("button", { name: "Forgot password?" })).toBeInTheDocument();

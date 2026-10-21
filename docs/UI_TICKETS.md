@@ -214,6 +214,10 @@ These tickets are ready to copy into Jira (project CAR). The findings behind the
 - **Could break:** `ResetPasswordPage.test.jsx`, `App.test.jsx` (not-found route).
 - **Model:** Haiku 5.5
 - **Estimate:** 2 h
+- **Implementation note (CAR-73, 2026-10-22): where the build differs from the plan above, and why.**
+  - **Reset page:** besides the primary "Back to Log In" (item 1), a secondary "Request a new link" (asked for in Jira) opens Log In directly on its "Forgot password?" form, through router state (`mode: "forgot"`), not a URL parameter. The wording is unchanged. The reset page is still never redirected (CAR-71).
+  - **404 while the session loads:** an invisible, same-sized stand-in holds the button's place, so a signed-in user never sees "Back to Home" first.
+  - **Tab stops:** at 390 px (new header: logo, Menu) and at 1280 px, each button is the first Tab stop after the header.
 
 ### T8. Mobile header and My Car menu [X4, X7]
 - **Acceptance criteria:**
