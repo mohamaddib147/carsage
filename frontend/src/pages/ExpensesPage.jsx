@@ -21,6 +21,8 @@ import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import PageShell from "../components/PageShell.jsx";
 import Price from "../components/Price.jsx";
+import { addPhoto, MAX_MAINTENANCE_PHOTOS } from "../lib/recordPhotos.js";
+import PendingPhotos from "../components/PendingPhotos.jsx";
 import RecordPhotos from "../components/RecordPhotos.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { useCurrency } from "../currency/CurrencyContext.jsx";
@@ -115,6 +117,7 @@ function ExpensesPage() {
   const [chosenCurrency, setChosenCurrency] = useState(null);
   const currency = chosenCurrency ?? primaryCurrency;
   const [note, setNote] = useState("");
+  const [pendingPhotos, setPendingPhotos] = useState([]);
   const [fieldErrors, setFieldErrors] = useState({});
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
@@ -194,7 +197,7 @@ function ExpensesPage() {
     const trimmedNote = note.trim();
     setBusy(true);
     try {
-      const { error } = await supabase.from("car_expenses").insert({
+      const { data, error } = await supabase.from("car_expenses").insert({
         user_id: user.id,
         car_id: carId,
         spent_on: date,
@@ -202,18 +205,32 @@ function ExpensesPage() {
         amount: Number(amount),
         currency,
         note: trimmedNote === "" ? null : trimmedNote,
-      });
+      }).select("id").single();
       if (error) {
         setActionError(describeSaveError(error));
         return;
+      }
+      // Receipts attach only AFTER the expense is saved; a photo that fails never undoes it.
+      let failed = 0;
+      for (const [index, file] of pendingPhotos.entries()) {
+        try {
+          await addPhoto("receipt", { userId: user.id, parentId: data.id, slot: index + 1, file });
+        } catch {
+          failed += 1;
+        }
       }
       // The message only appears once the list and totals already include it.
       await reload(carId);
       setAmount("");
       setNote("");
+      setPendingPhotos([]);
       setCategory("");
       setDate(todayInBeirut());
-      setNotice(`${categoryLabel(category)} expense added.`);
+      setNotice(
+        failed === 0
+          ? `${categoryLabel(category)} expense added.`
+          : `Saved, but ${failed === 1 ? "1 photo couldn't be attached. You can add it from the list below." : `${failed} photos couldn't be attached. You can add them from the list below.`}`,
+      );
     } finally {
       setBusy(false);
     }
@@ -356,6 +373,15 @@ function ExpensesPage() {
             />
             {fieldError("note")}
           </div>
+
+          <PendingPhotos
+            id="expense-photos"
+            label="this expense"
+            files={pendingPhotos}
+            max={MAX_MAINTENANCE_PHOTOS}
+            disabled={busy}
+            onChange={setPendingPhotos}
+          />
 
           {actionError && <p role="alert" className="auth-form__error">{actionError}</p>}
           {notice && <p role="status" className="fuel-log-saved">{notice}</p>}

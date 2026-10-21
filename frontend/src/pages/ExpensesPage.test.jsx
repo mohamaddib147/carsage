@@ -15,6 +15,7 @@ import ExpensesPage from "./ExpensesPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import CurrencyToggle from "../components/CurrencyToggle.jsx";
 import { CurrencyProvider } from "../currency/CurrencyContext.jsx";
+import { addPhoto } from "../lib/recordPhotos.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { priceText, unconvertedMoney } from "../test/priceText.js";
 
@@ -22,6 +23,8 @@ const USER = { id: "user-123", email: "driver@example.com" };
 const CAR_1 = { id: "car-1", make: "Mercedes-Benz", model: "C230", year: 2005 };
 const CAR_2 = { id: "car-2", make: "Toyota", model: "Corolla", year: 2020 };
 
+// Receipts attach through lib/recordPhotos.js: addPhoto is mocked (no storage call).
+vi.mock("../lib/recordPhotos.js", async (importOriginal) => ({ ...(await importOriginal()), addPhoto: vi.fn() }));
 vi.mock("../lib/supabaseClient.js", () => ({
   supabase: {
     auth: {
@@ -56,7 +59,10 @@ function mockDatabase({ cars = [CAR_1], expensesByCar = {}, fuelByCar = {}, expe
         })),
         insert: vi.fn((row) => {
           calls.inserts.push(row);
-          return Promise.resolve({ error: writeError });
+          return {
+            select: () => ({ single: () => Promise.resolve({ data: writeError ? null : { id: "exp-new" }, error: writeError }) }),
+            then: (resolve, reject) => Promise.resolve({ error: writeError }).then(resolve, reject),
+          };
         }),
         delete: vi.fn(() => ({
           eq: vi.fn((column, id) => {
@@ -192,6 +198,54 @@ describe("ExpensesPage — adding an expense", () => {
     // The message appears once the history already shows the new expense.
     expect(await screen.findByRole("status")).toHaveTextContent("Fines expense added.");
     expect(within(screen.getByRole("table")).getByText("Fines")).toBeInTheDocument();
+  });
+
+  describe("receipt photos on the Add form", () => {
+    const receipt = (name = "r.jpg") => new File([new Uint8Array(10)], name, { type: "image/jpeg" });
+    const fill = async (user) => {
+      await user.selectOptions(await screen.findByLabelText("Category *"), "parking");
+      await user.type(screen.getByLabelText("Amount *"), "5");
+    };
+
+    it("offers photo choosing on the form and uploads nothing until Add Expense", async () => {
+      const user = userEvent.setup();
+      mockDatabase();
+      renderPage();
+
+      await fill(user);
+      await user.upload(screen.getByLabelText(/Add a photo/i, { selector: "input" }), receipt());
+      expect(addPhoto).not.toHaveBeenCalled();
+    });
+
+    it("attaches the chosen photos to the new expense after it is saved", async () => {
+      const user = userEvent.setup();
+      mockDatabase();
+      renderPage();
+
+      await fill(user);
+      const input = screen.getByLabelText(/Add a photo/i, { selector: "input" });
+      await user.upload(input, receipt("a.jpg"));
+      await user.upload(input, receipt("b.jpg"));
+      await user.click(screen.getByRole("button", { name: "Add Expense" }));
+
+      await waitFor(() => expect(addPhoto).toHaveBeenCalledTimes(2));
+      expect(addPhoto.mock.calls[0][0]).toBe("receipt");
+      expect(addPhoto.mock.calls[0][1]).toMatchObject({ userId: "user-123", parentId: "exp-new" });
+      expect(await screen.findByRole("status")).toHaveTextContent("Parking expense added.");
+    });
+
+    it("keeps the expense saved and says so when a photo fails", async () => {
+      const user = userEvent.setup();
+      addPhoto.mockRejectedValueOnce(new Error("nope"));
+      mockDatabase();
+      renderPage();
+
+      await fill(user);
+      await user.upload(screen.getByLabelText(/Add a photo/i, { selector: "input" }), receipt());
+      await user.click(screen.getByRole("button", { name: "Add Expense" }));
+
+      expect(await screen.findByRole("status")).toHaveTextContent("Saved, but 1 photo couldn't be attached. You can add it from the list below.");
+    });
   });
 
   it("records the currency chosen in the form (LBP), not a converted amount", async () => {
