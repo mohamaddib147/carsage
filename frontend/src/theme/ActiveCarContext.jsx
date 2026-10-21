@@ -205,14 +205,28 @@ export function ActiveCarProvider({ children }) {
     let cancelled = false;
 
     async function loadCars() {
-      const { data, error } = await supabase
-        .from("cars")
-        .select("id, make")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: true });
+      // Any failure (an error response such as a 401 when the request went out without the user's
+      // session, a network error returned as an error, or one THROWN by the request) is handled the
+      // same way: remembered, default theme for an unconfirmed car, retried on the next auth event.
+      // Nothing here may throw: an unhandled rejection would surface as an app error.
+      let result;
+      try {
+        result = await supabase
+          .from("cars")
+          .select("id, make")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: true });
+      } catch {
+        result = { data: null, error: { message: "network error" }, status: undefined };
+      }
+      const { data, error, status } = result ?? {};
 
       if (cancelled) return;
       if (error || !data) {
+        // Development only (removed from production builds): the HTTP status, never a token or user data.
+        if (import.meta.env.DEV) {
+          console.warn(`[CarSage] Brand theme lookup failed (${status ? `HTTP ${status}` : "no HTTP status, network error"}); using the default theme until the next auth event.`);
+        }
         setFailure({ token: tokenRef.current });
         return;
       }

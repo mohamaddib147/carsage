@@ -9,7 +9,7 @@
 import { useLayoutEffect } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { ActiveCarProvider, useActiveCar } from "./ActiveCarContext.jsx";
@@ -379,7 +379,14 @@ describe("ActiveCarProvider: selectInitialCar (CAR-70)", () => {
 });
 
 describe("ActiveCarProvider: a failing cars lookup, e.g. a 401 (CAR-70)", () => {
-  const UNAUTHORIZED = { data: null, error: { status: 401, message: "JWT expired" } };
+  // The shape supabase-js returns for a 401: an error object plus the HTTP status (it does not throw).
+  const UNAUTHORIZED = { data: null, error: { code: "PGRST301", message: "JWT expired" }, status: 401 };
+  beforeEach(() => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.mocked(console.warn).mockRestore();
+  });
   const SESSION_1 = { user: USER, access_token: "token-1" };
 
   /** A lookup that answers with the first answer, then the second, and so on (the last one repeats). */
@@ -453,5 +460,118 @@ describe("ActiveCarProvider: the lookup is keyed on the user's id, not the user 
 
     expect(supabase.from).toHaveBeenCalledTimes(1);
     expect(result.current.activeCarId).toBe("car-1");
+  });
+});
+
+describe("ActiveCarProvider: every kind of failed lookup falls back, never throws, and retries (CAR-70 follow-up)", () => {
+  const CARS_OK = { data: [{ id: "car-1", make: "Ferrari" }, { id: "car-2", make: "BMW" }], error: null, status: 200 };
+  const UNAUTHORIZED = { data: null, error: { code: "PGRST301", message: "JWT expired" }, status: 401 };
+
+  beforeEach(() => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.mocked(console.warn).mockRestore();
+  });
+
+  /** A lookup whose n-th call does answers[n] (the last one repeats): a value resolves, an Error is THROWN (the promise rejects). */
+  function mockLookup(...answers) {
+    let call = 0;
+    const order = vi.fn(() => {
+      const answer = answers[Math.min(call++, answers.length - 1)];
+      return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
+    });
+    supabase.from.mockImplementation(() => ({ select: () => ({ eq: () => ({ order }) }) }));
+    return order;
+  }
+
+  it("a 401 response: default theme, no error thrown, and the next auth event retries and themes correctly", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: "token-1" } } });
+    storeActive(USER.id, "car-2", "BMW");
+    const order = mockLookup(UNAUTHORIZED, CARS_OK);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+    expect(rootPrimary()).toBe(DEFAULT_THEME["--color-primary"]);
+
+    fireAuthEvent("TOKEN_REFRESHED", { user: USER, access_token: "token-2" });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(false));
+    expect(order).toHaveBeenCalledTimes(2);
+    expect(rootPrimary()).toBe(BMW_PRIMARY);
+  });
+
+  it("a network error THROWN by the request: no unhandled rejection, default theme, retried on the next auth event", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: "token-1" } } });
+    storeActive(USER.id, "car-2", "BMW");
+    const order = mockLookup(new TypeError("Failed to fetch"), CARS_OK);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+    expect(rootPrimary()).toBe(DEFAULT_THEME["--color-primary"]);
+
+    fireAuthEvent("TOKEN_REFRESHED", { user: USER, access_token: "token-2" });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(false));
+    expect(order).toHaveBeenCalledTimes(2);
+    expect(rootPrimary()).toBe(BMW_PRIMARY);
+  });
+
+  it("a network error RETURNED as an error with HTTP status 0: same fallback", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: "token-1" } } });
+    storeActive(USER.id, "car-2", "BMW");
+    mockLookup({ data: null, error: { message: "TypeError: Failed to fetch" }, status: 0 });
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+    expect(rootPrimary()).toBe(DEFAULT_THEME["--color-primary"]);
+  });
+
+  it("a session without a token (the request goes out anonymously and gets a 401): default theme, then the sign-in with a token retries", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER } } });   // no access_token yet
+    storeActive(USER.id, "car-2", "BMW");
+    const order = mockLookup(UNAUTHORIZED, CARS_OK);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+    expect(rootPrimary()).toBe(DEFAULT_THEME["--color-primary"]);
+
+    fireAuthEvent("SIGNED_IN", { user: USER, access_token: "token-1" });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(false));
+    expect(order).toHaveBeenCalledTimes(2);
+    expect(rootPrimary()).toBe(BMW_PRIMARY);
+  });
+
+  it("in development it warns with the HTTP status only: never a token or user data", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: "secret-token-value" } } });
+    mockLookup(UNAUTHORIZED);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+
+    expect(console.warn).toHaveBeenCalledTimes(1);
+    const logged = vi.mocked(console.warn).mock.calls.flat().map(String).join(" ");
+    expect(logged).toContain("HTTP 401");
+    for (const secret of ["secret-token-value", USER.id, USER.email, "JWT expired", "PGRST301"]) {
+      expect(logged).not.toContain(secret);
+    }
+  });
+
+  it("a thrown error is logged without a status (edge case: there is none)", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: "token-1" } } });
+    mockLookup(new TypeError("Failed to fetch"));
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+
+    const logged = vi.mocked(console.warn).mock.calls.flat().map(String).join(" ");
+    expect(logged).toContain("no HTTP status, network error");
+    expect(logged).not.toContain("token-1");
+  });
+
+  it("a successful lookup logs nothing", async () => {
+    mockLookup(CARS_OK);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+    await waitFor(() => expect(result.current.cars).toHaveLength(2));
+    expect(console.warn).not.toHaveBeenCalled();
   });
 });
