@@ -8,5 +8,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.js',
+    // Half the cores: each worker is a jsdom process, and 16 of them on a memory-tight machine failed to start in time (not a test-timing fix).
+    maxWorkers: '50%',
   },
 })
