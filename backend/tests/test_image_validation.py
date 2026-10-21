@@ -73,16 +73,31 @@ def test_rejects_an_unsupported_but_validly_decoded_format():
 
 
 def test_rejects_an_image_over_the_decompression_bomb_pixel_ceiling(monkeypatch):
-    # Lower the ceiling instead of actually generating a 120-megapixel
+    # Lower the ceiling instead of actually generating a 40-megapixel
     # file, so this test stays fast.
     monkeypatch.setattr("app.services.image_validation.MAX_IMAGE_PIXELS", 100)
     with pytest.raises(InvalidImage, match="too large to process"):
         validate_and_sanitize_image(_image_bytes("PNG", size=(50, 50)))
 
 
-def test_the_real_ceiling_is_comfortably_above_a_phone_photo():
-    # A 12-megapixel phone photo (4032x3024) must never be rejected.
-    assert 4032 * 3024 < MAX_IMAGE_PIXELS
+def test_an_oversized_image_is_refused_before_a_single_pixel_is_decoded(monkeypatch):
+    # The whole point of the ceiling is memory: the size check must use the
+    # header and run BEFORE image.load(), or the memory is already spent.
+    from unittest.mock import patch
+
+    from PIL import PngImagePlugin
+
+    monkeypatch.setattr("app.services.image_validation.MAX_IMAGE_PIXELS", 100)
+    with patch.object(PngImagePlugin.PngImageFile, "load", side_effect=AssertionError("decoded before the size check")):
+        with pytest.raises(InvalidImage, match="too large to process"):
+            validate_and_sanitize_image(_image_bytes("PNG", size=(50, 50)))
+
+
+def test_the_ceiling_is_40_megapixels_phone_photos_pass_and_48mp_is_refused():
+    assert MAX_IMAGE_PIXELS == 40_000_000
+    assert 4032 * 3024 < MAX_IMAGE_PIXELS      # 12 MP phone photo
+    assert 6000 * 4000 < MAX_IMAGE_PIXELS      # 24 MP camera
+    assert 8000 * 6000 > MAX_IMAGE_PIXELS      # 48 MP full-resolution mode
 
 
 def test_strips_exif_metadata():
