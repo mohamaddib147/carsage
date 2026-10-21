@@ -27,7 +27,12 @@ iframe#nl-badge-frame {
   --color-text-muted: #6b6a63;
   --color-danger: #b3261e;
 
-  --font-family-base: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* CAR-68: the brand fonts are declared in fonts.css. Each stack lists the web
+     font, then its metric-matched Arial fallback (limits layout shift while the
+     font loads), then the system fonts this app used before. */
+  --font-body: "Manrope", "Manrope Fallback", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-heading: "Space Grotesk", "Space Grotesk Fallback", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-family-base: var(--font-body);
 
   --radius-base: 8px;
   --radius-lg: 12px;
@@ -59,6 +64,18 @@ h2,
 h3 {
   color: var(--color-primary);
   line-height: 1.2;
+}
+
+/* CAR-68: Space Grotesk for every heading, plus the Landing hero headline,
+   which is styled text rather than a heading element. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.landing-hero__headline {
+  font-family: var(--font-heading);
 }
 
 a {
