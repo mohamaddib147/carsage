@@ -42,9 +42,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
-import WarningLightScan from "../components/WarningLightScan.jsx";
+import PhotoScan from "../components/PhotoScan.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
+import { isStillFromPhoto, mergeFlag, toRequestFlag } from "../lib/advisorPhoto.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 
@@ -132,6 +133,8 @@ function AIAdvisorPage() {
   const [messages, setMessages] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [description, setDescription] = useState("");
+  // Set while the input holds text that came from a photo scan: {kind, confidence, sentences}.
+  const [photoFlag, setPhotoFlag] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -140,11 +143,20 @@ function AIAdvisorPage() {
   const transcriptEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  // The warning-light scan only FILLS the input (after anything already typed); the user edits
-  // it and presses Send. Nothing is sent automatically.
-  function handleLightSentence(sentence) {
-    setDescription((previous) => (previous.trim() ? `${previous.trim()} ${sentence}` : sentence).slice(0, 1000));
+  // The photo scan only FILLS the input (after anything already typed); the user edits it and
+  // presses Send. Nothing is sent automatically. The flag marks the text as photo-derived so the
+  // backend can be more cautious about it.
+  function handleFinding(finding) {
+    setDescription((previous) => (previous.trim() ? `${previous.trim()} ${finding.sentence}` : finding.sentence).slice(0, 1000));
+    setPhotoFlag((previous) => mergeFlag(previous, finding));
     inputRef.current?.focus();
+  }
+
+  // Typing keeps the flag while the scanned sentence is still (mostly) there; emptying the box or
+  // replacing the text entirely clears it.
+  function handleDescriptionChange(value) {
+    setDescription(value);
+    setPhotoFlag((previous) => (previous && isStillFromPhoto(value, previous.sentences) ? previous : null));
   }
 
   useEffect(() => {
@@ -239,7 +251,7 @@ function AIAdvisorPage() {
   }, [messages, submitting]);
 
   /** @param {string} text */
-  async function sendMessage(text) {
+  async function sendMessage(text, { photo } = {}) {
     const trimmed = text.trim();
     if (!trimmed || submitting) return;
 
@@ -249,6 +261,7 @@ function AIAdvisorPage() {
       { id: nextMessageId.current++, role: "user", text: trimmed },
     ]);
     setDescription("");
+    setPhotoFlag(null);
     setSubmitting(true);
 
     try {
@@ -259,6 +272,7 @@ function AIAdvisorPage() {
           car_id: selectedCarId,
           description: trimmed,
           conversation_id: conversationIdRef.current ?? undefined,
+          photo,
         },
       });
       conversationIdRef.current = result.conversation_id;
@@ -285,7 +299,7 @@ function AIAdvisorPage() {
   /** @param {import('react').FormEvent} event */
   function handleSubmit(event) {
     event.preventDefault();
-    sendMessage(description);
+    sendMessage(description, { photo: toRequestFlag(photoFlag) });
   }
 
   /**
@@ -586,7 +600,7 @@ function AIAdvisorPage() {
           // Same cap as the backend (MAX_DESCRIPTION_CHARS in ai_advisor.py).
           maxLength={1000}
           value={description}
-          onChange={(event) => setDescription(event.target.value)}
+          onChange={(event) => handleDescriptionChange(event.target.value)}
           disabled={submitting}
           aria-describedby="advisorInputHint"
         />
@@ -601,7 +615,7 @@ function AIAdvisorPage() {
       <p id="advisorInputHint" className="form-hint">
         Don&apos;t include personal details such as names, license plates or phone numbers.
       </p>
-      <WarningLightScan onSentence={handleLightSentence} disabled={submitting} />
+      <PhotoScan onFinding={handleFinding} disabled={submitting} />
       <p className="advisor-disclaimer">
         AI-generated guidance, not a substitute for a professional
         inspection.

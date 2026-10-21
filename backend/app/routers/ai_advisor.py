@@ -39,6 +39,7 @@ from pydantic import BaseModel, Field
 from app.auth import get_current_user_id
 from app.services.llm_client import LLMError, classify_issue
 from app.services.nhtsa_safety import check_safety_data
+from app.services.photo_findings import must_see_a_mechanic, parse_photo_flag
 from app.services.usage_limiter import UsageCheckFailed, UsageLimitExceeded, enforce_usage
 from app.services.youtube_client import search_diy_video
 from app.supabase_client import supabase
@@ -78,6 +79,11 @@ class ClassifyIssueRequest(BaseModel):
     # Omit to start a new conversation; pass back a prior response's
     # conversation_id to append to that same conversation instead.
     conversation_id: RecordId | None = None
+    # Set by the page when the text came from a photo scan (POST /ai-advisor/scan-photo):
+    # {"source": "photo", "confidence": "low|medium|high", "kind": "other|listed"}. Typed
+    # loosely on purpose: only EXACT values count (parse_photo_flag), anything else is
+    # simply no flag, never a 422. It can only make the Advisor MORE cautious.
+    photo: object | None = None
 
 
 class ClassifyIssueResponse(BaseModel):
@@ -226,10 +232,26 @@ def post_classify_issue(
             ),
         }
     else:
-        try:
-            result = classify_issue(description, car_data)
-        except LLMError as error:
-            raise HTTPException(status_code=503, detail=str(error)) from error
+        # The recall check above ran first and keeps priority. For text that came from a
+        # photo guess: free text ("other") or low confidence is never answered DIY, and any
+        # other photo text tells the classifier to prefer a mechanic unless clearly low-risk.
+        photo_flag = parse_photo_flag(payload.photo)
+        if must_see_a_mechanic(photo_flag):
+            result = {
+                "recommendation": "mechanic",
+                "guidance": (
+                    "This started from a photo, and reading a photo is only a guess that may be "
+                    "wrong, so please have a mechanic take a look to be safe."
+                ),
+            }
+        else:
+            try:
+                if photo_flag:
+                    result = classify_issue(description, car_data, from_photo=True)
+                else:
+                    result = classify_issue(description, car_data)
+            except LLMError as error:
+                raise HTTPException(status_code=503, detail=str(error)) from error
 
         if safety["status"] == "not_found":
             result["guidance"] += (

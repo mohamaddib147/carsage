@@ -768,3 +768,124 @@ class TestAdvisorUsageLimiting:
         assert response.status_code == 200
         mock_classify.assert_called_once()
         assert response.json()["recommendation"] == "mechanic"
+
+
+class TestPhotoFlag:
+    """The page attaches {"source": "photo", "confidence", "kind"} to a message that came from
+    a photo scan. Only EXACT values count (anything else is no flag, never a 422), the recall
+    check still runs first, free-text ("other") or low-confidence photo text is never answered
+    DIY, other photo text tells the classifier to prefer a mechanic, and the flag can only make
+    the Advisor MORE cautious, never less."""
+
+    CAR = "00000000-0000-4000-8000-000000000001"
+    DESC = "A headlight is not working."
+
+    def setup_method(self):
+        app.dependency_overrides[get_current_user_id] = lambda: "user-123"
+
+    def teardown_method(self):
+        app.dependency_overrides.pop(get_current_user_id, None)
+
+    def _post(self, photo, *, classify_returns=None, safety=None):
+        mock_supabase, captured, _ = _build_mock_supabase({"make": "Toyota", "model": "Camry", "year": 2016})
+        body = {"car_id": self.CAR, "description": self.DESC}
+        if photo is not _MISSING:
+            body["photo"] = photo
+        classify_returns = classify_returns or {"recommendation": "diy", "guidance": "Replace the bulb."}
+        patches = [
+            patch("app.routers.ai_advisor.supabase", mock_supabase),
+            patch("app.routers.ai_advisor.classify_issue", return_value=classify_returns),
+            patch("app.routers.ai_advisor.search_diy_video", return_value=None),
+        ]
+        if safety is not None:
+            patches.append(patch("app.routers.ai_advisor.check_safety_data", return_value=safety))
+        with patches[0], patches[1] as mock_classify, patches[2] as mock_video:
+            if safety is not None:
+                with patches[3]:
+                    response = client.post("/ai-advisor/classify", json=body)
+            else:
+                response = client.post("/ai-advisor/classify", json=body)
+        return response, mock_classify, mock_video, captured
+
+    def test_no_flag_is_the_ordinary_path(self):
+        response, classify, _, _ = self._post(_MISSING)
+
+        assert response.status_code == 200
+        assert response.json()["recommendation"] == "diy"
+        classify.assert_called_once_with(self.DESC, {"make": "Toyota", "model": "Camry", "year": 2016})
+
+    @pytest.mark.parametrize(
+        "photo",
+        [
+            None, "photo", 1, True, [], {}, [{"source": "photo"}],
+            {"source": "photo"}, {"source": "photo", "confidence": "low"}, {"source": "photo", "kind": "other"},
+            {"source": "Photo", "confidence": "low", "kind": "other"},
+            {"source": "camera", "confidence": "low", "kind": "other"},
+            {"source": "photo", "confidence": "LOW", "kind": "other"},
+            {"source": "photo", "confidence": "certain", "kind": "other"},
+            {"source": "photo", "confidence": "low", "kind": "free"},
+            {"source": "photo", "confidence": ["low"], "kind": "other"},
+            {"source": "photo", "confidence": "low", "kind": None},
+        ],
+    )
+    def test_a_garbage_flag_is_no_flag_the_ordinary_path_and_never_a_422(self, photo):
+        response, classify, _, _ = self._post(photo)
+
+        assert response.status_code == 200
+        assert response.json()["recommendation"] == "diy"
+        classify.assert_called_once_with(self.DESC, {"make": "Toyota", "model": "Camry", "year": 2016})
+
+    @pytest.mark.parametrize("confidence", ["low", "medium", "high"])
+    def test_other_is_never_answered_diy_and_skips_the_classifier(self, confidence):
+        response, classify, video, captured = self._post({"source": "photo", "confidence": confidence, "kind": "other"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["recommendation"] == "mechanic"
+        assert "photo" in body["guidance"] and "mechanic" in body["guidance"]
+        classify.assert_not_called()
+        video.assert_not_called()  # a mechanic answer never looks up a DIY video
+        assert [row["sender"] for row in captured] == ["user", "ai"]  # still saved like any answer
+
+    def test_a_listed_lamp_key_with_low_confidence_is_never_answered_diy(self):
+        response, classify, video, _ = self._post({"source": "photo", "confidence": "low", "kind": "listed"})
+
+        assert response.json()["recommendation"] == "mechanic"
+        classify.assert_not_called()
+        video.assert_not_called()
+
+    @pytest.mark.parametrize("confidence", ["medium", "high"])
+    def test_a_listed_key_with_medium_or_high_confidence_goes_to_the_classifier_with_the_photo_caution(self, confidence):
+        response, classify, _, _ = self._post({"source": "photo", "confidence": confidence, "kind": "listed"})
+
+        assert response.json()["recommendation"] == "diy"  # clearly low-risk: DIY is still allowed
+        classify.assert_called_once_with(self.DESC, {"make": "Toyota", "model": "Camry", "year": 2016}, from_photo=True)
+
+    def test_the_flag_never_makes_the_answer_less_cautious(self):
+        mechanic = {"recommendation": "mechanic", "guidance": "See a mechanic."}
+        response, classify, _, _ = self._post({"source": "photo", "confidence": "high", "kind": "listed"}, classify_returns=mechanic)
+
+        assert response.json()["recommendation"] == "mechanic"
+        assert response.json()["guidance"] == "See a mechanic."
+
+    def test_the_recall_check_still_runs_first_and_wins_whatever_the_flag(self):
+        recall = {"status": "recall_match", "summary": "Headlamp may fail.", "system": "lighting"}
+        for kind, confidence in (("other", "low"), ("listed", "high")):
+            response, classify, _, _ = self._post({"source": "photo", "confidence": confidence, "kind": kind}, safety=recall)
+
+            body = response.json()
+            assert body["recommendation"] == "mechanic"
+            assert "open recall" in body["guidance"] and "Headlamp may fail." in body["guidance"]
+            assert "started from a photo" not in body["guidance"]
+            classify.assert_not_called()
+
+    def test_extra_keys_on_a_valid_flag_cannot_loosen_anything(self):
+        response, classify, _, _ = self._post(
+            {"source": "photo", "confidence": "low", "kind": "other", "recommendation": "diy", "force": False}
+        )
+
+        assert response.json()["recommendation"] == "mechanic"
+        classify.assert_not_called()
+
+
+_MISSING = object()

@@ -140,17 +140,20 @@ describe("legal pages", () => {
     renderAt("/privacy");
 
     expect(await screen.findByRole("heading", { name: "What goes to Google Gemini" })).toBeInTheDocument();
-    for (const item of ["AI Advisor", "Fuel pump display photo", "Odometer photo", "Dashboard warning light photo"]) {
+    for (const item of ["AI Advisor", "Fuel pump display photo", "Odometer photo", "Photo of a dashboard light, lamp or visible car problem"]) {
       expect(screen.getByText(item)).toBeInTheDocument();
     }
     expect(document.body.textContent).toMatch(/Odometer photo\s*\(Fuel Log and Maintenance\)/);
-    expect(document.body.textContent).toMatch(/Dashboard warning light photo\s*\(AI Advisor\)/);
-    expect(document.body.textContent).toMatch(/A warning light sentence is saved only if you send it/);
+    expect(document.body.textContent).toMatch(/Photo of a dashboard light, lamp or visible car problem\s*\(AI\s*Advisor\)/);
+    expect(document.body.textContent).toMatch(/A sentence from a photo is saved only if you send it/);
+    expect(document.body.textContent).toMatch(/AI guess and may be wrong/);
+    expect(document.body.textContent).toMatch(/people, a\s+license plate or a document in the photo, CarSage discards the result/);
     expect(document.body.textContent).not.toMatch(/may be added/);
     expect(screen.getByText(/Later features may add more\. Each will be listed here before it is\s+released/)).toBeInTheDocument();
     expect(screen.getByText(/free \(unpaid\) tier of the Gemini API/)).toBeInTheDocument();
     expect(screen.getByText(/provide, improve and develop its products and services, and human reviewers may read it/)).toBeInTheDocument();
-    expect(screen.getByText(/does not store: the photo itself/)).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/does not store: a photo you scan/);
+    expect(document.body.textContent).toMatch(/Photos you choose to attach to maintenance and\s+expenses are different/);
     expect(screen.getByRole("link", { name: "Gemini API Additional Terms of Service" })).toHaveAttribute(
       "href",
       "https://ai.google.dev/gemini-api/terms",

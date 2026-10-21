@@ -196,10 +196,12 @@ export function PrivacyPage() {
             car&apos;s total distance.
           </li>
           <li>
-            <strong>Dashboard warning light photo</strong> (AI Advisor): to name which
-            warning light is on. CarSage turns the answer into a short sentence in the
-            Advisor&apos;s input box, which you can edit before sending. It is a
-            guess, and you choose whether to send it.
+            <strong>Photo of a dashboard light, lamp or visible car problem</strong> (AI
+            Advisor): to say what is wrong. CarSage turns the answer into one short
+            sentence in the Advisor&apos;s input box, which you can edit before sending.
+            It is an AI guess and may be wrong, and you choose whether to send it.
+            Please photograph only the part: if Google&apos;s reading finds people, a
+            license plate or a document in the photo, CarSage discards the result.
           </li>
         </ul>
         <p>
@@ -223,12 +225,14 @@ export function PrivacyPage() {
           What CarSage stores: your AI Advisor conversations, saved to your account,
           and the values a photo scan reads (for example the liters and cost of a
           fill-up, or an odometer reading), only after you have reviewed them and
-          pressed save. A warning light sentence is saved only if you send it, like
-          any text you type. Nothing from a scan is saved automatically. What CarSage does not store: the photo
-          itself. It is read for that one request and then discarded; it is never
-          written to our database, to file storage, or to our server&apos;s disk.
-          Scanning is always optional, and every field can be typed in by hand
-          instead.
+          pressed save. A sentence from a photo is saved only if you send it, like
+          any text you type. Nothing from a scan is saved automatically. What
+          CarSage does not store: a photo you scan. It is read for that one request
+          and then discarded; it is never written to our database, to file storage,
+          or to our server&apos;s disk. (Photos you choose to attach to maintenance and
+          expenses are different: they are kept in your private storage, as
+          described above.) Scanning is always optional, and every field can be
+          typed in by hand instead.
         </p>
 
         <h2>Cookies and local storage</h2>

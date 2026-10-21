@@ -478,3 +478,21 @@ def test_pump_and_odometer_scans_use_the_vision_key_when_configured(monkeypatch)
         extract_pump_fields(b"fake-image-bytes", "image/jpeg")
 
     assert mock_post.call_args.kwargs["params"]["key"] == "vision-only-key"
+
+
+# --- Advisor camera: text that came from a photo guess ---------------------------
+
+from app.services.llm_client import PHOTO_CAUTION, SYSTEM_PROMPT  # noqa: E402
+
+
+def test_classify_issue_adds_the_photo_caution_only_when_the_text_came_from_a_photo():
+    reply = json.dumps({"recommendation": "mechanic", "guidance": "See a mechanic."})
+    with patch("app.services.llm_client.httpx.post", return_value=_mock_response(json_body=_gemini_payload(reply))) as plain:
+        classify_issue("A headlight is not working.", {"make": "Toyota"})
+    with patch("app.services.llm_client.httpx.post", return_value=_mock_response(json_body=_gemini_payload(reply))) as photo:
+        classify_issue("A headlight is not working.", {"make": "Toyota"}, from_photo=True)
+
+    assert plain.call_args.kwargs["json"]["systemInstruction"]["parts"][0]["text"] == SYSTEM_PROMPT
+    sent = photo.call_args.kwargs["json"]["systemInstruction"]["parts"][0]["text"]
+    assert sent == SYSTEM_PROMPT + PHOTO_CAUTION
+    assert "automated guess about a photo" in sent and "recommend a mechanic" in sent

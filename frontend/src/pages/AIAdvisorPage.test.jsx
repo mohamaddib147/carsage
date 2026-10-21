@@ -21,7 +21,7 @@ import { apiFetch } from "../lib/apiClient.js";
 import { scanPhoto } from "../lib/scanPhoto.js";
 import { supabase } from "../lib/supabaseClient.js";
 
-// The warning-light scan sends a photo to the backend: mocked, so no network call happens.
+// The photo scan sends a photo to the backend: mocked, so no network call happens.
 vi.mock("../lib/scanPhoto.js", () => ({ scanPhoto: vi.fn() }));
 
 const LOGGED_IN_USER = { id: "user-123", email: "driver@example.com" };
@@ -915,73 +915,225 @@ describe("AIAdvisorPage — Find a mechanic near me (CAR-65)", () => {
   });
 });
 
-describe("AIAdvisorPage — warning-light camera", () => {
+describe("AIAdvisorPage — Scan a photo", () => {
   const INPUT = "Describe your issue, e.g. grinding noise when braking";
   const CAR = { id: "car-1", make: "Toyota", model: "Corolla", year: 2020 };
-  const photo = () => new File([new Uint8Array(10)], "light.jpg", { type: "image/jpeg" });
+  const photo = () => new File([new Uint8Array(10)], "part.jpg", { type: "image/jpeg" });
+  const LISTED = { kind: "listed", key: "headlight_out", sentence: "A headlight is not working.", message: null, confidence: "high" };
+  const OTHER = {
+    kind: "other", key: null, sentence: "From a photo (AI guess, may be wrong): Rust hole in the rear fender",
+    message: null, confidence: "medium",
+  };
+  const classifyCalls = () => apiFetch.mock.calls.filter(([path]) => path === "/ai-advisor/classify");
 
-  it("shows the three notices under the button before any scan: only the light, Google's free tier, a guess to edit", async () => {
+  async function scan(user, result) {
+    scanPhoto.mockResolvedValue(result);
+    await user.upload(document.getElementById("scanPhotoFile"), photo());
+  }
+
+  it("shows one 'Scan a photo' button with the three notices before any scan", async () => {
     mockSupabaseTables({ cars: [CAR] });
     renderPage();
 
     await screen.findByPlaceholderText(INPUT);
-    expect(screen.getByText("Scan a warning light")).toBeInTheDocument();
-    expect(screen.getByText("Photograph only the warning light: no people, license plates, VINs or documents.")).toBeInTheDocument();
+    expect(screen.getByText("Scan a photo")).toBeInTheDocument();
+    expect(screen.queryByText("Scan a warning light")).not.toBeInTheDocument();
+    expect(screen.getByText("Photograph only the part with the problem: no people, license plates, VINs or documents.")).toBeInTheDocument();
     expect(screen.getByText(/sent to Google's Gemini API to read it, then discarded; it's never saved by CarSage\. On Google's free tier/)).toBeInTheDocument();
+    expect(screen.getByText(/human reviewers may read it/)).toBeInTheDocument();
     expect(screen.getByText("The result is a guess. Edit it before you send.")).toBeInTheDocument();
   });
 
-  it("a scan FILLS the input with the fixed sentence and sends nothing", async () => {
+  it("a listed result FILLS the input with our sentence and sends nothing", async () => {
     const user = userEvent.setup();
     mockSupabaseTables({ cars: [CAR] });
-    scanPhoto.mockResolvedValue({ light: "brake_system", sentence: "The brake warning light is on." });
     renderPage();
 
     const input = await screen.findByPlaceholderText(INPUT);
-    await user.upload(document.getElementById("scanWarningLightFile"), photo());
+    await scan(user, LISTED);
 
-    await waitFor(() => expect(input).toHaveValue("The brake warning light is on."));
-    expect(scanPhoto).toHaveBeenCalledWith("/ai-advisor/scan-warning-light", expect.any(File), "test-access-token");
-    expect(apiFetch).not.toHaveBeenCalledWith("/ai-advisor/classify", expect.anything()); // never auto-sent
-    expect(screen.queryByText("DIY Fixable")).not.toBeInTheDocument();
+    await waitFor(() => expect(input).toHaveValue("A headlight is not working."));
+    expect(scanPhoto).toHaveBeenCalledWith("/ai-advisor/scan-photo", expect.any(File), "test-access-token");
+    expect(classifyCalls()).toHaveLength(0); // never auto-sent
   });
 
-  it("appends to what the user already typed, and the user can edit it before Send", async () => {
+  it("an 'other' result fills the 'From a photo (AI guess, may be wrong)' sentence", async () => {
     const user = userEvent.setup();
     mockSupabaseTables({ cars: [CAR] });
-    scanPhoto.mockResolvedValue({ light: "check_engine", sentence: "The check engine light is on." });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await scan(user, OTHER);
+
+    await waitFor(() => expect(input).toHaveValue("From a photo (AI guess, may be wrong): Rust hole in the rear fender"));
+    expect(classifyCalls()).toHaveLength(0);
+  });
+
+  it("appends to what the user already typed", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await user.type(input, "It stopped working yesterday.");
+    await scan(user, LISTED);
+
+    await waitFor(() => expect(input).toHaveValue("It stopped working yesterday. A headlight is not working."));
+  });
+
+  it("a low-confidence result still fills the input but warns to check it carefully", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await scan(user, { ...LISTED, confidence: "low" });
+
+    await waitFor(() => expect(input).toHaveValue("A headlight is not working."));
+    expect(screen.getByText("Low confidence: check this sentence carefully before you send it.")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["not_car", "That doesn't look like a car problem."],
+    ["unknown", "Couldn't tell what that is. Describe it in words instead."],
+    ["sensitive", "This photo shows people, a plate or a document. Retake it with just the car part."],
+  ])("a %s result shows its message and leaves the input untouched", async (kind, message) => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await user.type(input, "Something is wrong");
+    await scan(user, { kind, key: null, sentence: null, message, confidence: null });
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(input).toHaveValue("Something is wrong");
+    // and no flag was set: sending the typed text carries none
+    apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    expect(classifyCalls()[0][1].body.photo).toBeUndefined();
+  });
+
+  it("Send carries the exact photo flag with the scanned text", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
+    renderPage();
+
+    await screen.findByPlaceholderText(INPUT);
+    await scan(user, { ...LISTED, confidence: "medium" });
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    expect(classifyCalls()[0][1].body).toEqual({
+      car_id: "car-1",
+      description: "A headlight is not working.",
+      photo: { source: "photo", confidence: "medium", kind: "listed" },
+    });
+  });
+
+  it("the flag stays attached when the sentence is edited before sending", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
     apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
     renderPage();
 
     const input = await screen.findByPlaceholderText(INPUT);
-    await user.type(input, "It started after fuel-up.");
-    await user.upload(document.getElementById("scanWarningLightFile"), photo());
-    await waitFor(() => expect(input).toHaveValue("It started after fuel-up. The check engine light is on."));
-
-    await user.type(input, " It is flashing.");
+    await scan(user, OTHER);
+    await waitFor(() => expect(input).toHaveValue(OTHER.sentence));
+    await user.type(input, " It happened after a car wash.");
+    await user.type(input, "{Backspace}{Backspace}"); // fiddling with the end of it
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(await screen.findByText("See a mechanic.")).toBeInTheDocument();
-    expect(apiFetch).toHaveBeenCalledWith(
-      "/ai-advisor/classify",
-      expect.objectContaining({
-        body: { car_id: "car-1", description: "It started after fuel-up. The check engine light is on. It is flashing." },
-      }),
-    );
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    const body = classifyCalls()[0][1].body;
+    expect(body.description).toContain("Rust hole in the rear fender");
+    expect(body.photo).toEqual({ source: "photo", confidence: "medium", kind: "other" });
   });
 
-  it("an unknown light says so and leaves the input untouched", async () => {
+  it("emptying the box clears the flag", async () => {
     const user = userEvent.setup();
     mockSupabaseTables({ cars: [CAR] });
-    scanPhoto.mockResolvedValue({ light: "unknown", sentence: null });
+    apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
     renderPage();
 
     const input = await screen.findByPlaceholderText(INPUT);
-    await user.type(input, "Something is on");
-    await user.upload(document.getElementById("scanWarningLightFile"), photo());
+    await scan(user, LISTED);
+    await waitFor(() => expect(input).toHaveValue(LISTED.sentence));
+    await user.clear(input);
+    await user.type(input, "My engine is knocking loudly");
+    await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(await screen.findByText("Couldn't tell which light that is. Describe it in words instead.")).toBeInTheDocument();
-    expect(input).toHaveValue("Something is on");
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    expect(classifyCalls()[0][1].body.photo).toBeUndefined();
+  });
+
+  it("replacing the text entirely (without emptying the box) clears the flag", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await scan(user, LISTED);
+    await waitFor(() => expect(input).toHaveValue(LISTED.sentence));
+    await user.click(input);
+    input.setSelectionRange(0, input.value.length); // select all, then replace it
+    await user.paste("Steering feels loose on bumps");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    const body = classifyCalls()[0][1].body;
+    expect(body.description).toBe("Steering feels loose on bumps");
+    expect(body.photo).toBeUndefined();
+  });
+
+  it("a second scan keeps the MORE cautious flag (free text and the lower confidence win)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
+    renderPage();
+
+    await screen.findByPlaceholderText(INPUT);
+    await scan(user, LISTED); // listed, high
+    await scan(user, { ...OTHER, confidence: "low" }); // other, low
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    expect(classifyCalls()[0][1].body.photo).toEqual({ source: "photo", confidence: "low", kind: "other" });
+  });
+
+  it("an example prompt chip never carries the flag", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    apiFetch.mockResolvedValue({ recommendation: "diy", guidance: "It's fine." });
+    renderPage();
+
+    await screen.findByPlaceholderText(INPUT);
+    await scan(user, LISTED);
+    await user.click(await screen.findByRole("button", { name: "Squeaking brakes at low speed" }));
+
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    expect(classifyCalls()[0][1].body).toEqual({ car_id: "car-1", description: "Squeaking brakes at low speed" });
+  });
+
+  it("the flag is gone after a message is sent (the next typed message has none)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await scan(user, LISTED);
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    await screen.findByText("See a mechanic.");
+    await user.type(input, "Another problem entirely");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(classifyCalls()).toHaveLength(2));
+    expect(classifyCalls()[1][1].body.photo).toBeUndefined();
   });
 
   it("shows the backend's plain message when the scan is refused (e.g. the daily limit)", async () => {
@@ -991,7 +1143,7 @@ describe("AIAdvisorPage — warning-light camera", () => {
     renderPage();
 
     await screen.findByPlaceholderText(INPUT);
-    await user.upload(document.getElementById("scanWarningLightFile"), photo());
+    await user.upload(document.getElementById("scanPhotoFile"), photo());
 
     expect(await screen.findByText(/reached today's limit of 20/)).toBeInTheDocument();
   });
@@ -1002,7 +1154,7 @@ describe("AIAdvisorPage — warning-light camera", () => {
     renderPage();
 
     await screen.findByPlaceholderText(INPUT);
-    await user.upload(document.getElementById("scanWarningLightFile"), new File(["x"], "a.pdf", { type: "application/pdf" }));
+    await user.upload(document.getElementById("scanPhotoFile"), new File(["x"], "a.pdf", { type: "application/pdf" }));
 
     expect(await screen.findByText(/Please choose a photo/)).toBeInTheDocument();
     expect(scanPhoto).not.toHaveBeenCalled();
@@ -1018,6 +1170,6 @@ describe("AIAdvisorPage — warning-light camera", () => {
     await user.type(input, "Squeaky brakes");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => expect(document.getElementById("scanWarningLightFile")).toBeDisabled());
+    await waitFor(() => expect(document.getElementById("scanPhotoFile")).toBeDisabled());
   });
 });
