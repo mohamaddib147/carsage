@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  getCompletionOdometerWarning,
   addMonths,
   dashboardMaintenance,
   itemAnchorId,
@@ -307,5 +308,31 @@ describe("dashboardMaintenance (across cars)", () => {
 
   it("gives each item a stable anchor id", () => {
     expect(itemAnchorId("abc")).toBe("maintenance-item-abc");
+  });
+});
+
+describe("getCompletionOdometerWarning (Mark as done only)", () => {
+  const latest = { km: 89100, filledAt: "2026-10-10" };
+
+  it("warns when the reading is lower than the latest and the date is on or after the latest's date", () => {
+    const expected = "Lower than your latest reading of 89,100 km (10 Oct 2026). Check the reading.";
+    expect(getCompletionOdometerWarning("85000", "2026-10-19", latest)).toBe(expected);
+    expect(getCompletionOdometerWarning("85000", "2026-10-10", latest)).toBe(expected); // the same day counts
+  });
+
+  it("says nothing for a reading equal to or above the latest", () => {
+    expect(getCompletionOdometerWarning("89100", "2026-10-19", latest)).toBe("");
+    expect(getCompletionOdometerWarning("90000", "2026-10-19", latest)).toBe("");
+  });
+
+  it("says nothing for a backdated completion (before the latest reading's date), where lower is normal", () => {
+    expect(getCompletionOdometerWarning("85000", "2026-10-09", latest)).toBe("");
+  });
+
+  it("says nothing without a reading, a date, or a car reading to compare with", () => {
+    expect(getCompletionOdometerWarning("", "2026-10-19", latest)).toBe("");
+    expect(getCompletionOdometerWarning("85000", "", latest)).toBe("");
+    expect(getCompletionOdometerWarning("85000", "2026-10-19", null)).toBe("");
+    expect(getCompletionOdometerWarning("abc", "2026-10-19", latest)).toBe("");
   });
 });

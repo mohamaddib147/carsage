@@ -354,6 +354,24 @@ export function getCompletionErrors(values, today, kmBased) {
 }
 
 /**
+ * A non-blocking warning for the "Mark as done" odometer: lower than the car's latest
+ * Fuel Log reading, when the done-on date is on or after that reading's date (a reading
+ * can only have gone up since). A BACKDATED completion may legitimately be lower, so it
+ * gets no warning; neither does the item form's "last done" km, which belongs to the item.
+ * @param {string} odometer - the odometer text as typed or scanned.
+ * @param {string} doneOn - the done-on date (YYYY-MM-DD).
+ * @param {{ km: number, filledAt: string } | null} latest - latestOdometer() of the car's fill-ups.
+ * @returns {string} the warning, or "".
+ */
+export function getCompletionOdometerWarning(odometer, doneOn, latest) {
+  const km = wholeNumber(odometer);
+  if (!Number.isFinite(km) || !latest || !doneOn) return "";
+  if (doneOn < latest.filledAt) return "";
+  if (km >= latest.km) return "";
+  return `Lower than your latest reading of ${formatKm(latest.km)} (${formatFillDate(latest.filledAt)}). Check the reading.`;
+}
+
+/**
  * The item row to save from the form's values (only call once it validates).
  * @returns {{ name: string, interval_km: number | null, interval_months: number | null, baseline_date: string, baseline_km: number | null, notes: string | null }}
  */

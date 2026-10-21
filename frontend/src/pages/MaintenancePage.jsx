@@ -21,6 +21,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import FormattedNumberInput from "../components/FormattedNumberInput.jsx";
+import OdometerScanButton from "../components/OdometerScanButton.jsx";
 import PageShell from "../components/PageShell.jsx";
 import RecordPhotos from "../components/RecordPhotos.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
@@ -32,6 +33,7 @@ import {
   describeDue,
   describeRemaining,
   getCompletionErrors,
+  getCompletionOdometerWarning,
   getMaintenanceItemErrors,
   itemAnchorId,
   itemFromForm,
@@ -167,6 +169,11 @@ function ItemFields({ idPrefix, values, errors, onChange, today }) {
             onChange={(raw) => onChange("baselineKm", raw)}
           />
           {errorFor("baselineKm")}
+          <OdometerScanButton
+            id={field("baselineKmScan")}
+            label="the last-done reading"
+            onReading={(km) => onChange("baselineKm", km)}
+          />
         </div>
       </div>
       <p className="form-hint">
@@ -631,6 +638,16 @@ function MaintenancePage() {
                             onChange={(raw) => setPanelField("odometer", raw)}
                           />
                           {panelErrors.odometer && <p role="alert" className="auth-form__error">{panelErrors.odometer}</p>}
+                          {!panelErrors.odometer && getCompletionOdometerWarning(panelValues.odometer, panelValues.doneOn, reading) && (
+                            <p role="status" className="form-hint form-hint--warning">
+                              {getCompletionOdometerWarning(panelValues.odometer, panelValues.doneOn, reading)}
+                            </p>
+                          )}
+                          <OdometerScanButton
+                            id={`done-km-scan-${item.id}`}
+                            label={item.name}
+                            onReading={(km) => setPanelField("odometer", km)}
+                          />
                         </div>
                       </div>
                       <div className="form-field">

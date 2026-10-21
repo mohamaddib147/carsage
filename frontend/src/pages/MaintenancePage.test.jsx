@@ -12,7 +12,11 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MaintenancePage from "./MaintenancePage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
+import { scanPhoto } from "../lib/scanPhoto.js";
 import { supabase } from "../lib/supabaseClient.js";
+
+// The odometer scan sends a photo to the backend: mocked, so no network call happens.
+vi.mock("../lib/scanPhoto.js", () => ({ scanPhoto: vi.fn() }));
 
 const USER = { id: "user-123", email: "driver@example.com" };
 const CAR_1 = { id: "car-1", make: "Mercedes-Benz", model: "C230", year: 2005 };
@@ -562,5 +566,133 @@ describe("MaintenancePage — several cars", () => {
 
     expect(await screen.findByRole("heading", { name: "Mercedes oil" })).toBeInTheDocument();
     expect(screen.getByLabelText("Car")).toHaveValue("car-1");
+  });
+});
+
+describe("MaintenancePage — odometer scan", () => {
+  const photo = () => new File([new Uint8Array(10)], "odo.jpg", { type: "image/jpeg" });
+  const ONE_ITEM = { itemsByCar: { "car-1": [item()] }, readingsByCar: { "car-1": [reading("car-1", 89100, "2026-10-10")] } };
+
+  async function openMarkAsDone(user) {
+    await user.click(await screen.findByRole("button", { name: "Mark as done" }));
+  }
+
+  it("Mark as done: a scan REPLACES the suggested reading, fills the field for review and saves nothing", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase(ONE_ITEM);
+    scanPhoto.mockResolvedValue({ readable: true, odometer_km: 89500 });
+    renderPage();
+
+    await openMarkAsDone(user);
+    expect(screen.getByLabelText("Odometer (km) *")).toHaveValue("89,100"); // the suggestion
+    await user.upload(document.getElementById("done-km-scan-item-1"), photo());
+
+    await waitFor(() => expect(screen.getByLabelText("Odometer (km) *")).toHaveValue("89,500"));
+    expect(scanPhoto).toHaveBeenCalledWith("/fuel-log/scan-odometer", expect.any(File), undefined);
+    expect(calls.recordInserts).toEqual([]); // never saved by a scan
+    expect(calls.itemInserts).toEqual([]);
+  });
+
+  it("an unreadable photo changes nothing and says so", async () => {
+    const user = userEvent.setup();
+    mockDatabase(ONE_ITEM);
+    scanPhoto.mockResolvedValue({ readable: false, odometer_km: null });
+    renderPage();
+
+    await openMarkAsDone(user);
+    await user.upload(document.getElementById("done-km-scan-item-1"), photo());
+
+    expect(await screen.findByText(/Couldn't read that as an odometer display/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Odometer (km) *")).toHaveValue("89,100");
+  });
+
+  it("a failed scan (e.g. the daily limit) shows the backend's plain message", async () => {
+    const user = userEvent.setup();
+    mockDatabase(ONE_ITEM);
+    scanPhoto.mockRejectedValue(new Error("You've reached today's limit of 20 for this feature. It resets at midnight Beirut time."));
+    renderPage();
+
+    await openMarkAsDone(user);
+    await user.upload(document.getElementById("done-km-scan-item-1"), photo());
+
+    expect(await screen.findByText(/reached today's limit of 20/)).toBeInTheDocument();
+  });
+
+  it("refuses a non-image without sending it, and shows the Google free-tier notice by the button", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    mockDatabase(ONE_ITEM);
+    renderPage();
+
+    await openMarkAsDone(user);
+    expect(screen.getAllByText(/sent to Google's Gemini API/).length).toBeGreaterThan(0);
+    await user.upload(document.getElementById("done-km-scan-item-1"), new File(["x"], "a.pdf", { type: "application/pdf" }));
+
+    expect(await screen.findByText(/Please choose a photo/)).toBeInTheDocument();
+    expect(scanPhoto).not.toHaveBeenCalled();
+  });
+
+  it("Mark as done: warns (without blocking) when the reading is lower than the car's latest and the date is on or after it", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase(ONE_ITEM);
+    renderPage();
+
+    await openMarkAsDone(user);
+    const odometer = screen.getByLabelText("Odometer (km) *");
+    expect(screen.queryByText(/Lower than your latest reading/)).not.toBeInTheDocument(); // the suggestion itself is fine
+    await user.clear(odometer);
+    await user.type(odometer, "85000");
+
+    expect(await screen.findByText("Lower than your latest reading of 89,100 km (10 Oct 2026). Check the reading.")).toBeInTheDocument();
+
+    // not blocking: it still saves
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls.recordInserts).toHaveLength(1));
+    expect(calls.recordInserts[0].odometer_km).toBe(85000);
+  });
+
+  it("Mark as done: no warning for a BACKDATED completion, or for a reading at or above the latest", async () => {
+    const user = userEvent.setup();
+    mockDatabase(ONE_ITEM);
+    renderPage();
+
+    await openMarkAsDone(user);
+    const odometer = screen.getByLabelText("Odometer (km) *");
+    await user.clear(odometer);
+    await user.type(odometer, "85000");
+    expect(await screen.findByText(/Lower than your latest reading/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Done on *"), { target: { value: "2026-10-05" } }); // before the 10 Oct reading
+    await waitFor(() => expect(screen.queryByText(/Lower than your latest reading/)).not.toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText("Done on *"), { target: { value: TODAY } });
+    await user.clear(odometer);
+    await user.type(odometer, "89100"); // equal to the latest
+    expect(screen.queryByText(/Lower than your latest reading/)).not.toBeInTheDocument();
+  });
+
+  it("a scanned reading below the latest also gets the warning (it is just a filled field)", async () => {
+    const user = userEvent.setup();
+    mockDatabase(ONE_ITEM);
+    scanPhoto.mockResolvedValue({ readable: true, odometer_km: 8910 }); // a dropped digit
+    renderPage();
+
+    await openMarkAsDone(user);
+    await user.upload(document.getElementById("done-km-scan-item-1"), photo());
+
+    expect(await screen.findByText(/Lower than your latest reading of 89,100 km/)).toBeInTheDocument();
+  });
+
+  it("the item form: a scan fills 'Odometer when last done (km)' and there is NO car-reading check there", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase(ONE_ITEM);
+    scanPhoto.mockResolvedValue({ readable: true, odometer_km: 80000 }); // lower than the latest, normal for a past service
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "+ Custom item" }));
+    await user.upload(document.querySelector('input[id$="baselineKmScan"]'), photo());
+
+    await waitFor(() => expect(screen.getByLabelText("Odometer when last done (km)")).toHaveValue("80,000"));
+    expect(screen.queryByText(/Lower than your latest reading/)).not.toBeInTheDocument();
+    expect(calls.itemInserts).toEqual([]); // nothing saved
   });
 });

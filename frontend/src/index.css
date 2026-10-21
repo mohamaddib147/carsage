@@ -2826,6 +2826,22 @@ textarea:focus {
   text-align: center;
 }
 
+.odometer-scan {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.odometer-scan__btn {
+  cursor: pointer;
+}
+
+.odometer-scan__note {
+  margin: 0;
+}
+
 .attached-photos__add {
   cursor: pointer;
   align-self: flex-start;
