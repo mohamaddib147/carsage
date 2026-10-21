@@ -1146,6 +1146,44 @@ textarea:focus {
   min-height: 60vh;
 }
 
+/* CAR-67 follow-up: a thin bar across the top while a screen takes longer than
+   ~300 ms to download (ScreenLoadingBar). Fixed and above everything, so it
+   never moves the layout. The accent colour follows the car theme. */
+.screen-loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  height: 3px;
+  overflow: hidden;
+  pointer-events: none;
+  /* The primary-coloured track keeps the bar visible over both the nav (also
+     primary, where the accent fill shows) and the cream page when scrolled. */
+  background-color: var(--color-primary);
+}
+
+.screen-loading-bar__fill {
+  width: 40%;
+  height: 100%;
+  background-color: var(--color-accent);
+  animation: screen-loading-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes screen-loading-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+/* Shown when a screen can't download or render (ScreenErrorBoundary). */
+.screen-error {
+  min-height: 40vh;
+}
+
 .skeleton-bar--w-25 { width: 25%; }
 .skeleton-bar--w-40 { width: 40%; }
 .skeleton-bar--w-55 { width: 55%; }
@@ -3286,6 +3324,14 @@ textarea:focus {
 
   .skeleton-bar {
     animation: none;
+  }
+
+  /* Still shown while loading, but static: half the bar in the accent colour,
+     half dark track, so it stays visible on the nav and on the cream page
+     (a solid accent bar would be only about 2:1 against cream). */
+  .screen-loading-bar__fill {
+    animation: none;
+    width: 50%;
   }
 }
 
