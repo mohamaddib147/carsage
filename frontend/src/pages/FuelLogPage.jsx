@@ -48,7 +48,9 @@ import { apiFetch } from "../lib/apiClient.js";
 import { CURRENCIES, formatMoney } from "../lib/currency.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { describeActionError, describeApiFetchError, describeSaveError, LIMITS } from "../lib/limits.js";
-import { getFuelPhotoError, getPricePerLiterWarning, getTankCapacityWarning } from "../lib/fuelCamera.js";
+import { getPricePerLiterWarning, getTankCapacityWarning } from "../lib/fuelCamera.js";
+import { getPhotoFileError } from "../lib/photoReencode.js";
+import { scanPhoto } from "../lib/scanPhoto.js";
 import { GEMINI_PRIVACY_NOTICE } from "../lib/geminiPrivacyNotice.js";
 import {
   fillUpChartPoints,
@@ -415,7 +417,7 @@ function FuelLogPage() {
     if (!file) return;
 
     setScanPumpError("");
-    const clientError = getFuelPhotoError(file);
+    const clientError = getPhotoFileError(file);
     if (clientError) {
       setScanPumpError(clientError);
       if (scanPumpInputRef.current) scanPumpInputRef.current.value = "";
@@ -424,13 +426,7 @@ function FuelLogPage() {
 
     setScanPumpLoading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const result = await apiFetch("/fuel-log/scan-pump", {
-        method: "POST",
-        body: formData,
-        accessToken: sessionRef.current?.access_token,
-      });
+      const result = await scanPhoto("/fuel-log/scan-pump", file, sessionRef.current?.access_token);
 
       if (!result.readable) {
         setScanPumpError("Couldn't read that as a pump display. Try a clearer photo, or enter it manually below.");
@@ -464,7 +460,7 @@ function FuelLogPage() {
     if (!file) return;
 
     setScanOdometerError("");
-    const clientError = getFuelPhotoError(file);
+    const clientError = getPhotoFileError(file);
     if (clientError) {
       setScanOdometerError(clientError);
       if (scanOdometerInputRef.current) scanOdometerInputRef.current.value = "";
@@ -473,13 +469,7 @@ function FuelLogPage() {
 
     setScanOdometerLoading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const result = await apiFetch("/fuel-log/scan-odometer", {
-        method: "POST",
-        body: formData,
-        accessToken: sessionRef.current?.access_token,
-      });
+      const result = await scanPhoto("/fuel-log/scan-odometer", file, sessionRef.current?.access_token);
 
       if (!result.readable) {
         setScanOdometerError("Couldn't read that as an odometer display. Try a clearer photo, or enter it manually below.");

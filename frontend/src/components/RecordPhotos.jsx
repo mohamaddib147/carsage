@@ -11,11 +11,11 @@ import {
   deletePhoto,
   firstFreeSlot,
   getPhotoUrl,
-  getRecordPhotoError,
   listPhotos,
   MAX_MAINTENANCE_PHOTOS,
   PHOTO_ERRORS,
 } from "../lib/recordPhotos.js";
+import { getPhotoFileError } from "../lib/photoReencode.js";
 
 /**
  * @param {{ kind: "maintenance" | "receipt", parentId: string, userId: string, label: string }} props
@@ -73,7 +73,7 @@ function RecordPhotos({ kind, parentId, userId, label }) {
     if (inputRef.current) inputRef.current.value = "";
     if (!file) return;
     setError("");
-    const clientError = getRecordPhotoError(file);
+    const clientError = getPhotoFileError(file);
     if (clientError) {
       setError(clientError);
       return;

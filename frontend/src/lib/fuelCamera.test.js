@@ -1,38 +1,10 @@
-// Tests lib/fuelCamera.js: the client-side photo pre-check (mirrors the
-// backend's MAX_FUEL_PHOTO_BYTES / ALLOWED_FUEL_PHOTO_TYPES) and the two
-// plausibility warnings (price per liter vs. today's fuel price, liters
+// Tests lib/fuelCamera.js: the two plausibility warnings (price per liter vs. today's fuel price, liters
 // vs. tank capacity). The third warning the plan calls for (odometer order)
 // needs no new code here — it's lib/odometer.js's existing
 // getOdometerOrderWarning, already tested there.
 
 import { describe, expect, it } from "vitest";
-import { getFuelPhotoError, getPricePerLiterWarning, getTankCapacityWarning } from "./fuelCamera.js";
-
-function file(type, size) {
-  return { type, size };
-}
-
-describe("getFuelPhotoError", () => {
-  it("accepts a normal JPEG/PNG/WEBP photo", () => {
-    expect(getFuelPhotoError(file("image/jpeg", 2_000_000))).toBe("");
-    expect(getFuelPhotoError(file("image/png", 500))).toBe("");
-    expect(getFuelPhotoError(file("image/webp", 500))).toBe("");
-  });
-
-  it("refuses HEIC (the backend doesn't re-encode it) and other non-image types", () => {
-    expect(getFuelPhotoError(file("image/heic", 500))).toMatch(/JPEG, PNG or WEBP/);
-    expect(getFuelPhotoError(file("application/pdf", 500))).toMatch(/JPEG, PNG or WEBP/);
-  });
-
-  it("refuses an oversized file (over 8 MB)", () => {
-    expect(getFuelPhotoError(file("image/jpeg", 8 * 1024 * 1024 + 1))).toMatch(/too large/);
-    expect(getFuelPhotoError(file("image/jpeg", 8 * 1024 * 1024))).toBe("");
-  });
-
-  it("refuses an empty file", () => {
-    expect(getFuelPhotoError(file("image/jpeg", 0))).toMatch(/empty/);
-  });
-});
+import { getPricePerLiterWarning, getTankCapacityWarning } from "./fuelCamera.js";
 
 describe("getPricePerLiterWarning", () => {
   const currentPrice = 150_000; // LBP per liter

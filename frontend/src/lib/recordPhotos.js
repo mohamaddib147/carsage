@@ -4,9 +4,8 @@
 // talks to Supabase Storage and the two photo tables, and a source-scan test
 // (recordPhotos.test.js) fails if it ever imports the API client or calls fetch.
 //
-// - Every photo is re-encoded in the browser first: drawn on a canvas at most
-//   MAX_EDGE_PX on its longest side and saved as a JPEG under MAX_UPLOAD_BYTES.
-//   A canvas keeps only pixels, so EXIF data, including GPS location, is dropped.
+// - Every photo is re-encoded in the browser first (lib/photoReencode.js): at most
+//   1600 px, a JPEG under 2 MB, with no EXIF and so no location data.
 // - Row first, then file (the bucket only accepts a file whose row already
 //   exists, docs/db_migrations/2026-10-21_record_photos_storage.sql); if the
 //   upload fails, the row is deleted again.
@@ -15,15 +14,11 @@
 // - Deleting removes the row, then the file. If the file delete fails, the
 //   database has already queued the path and the backend removes it later.
 
+import { PHOTO_FILE_ERRORS, reencodeToJpeg } from "./photoReencode.js";
 import { supabase } from "./supabaseClient.js";
 
-export const MAX_EDGE_PX = 1600;
-export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 export const SIGNED_URL_TTL_SECONDS = 300;
 export const MAX_MAINTENANCE_PHOTOS = 3;
-// Before re-encoding: a generous cap so a huge file is refused without decoding it.
-export const MAX_SOURCE_BYTES = 25 * 1024 * 1024;
-const JPEG_QUALITIES = [0.85, 0.75, 0.6, 0.45];
 
 export const KINDS = {
   maintenance: { parentColumn: "record_id", folder: "maintenance" },
@@ -40,67 +35,10 @@ function bucket() {
 }
 
 export const PHOTO_ERRORS = {
-  notImage: "Please choose a photo (JPEG, PNG, WEBP or HEIC).",
-  tooBig: "That file is too large. Please choose a photo under 25 MB.",
-  unreadable: "Couldn't read that photo. Please try another one.",
+  ...PHOTO_FILE_ERRORS,
   limit: "You've reached the limit of 100 photos. Remove one to add another.",
   failed: "Could not save the photo. Please try again.",
 };
-
-/**
- * Client-side pre-check before decoding.
- * @param {File} file
- * @returns {string} an error message, or "".
- */
-export function getRecordPhotoError(file) {
-  if (!String(file.type).startsWith("image/")) return PHOTO_ERRORS.notImage;
-  if (file.size === 0) return PHOTO_ERRORS.unreadable;
-  if (file.size > MAX_SOURCE_BYTES) return PHOTO_ERRORS.tooBig;
-  return "";
-}
-
-/** Width and height scaled so the longest side is at most `maxEdge`. */
-export function fitWithin(width, height, maxEdge = MAX_EDGE_PX) {
-  const scale = Math.min(1, maxEdge / Math.max(width, height));
-  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
-}
-
-function canvasToJpeg(canvas, quality) {
-  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
-}
-
-/**
- * Re-encodes a photo to a JPEG at most MAX_EDGE_PX on its longest side and under
- * MAX_UPLOAD_BYTES, lowering the quality (then the size) until it fits. The
- * output has no EXIF, so no location data.
- * @param {Blob} file
- * @returns {Promise<Blob>}
- * @throws {Error} with PHOTO_ERRORS.unreadable if the browser can't decode it.
- */
-export async function reencodeToJpeg(file) {
-  let bitmap;
-  try {
-    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-  } catch {
-    throw new Error(PHOTO_ERRORS.unreadable);
-  }
-  try {
-    for (const edge of [MAX_EDGE_PX, 1200]) {
-      const { width, height } = fitWithin(bitmap.width, bitmap.height, edge);
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
-      for (const quality of JPEG_QUALITIES) {
-        const blob = await canvasToJpeg(canvas, quality);
-        if (blob && blob.size <= MAX_UPLOAD_BYTES) return blob;
-      }
-    }
-  } finally {
-    bitmap.close?.();
-  }
-  throw new Error(PHOTO_ERRORS.unreadable);
-}
 
 /** The one path the database accepts for a photo row (lower-case uuids, .jpg). */
 export function photoPath(kind, userId, parentId, photoId) {

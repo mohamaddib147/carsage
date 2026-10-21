@@ -30,6 +30,13 @@ vi.mock("../lib/apiClient.js", () => ({
   apiFetch: vi.fn(),
 }));
 
+// jsdom has no createImageBitmap/canvas, so the browser re-encoder is replaced by one
+// that returns a small JPEG; lib/photoReencode.test.js tests the real one.
+vi.mock("../lib/photoReencode.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  reencodeToJpeg: vi.fn(async () => new Blob([new Uint8Array(100)], { type: "image/jpeg" })),
+}));
+
 const FUEL_PRICES_REPLY = {
   prices: { "95_octane": { lbp_per_liter: 150_000, usd_per_liter: 1.67 }, "98_octane": { lbp_per_liter: 155_000, usd_per_liter: 1.73 }, diesel: { lbp_per_liter: 140_000, usd_per_liter: 1.56 } },
   lbp_per_usd: 89_700,
@@ -1280,6 +1287,41 @@ describe("FuelLogPage — camera scans (Step 2)", () => {
     await user.upload(document.getElementById("scanPumpFile"), scanFile());
 
     expect(await screen.findByText(/reached today's limit of 20/)).toBeInTheDocument();
+  });
+
+  it("uploads the browser-resized JPEG (photo.jpg), not the original file", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    apiFetch.mockImplementation((path) =>
+      path === "/fuel-log/scan-odometer" ? Promise.resolve({ readable: true, odometer_km: 84610 }) : Promise.resolve(FUEL_PRICES_REPLY),
+    );
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    await user.upload(document.getElementById("scanOdometerFile"), new File([new Uint8Array(9_000_000)], "IMG_8000.jpg", { type: "image/jpeg" }));
+
+    await waitFor(() => expect(screen.getByLabelText("Odometer (km)")).toHaveValue("84,610"));
+    const scanCall = apiFetch.mock.calls.find(([path]) => path === "/fuel-log/scan-odometer");
+    const sent = scanCall[1].body.get("file");
+    expect(sent.name).toBe("photo.jpg");
+    expect(sent.size).toBe(100); // the 9 MB original never leaves the phone
+  });
+
+  it("accepts a HEIC photo and a large one (they are re-encoded), but refuses a non-image", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    apiFetch.mockImplementation((path) =>
+      path === "/fuel-log/scan-pump" ? Promise.resolve({ readable: true, liters: 20, total_price: 30, currency: "USD" }) : Promise.resolve(FUEL_PRICES_REPLY),
+    );
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    await user.upload(document.getElementById("scanPumpFile"), new File([new Uint8Array(12_000_000)], "p.heic", { type: "image/heic" }));
+    await waitFor(() => expect(screen.getByLabelText("Liters *")).toHaveValue(20));
+
+    await user.upload(document.getElementById("scanOdometerFile"), new File(["x"], "doc.pdf", { type: "application/pdf" }));
+    expect(await screen.findByText(/Please choose a photo/)).toBeInTheDocument();
+    expect(apiFetch.mock.calls.some(([path]) => path === "/fuel-log/scan-odometer")).toBe(false);
   });
 
   it("shows a privacy notice beside both the pump and odometer scan buttons", async () => {

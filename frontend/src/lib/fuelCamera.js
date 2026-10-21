@@ -17,30 +17,6 @@
 
 import { convertAmount } from "./currency.js";
 
-export const MAX_FUEL_PHOTO_BYTES = 8 * 1024 * 1024;
-export const ALLOWED_FUEL_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-
-/**
- * Client-side pre-check for a pump/odometer photo, before it's uploaded.
- * Mirrors the backend's own check (backend/app/validation.py's
- * MAX_FUEL_PHOTO_BYTES/ALLOWED_FUEL_PHOTO_TYPES) — this is just fast,
- * friendly feedback; the backend's check still applies regardless.
- * @param {File} file
- * @returns {string} an error message, or "" if the file looks fine.
- */
-export function getFuelPhotoError(file) {
-  if (!ALLOWED_FUEL_PHOTO_TYPES.has(file.type)) {
-    return "Please choose a JPEG, PNG or WEBP photo.";
-  }
-  if (file.size > MAX_FUEL_PHOTO_BYTES) {
-    return "That image is too large. Please use a photo under 8 MB.";
-  }
-  if (file.size === 0) {
-    return "That image appears to be empty. Please try again.";
-  }
-  return "";
-}
-
 // A scanned price per liter outside this band of today's known price is
 // flagged rather than trusted outright — wide enough that it only ever
 // catches a real misread (e.g. a missing/extra digit), never a normal
