@@ -1,0 +1,5 @@
+/* Tailwind for the shadcn/Aceternity components only: theme + utilities, NO preflight,
+   so it never resets the existing hand-written styles in index.css. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
