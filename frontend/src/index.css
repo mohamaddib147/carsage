@@ -1240,6 +1240,30 @@ textarea:focus {
   margin: calc(var(--spacing-unit) * 1.5) 0 0;
   padding-top: calc(var(--spacing-unit) * 1.5);
   border-top: 1px solid var(--color-border);
+  /* CAR-78 slow-connection fix: the at-a-glance figures arrive after the car list, so this reserves the tallest
+     realistic block for both the skeleton and the loaded data (a long "Last fill-up" value wraps to three lines at
+     phone width). Short cars keep a little spare room; nothing below the card moves when the data lands. Replaced
+     by the hero tiles in CAR-79. align-content keeps the rows at the top of the reserved area. */
+  min-height: 7rem;
+  align-content: start;
+}
+
+@media (max-width: 600px) {
+  .dashboard-car-card__specs {
+    min-height: 12rem;
+  }
+}
+
+/* The skeleton rows reserve the same height as a loaded row (a label line plus a value that can wrap to two). */
+.skeleton-bar--snapshot-label {
+  width: 60%;
+  height: 0.7rem;
+  margin-bottom: calc(var(--spacing-unit) * 0.5);
+}
+
+.skeleton-bar--snapshot-value {
+  width: 85%;
+  height: 2.4rem;
 }
 
 .dashboard-car-card__spec dt {

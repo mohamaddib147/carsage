@@ -8,6 +8,8 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { render, screen, waitFor, within } from "@testing-library/react";
+// eslint-disable-next-line import/order -- grouped with the node imports above
+const indexCss = readFileSync("src/index.css", "utf8");
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,7 +43,7 @@ vi.mock("../lib/apiClient.js", () => ({ apiFetch: vi.fn() }));
  * (user_id included), and resolves when awaited or ordered. `fail[table]` makes that table's reads fail (an
  * { error } reply); a function there decides per request (its argument is the request's number for that table).
  */
-function mockTables({ cars = [], fuelLogs = [], expenses = [], items = [], advisor = [], fail = {} } = {}) {
+function mockTables({ cars = [], fuelLogs = [], expenses = [], items = [], advisor = [], fail = {}, pending = [] } = {}) {
   const store = { cars, fuel_logs: fuelLogs, car_expenses: expenses, maintenance_items: items, advisor_messages: advisor };
   const requests = [];
   supabase.from.mockImplementation((table) => {
@@ -55,14 +57,16 @@ function mockTables({ cars = [], fuelLogs = [], expenses = [], items = [], advis
       const rows = store[table].filter((row) => request.filters.every(([column, value]) => (column === "user_id" ? value === USER.id : row[column] === value)));
       return { data: rows, error: null };
     };
+    const settle = (resolveReply, reject) =>
+      pending.includes(table) ? new Promise(() => {}) : Promise.resolve(reply()).then(resolveReply, reject);
     const builder = {
       select: (columns) => ((request.columns = columns), builder),
       eq: (column, value) => (request.filters.push([column, value]), builder),
       lte: () => builder,
       limit: () => builder,
       order: () => builder,
-      maybeSingle: () => Promise.resolve({ data: null, error: null }),
-      then: (resolveReply, reject) => Promise.resolve(reply()).then(resolveReply, reject),
+      maybeSingle: () => (pending.includes(table) ? new Promise(() => {}) : Promise.resolve({ data: null, error: null })),
+      then: settle,
     };
     return builder;
   });
@@ -144,6 +148,43 @@ describe("one fuel_logs read", () => {
     const maintenance = screen.getByRole("region", { name: "Maintenance due" });
     expect(within(maintenance).getByText("Oil change")).toBeInTheDocument();
     expect(within(maintenance).getByText("Due soon")).toBeInTheDocument();
+  });
+});
+
+describe("the at-a-glance block reserves its space while the data loads (no slow-connection jump)", () => {
+  it("renders an aria-hidden skeleton in the same grid as the loaded block, so nothing below the card moves when the data lands", async () => {
+    mockTables({ cars: [car(1, { fuel_efficiency: 12 })], fuelLogs: enough(1), pending: ["fuel_logs", "maintenance_items", "car_expenses"] });
+    renderAt("/dashboard");
+
+    await screen.findByText("Loading each car's details...");
+    const card = document.querySelector(".dashboard-car-card");
+    expect(card).not.toBeNull();
+    // The reserved placeholder uses the SAME class the loaded list uses (so it reserves the same CSS min-height),
+    // is hidden from the a11y tree, and holds skeleton bars — not the real "at a glance" list yet.
+    const placeholder = card.querySelector(".dashboard-car-card__specs[aria-hidden='true']");
+    expect(placeholder).toBeInTheDocument();
+    expect(placeholder.querySelectorAll(".skeleton-bar").length).toBeGreaterThanOrEqual(4);
+    expect(card.querySelector("[aria-label$='at a glance']")).not.toBeInTheDocument();
+    // A screen reader is told the details are loading.
+    expect(screen.getByText("Loading each car's details...")).toHaveAttribute("role", "status");
+  });
+
+  it("swaps the skeleton for the real list once the data settles (same class, so the height is unchanged)", async () => {
+    mockTables({ cars: [car(1, { fuel_efficiency: 12 })], fuelLogs: enough(1) });
+    renderAt("/dashboard");
+
+    const list = await glance(1);
+    expect(list).toHaveClass("dashboard-car-card__specs");
+    expect(list.querySelector(".skeleton-bar")).toBeNull();
+    expect(screen.queryByText("Loading each car's details...")).not.toBeInTheDocument();
+  });
+
+  it("the block reserves a min-height in the stylesheet (what makes the reserve real; CLS is measured on Slow 4G, jsdom has no layout)", () => {
+    // The .dashboard-car-card__specs rule, and its phone-width override, both set a min-height.
+    const base = /\.dashboard-car-card__specs\s*\{([^}]*)\}/.exec(indexCss);
+    expect(base, "the .dashboard-car-card__specs rule exists").not.toBeNull();
+    expect(base[1]).toMatch(/min-height:\s*[\d.]+rem/);
+    expect(indexCss).toMatch(/@media\s*\(max-width:\s*600px\)\s*\{\s*\.dashboard-car-card__specs\s*\{[^}]*min-height:\s*[\d.]+rem/);
   });
 });
 

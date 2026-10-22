@@ -144,6 +144,23 @@ function CarSnapshotList({ car, snapshot }) {
   );
 }
 
+// CAR-78 (slow-connection fix): the fill-ups and maintenance arrive after the car list, so the at-a-glance block is
+// rendered from the moment the cards show — as this skeleton until the data settles, then as CarSnapshotList — and
+// `.dashboard-car-card__specs` reserves its height for both, so nothing below the card moves when the data lands
+// (measured on Slow 4G). Four rows, the normal loaded count (odometer, economy, last fill-up, next service).
+function CarSnapshotSkeleton() {
+  return (
+    <dl className="dashboard-car-card__specs" aria-hidden="true">
+      {[0, 1, 2, 3].map((index) => (
+        <div key={index} className="dashboard-car-card__spec">
+          <dt className="skeleton-bar skeleton-bar--snapshot-label" />
+          <dd className="skeleton-bar skeleton-bar--snapshot-value" />
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 /**
  * Dashboard / Home screen. Fetches the logged-in user's cars (RLS scopes
  * this to their own rows) and shows either a summary of each or an empty
@@ -405,6 +422,7 @@ function DashboardPage() {
           </>
         ) : (
           <ul className="dashboard-car-list">
+            {!fuelSettled && <li className="sr-only" role="status">Loading each car&apos;s details...</li>}
             {cars.map((car, index) => {
               const meta = carMetaLine(car);
               const specs = carSpecs(car);
@@ -421,7 +439,7 @@ function DashboardPage() {
                   {meta && (
                     <p className="dashboard-car-card__meta">{meta}</p>
                   )}
-                  {snapshot && <CarSnapshotList car={car} snapshot={snapshot} />}
+                  {snapshot ? <CarSnapshotList car={car} snapshot={snapshot} /> : <CarSnapshotSkeleton />}
                   {specs.length > 0 ? (
                     <dl
                       className="dashboard-car-card__specs"
