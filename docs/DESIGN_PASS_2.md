@@ -386,6 +386,12 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
   3. With `prefers-reduced-motion: reduce`, no CSS animation is running on Landing, Dashboard or AI Advisor (Playwright `getAnimations()`), and the static equivalents from CAR-72 and CAR-67 still show.
   4. No element holding a price, odometer, km/L or advice text has an animation (a test over the stylesheet and the markup classes).
   5. CSS grows by at most 0.6 kB gzip.
+- **Implementation note (CAR-75, 2026-10-22): where the build differs from the plan above, and why.**
+  - **The page fade and the card entrance play only after an in-app navigation, never on a fresh page load.** Measured on a production build: a fade on load moved the Landing largest contentful paint from about 80 ms to about 360 ms (the fade's own duration) and the Dashboard's from about 150 ms to about 410 ms. `App.jsx` marks `<html data-routed>` in a layout effect on the first navigation; the two rules are scoped to it. With that, LCP is back at 84 / 80 ms (Landing) and 148 / 140 ms (Dashboard), the same as before.
+  - **Both are opacity-only.** The plan said "4 px up" for the page and 8 px for cards, but a page and a Dashboard card contain money, km and km/L, which must not move beyond a fade. The menu is the only thing that rises, and it uses the `translate` property so it keeps its horizontal centring.
+  - **The active-link bar is left to D3** (the header ticket), which owns that header change.
+  - **The looping loading indicators stay** (spinner, shimmer, loading bar, typing dots): they are the loading state itself, each with a static form under reduced motion, and they are the only literal durations left.
+  - **The CSS budget is now enforced** by the bundle guard (72 kB min / 13 kB gzip); the stylesheet is 67.77 / 11.48 after this ticket.
 - **Recommended model:** Sonnet 5.5. **Estimate:** 3 h.
 - **Retest:** `App.pending.test.jsx`, `accessibilityCss.test.js`, `headerCss.test.js`, every page's visual smoke at 1280 and 390 px, layout shift.
 

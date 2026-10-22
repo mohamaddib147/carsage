@@ -38,6 +38,15 @@ iframe#nl-badge-frame {
   --icon-stroke: 1.75;
   --color-icon-tile: color-mix(in srgb, var(--color-accent) 16%, #ffffff);
 
+  /* CAR-75: the motion system (docs/DESIGN_PASS_2.md 3.2). Three durations and two easings are all that
+     moves anything, apart from the looping loading indicators. Everything respects prefers-reduced-motion
+     (see the blocks at the end of this file); theme and motion tests are in motionCss.test.js. */
+  --motion-fast: 120ms;   /* hover and focus colour, small state changes */
+  --motion-base: 180ms;   /* menus, dropdowns, the mobile panel */
+  --motion-slow: 280ms;   /* page fade, card entrance */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);      /* things appearing */
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);     /* state changes and closing */
+
   /* CAR-68: the brand fonts are declared in fonts.css. Each stack lists the web
      font, then its metric-matched Arial fallback (limits layout shift while the
      font loads), then the system fonts this app used before. */
@@ -366,7 +375,7 @@ button {
     border-top: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
     transform: translateY(-8px);
-    transition: transform 150ms ease, display 150ms allow-discrete;
+    transition: transform var(--motion-base) var(--ease-out), display var(--motion-base) allow-discrete;
   }
 
   .site-nav__panel.is-open {
@@ -867,7 +876,7 @@ textarea:focus {
   color: #ffffff;
   padding: 0;
   cursor: pointer;
-  transition: background-color 0.15s ease, transform 0.15s ease;
+  transition: background-color var(--motion-fast) var(--ease-in-out), transform var(--motion-fast) var(--ease-out);
 }
 
 .overlay-icon-btn:hover:not(:disabled) {
@@ -958,7 +967,7 @@ textarea:focus {
   color: var(--color-text-muted);
   font-size: 0.875rem;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: border-color var(--motion-fast) var(--ease-in-out), color var(--motion-fast) var(--ease-in-out);
 }
 
 .car-photo__well:hover {
@@ -2316,7 +2325,7 @@ textarea:focus {
   font-size: 0.8125rem;
   font-weight: 600;
   text-decoration: none;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: border-color var(--motion-fast) var(--ease-in-out), color var(--motion-fast) var(--ease-in-out);
 }
 
 .advisor-mechanic-link:hover {
@@ -2341,7 +2350,7 @@ textarea:focus {
   text-decoration: none;
   color: var(--color-text);
   box-shadow: 0 1px 4px rgba(43, 43, 43, 0.06);
-  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: box-shadow var(--motion-fast) var(--ease-in-out), border-color var(--motion-fast) var(--ease-in-out);
 }
 
 .advisor-video-card:hover {
@@ -2690,7 +2699,7 @@ textarea:focus {
   border-top: 2px solid currentColor;
   border-right: 2px solid currentColor;
   transform: rotate(45deg);
-  transition: transform 0.15s ease;
+  transition: transform var(--motion-fast) var(--ease-out);
 }
 
 .advanced-options[open] > .advanced-options__toggle::before {
@@ -2918,7 +2927,7 @@ textarea:focus {
   color: var(--color-text);
   font-size: 0.875rem;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: border-color var(--motion-fast) var(--ease-in-out), color var(--motion-fast) var(--ease-in-out);
 }
 
 .maintenance-preset:hover {
@@ -3698,4 +3707,109 @@ textarea[aria-invalid="true"] {
    fold while they load and nothing visible jumps when they arrive. */
 .landing-sections-placeholder {
   min-height: 100vh;
+}
+
+/* CAR-75: what moves, and nothing else (the looping loading indicators above are the other animations).
+   Money, km, km/L, percentages and advice text are never animated themselves: the page and the cards
+   only fade, and motionCss.test.js fails if a rule animates them. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The menu rises 4 px as it fades in. It uses the `translate` property, not `transform`, so it
+   does not replace the desktop menu's translateX(-50%) centring. */
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+/* Page fade: the screen of a new route fades in, after an in-app navigation only (App.jsx marks <html data-routed>;
+   on a fresh load the fade would delay the largest contentful paint by its duration). Not the footer, and not the
+   loading skeleton. */
+:root[data-routed] .app-main > :not(.site-footer):not(.route-loading) {
+  animation: fade-in var(--motion-slow) var(--ease-out) backwards;
+}
+
+/* Card entrance: the Dashboard's real car cards (not their skeletons) fade in one after another,
+   40 ms apart, the first six only (--i is set in DashboardPage.jsx), after an in-app navigation only. */
+:root[data-routed] .dashboard-car-card:not(.dashboard-car-card--skeleton) {
+  animation: fade-in var(--motion-slow) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+
+/* Hover states: buttons change colour smoothly; the two kinds of card that invite a click lift 2 px. */
+.btn-primary,
+.btn-secondary,
+.btn-accent,
+.site-nav__logout,
+.site-nav__auth-link {
+  transition:
+    background-color var(--motion-fast) var(--ease-in-out),
+    border-color var(--motion-fast) var(--ease-in-out),
+    color var(--motion-fast) var(--ease-in-out),
+    opacity var(--motion-fast) var(--ease-in-out);
+}
+
+.dashboard-module-card,
+.landing-feature-card {
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
+}
+
+.dashboard-module-card:hover,
+.dashboard-module-card:focus-visible,
+.landing-feature-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(43, 43, 43, 0.1);
+}
+
+/* Menus: the My Car dropdown fades in. (The mobile panel's own transition is in the 860 px block.) */
+.site-nav__menu-list {
+  animation: menu-in var(--motion-base) var(--ease-out);
+}
+
+/* Reduced motion: everything above is off, and the information stays (a loading state is still shown by
+   its static form above). */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-routed] .app-main > :not(.site-footer):not(.route-loading),
+  :root[data-routed] .dashboard-car-card:not(.dashboard-car-card--skeleton),
+  .site-nav__menu-list {
+    animation: none;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-accent,
+  .site-nav__logout,
+  .site-nav__auth-link,
+  .dashboard-module-card,
+  .landing-feature-card {
+    transition: none;
+  }
+
+  .dashboard-module-card:hover,
+  .dashboard-module-card:focus-visible,
+  .landing-feature-card:hover {
+    transform: none;
+  }
+}
+
+/* Reduced motion, safety net: any animation or transition not listed above (a new one, or a library's)
+   becomes effectively instant and runs once. The specific rules above keep a static equivalent where one
+   is needed; this catches the rest. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
 }

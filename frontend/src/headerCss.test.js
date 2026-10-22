@@ -66,8 +66,8 @@ describe("860 px and below: one fixed row with a Menu button (CAR-74)", () => {
     expect(inMedia(narrow, ".site-nav__panel.is-open")).toMatch(/display: block/);
   });
 
-  it("opens and closes with a 150 ms transform, and instantly under reduced motion", () => {
-    expect(inMedia(narrow, ".site-nav__panel")).toMatch(/transition: transform 150ms/);
+  it("opens and closes with a transform on the base motion token (180 ms, CAR-75), and instantly under reduced motion", () => {
+    expect(inMedia(narrow, ".site-nav__panel")).toMatch(/transition: transform var\(--motion-base\) var\(--ease-out\)/);
     expect(media("(max-width: 860px) and (prefers-reduced-motion: reduce)")).toMatch(/\.site-nav__panel \{\s*transition: none;/);
   });
 

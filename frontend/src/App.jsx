@@ -14,7 +14,7 @@
 // screen fails to download or render. See lib/screenLoading.js and
 // lib/chunkReload.js (the one-time reload after a new deploy).
 
-import { Suspense } from "react";
+import { Suspense, useLayoutEffect, useRef } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import backgroundTexture from "./assets/background-texture-icon.svg";
 import ColdStartBanner from "./components/ColdStartBanner.jsx";
@@ -52,6 +52,15 @@ const NotFoundPage = lazyScreen(() => import("./pages/NotFoundPage.jsx"));
 function App() {
   const { pathname } = useLocation();
   const slowScreenLoad = useSlowScreenLoad();
+
+  // CAR-75: the page fade and the Dashboard card entrance (index.css) play only after an in-app navigation, never
+  // on a fresh page load, where they would delay the largest contentful paint by their own duration (measured:
+  // Landing 80 ms -> 360 ms). This marks <html> on the first navigation away from the page the visit started on. It
+  // is a layout effect so the mark is there before the new screen paints, and the fade starts at its first frame.
+  const firstPathname = useRef(pathname);
+  useLayoutEffect(() => {
+    if (pathname !== firstPathname.current) document.documentElement.dataset.routed = "true";
+  }, [pathname]);
 
   return (
     <>

@@ -16,9 +16,14 @@ import { gzipSync } from "node:zlib";
 // behaviour that has to load with the first screen (the theme follows the car, the signed-in
 // redirect, the mobile menu), leaving 0.2 kB of gzip room. The ticket limit on the entry
 // chunk is 480 / 150, so this stays well inside it. The initial budget is unchanged.
+//
+// CSS (added in CAR-75, decided 2026-10-22): 72 kB min and 13 kB gzip for the stylesheet(s) every first visit downloads.
+// It was 64.7 / 10.9 when the budget was set; the design pass adds icons, motion and the Dashboard, so the budget is
+// measured and reported in every ticket and enforced here from now on. Raising it needs the developer's approval.
 const BUDGET = {
   entry: { minKB: 470, gzipKB: 134 },
   initial: { minKB: 516, gzipKB: 150 },
+  css: { minKB: 72, gzipKB: 13 },
 };
 
 // A class name Recharts writes into the DOM; present in any chunk that bundles it.
@@ -42,7 +47,12 @@ function measure(paths) {
   return { minKB: bytes / 1000, gzipKB: gzipBytes / 1000, hasRecharts };
 }
 
-const sizes = { entry: measure([entryPath]), initial: measure([entryPath, ...preloadPaths]) };
+const cssPaths = [...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="\/?([^"]+)"/g)].map((m) => m[1]);
+if (cssPaths.length === 0) {
+  console.error(`check-bundle: no stylesheet <link> found in ${buildDir}/index.html`);
+  process.exit(1);
+}
+const sizes = { entry: measure([entryPath]), initial: measure([entryPath, ...preloadPaths]), css: measure(cssPaths) };
 const problems = [];
 for (const [name, size] of Object.entries(sizes)) {
   const budget = BUDGET[name];

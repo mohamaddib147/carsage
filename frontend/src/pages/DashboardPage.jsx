@@ -298,11 +298,12 @@ function DashboardPage() {
           </>
         ) : (
           <ul className="dashboard-car-list">
-            {cars.map((car) => {
+            {cars.map((car, index) => {
               const meta = carMetaLine(car);
               const specs = carSpecs(car);
               return (
-                <li key={car.id} className="dashboard-car-card">
+                // --i staggers the card entrance (CAR-75); only the first six are delayed.
+                <li key={car.id} className="dashboard-car-card" style={{ "--i": Math.min(index, 5) }}>
                   <Link
                     to={`/cars/${car.id}`}
                     className="dashboard-car-card__title"
