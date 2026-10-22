@@ -1,17 +1,45 @@
 # CarSage Design Pass 2
 
-**Status: plan only. Nothing here has been built.** This document reviews the app as it is after CAR-67 to CAR-74, proposes a more modern look, and lists tickets. It was written on 2026-10-22 on branch `ui/polish`, after commit `6c5327b`.
+**Status: plan with the decisions of 2026-10-22 applied (see "Decisions" below), built one ticket at a time; each ticket's progress is in Jira.** This document reviews the app as it is after CAR-67 to CAR-74, proposes a more modern look, and lists tickets. It was written on 2026-10-22 on branch `ui/polish`, after commit `6c5327b`.
 
 **Your goals:** a more modern look, better icons, better animation, a better nav bar, the new features (maintenance, expenses, fuel log, odometer, real fuel economy) visible on the Dashboard, and Aceternity and Componentry used where they genuinely help.
+
+## Decisions (2026-10-22)
+
+These answer §6 and override anything below that says otherwise.
+
+1. **Photo-adjacent places:** allowed **for icon markup only** (the Fuel Log scan-card icons and the camera and photo SVGs in Car Profile, Car Onboarding and AI Advisor). No camera, photo, upload or limits logic changes, and each such diff is shown as proof.
+2. **No account menu.** Log Out stays a plain button. A menu is only worth building with 3 or more items.
+3. **D9 is dropped.** Any underline on the Landing headline is plain CSS, inside D6.
+4. **Unused assets** (D8) are deleted only after proof for each file (no reference anywhere, and an identical build before and after).
+5. **CSS budget:** 72 kB minified and 13 kB gzip, **measured and reported in every ticket**, and enforced by `scripts/check-bundle.mjs` from CAR-75.
+6. **No Aceternity source is ever copied or installed, and no animation library is used.** Any library needs your approval first, with its bundle cost and licence. `components.json` no longer lists the Aceternity registry, and `CLAUDE.md` carries the rule.
+7. **D7 (status colours) is required**, not optional.
+8. **D4 is built by Opus 5.5** (it was Sonnet 5.5).
+
+**Jira keys**
+
+| Ticket | Jira |
+|---|---|
+| D1 Motion | CAR-75 |
+| D2 Icons | CAR-76 |
+| D3 Header v2 | CAR-77 |
+| D4 Dashboard data | CAR-78 |
+| D5 Dashboard UI | CAR-79 |
+| D6 Landing | CAR-80 |
+| D7 Status colours | CAR-81 |
+| D8 Favicon and assets | CAR-82 |
+| D10 Category icons | CAR-83 |
+| D9 | dropped |
 
 ## 1. Summary
 
 - **Icons:** one Lucide set copied into `src/components/icons.jsx`. Neither self-hosted font has the arrow, check, caret or sparkle glyphs the app uses as text icons (§2.2), so those render differently on every device today.
 - **Motion:** a small CSS-only system (three durations, two easings, a fixed list of what moves). No library.
-- **Desktop header:** sticky, with a scroll shadow, an active-link bar, and an account menu. The mobile menu from CAR-74 stays.
+- **Desktop header:** sticky, with a scroll shadow and an active-link bar. Log Out stays a button (no account menu). The mobile menu from CAR-74 stays.
 - **Dashboard v2:** a hero card for the active car with four tiles (odometer, real fuel economy, last fill-up, next service), then month cost, maintenance due and DIY success. **Every number comes from data the page already loads, and the two `fuel_logs` queries become one.** No new tables, queries or backend.
-- **Libraries:** of 27 Aceternity and Componentry items viewed, **none is needed.** One Componentry item (`annotated-text`, MIT) fits as an optional lazy Landing detail. Everything else is better built in CSS (§5).
-- **Cost:** about 41 h in total, 28.5 h for the core (D1 to D5 and D7). Entry-chunk impact is planned to net out near zero (§6).
+- **Libraries:** of 27 Aceternity and Componentry items viewed, **none is needed** and none will be used (decision 6). The one that fit, Componentry `annotated-text`, is dropped (D9); any underline is CSS. Everything else is built in CSS (§3.5).
+- **Cost:** about 39 h in total (D9 dropped), 28.5 h for the core with the header (D1 to D5 and D7). Entry-chunk impact is planned to net out near zero (§6).
 - **Findings that need no redesign:** "Due soon" looks like "Overdue" on the four red-accent themes and reads as blue on three others (D7), and `public/favicon.svg` is 343 kB (D8).
 
 ## 2. Review of the current state
@@ -173,10 +201,10 @@ CSS only, no library. All motion is off or static under `prefers-reduced-motion:
 
  Proposed (72 px, sticky)
  +--------------------------------------------------------------------------------------------+
- | (logo) CarSage   Dashboard   My Car v   Trip Planner   AI Advisor            [USD|LBP]  (E v) |
+ | (logo) CarSage   Dashboard   My Car v   Trip Planner   AI Advisor            [USD|LBP] [Log Out] |
  |                  =========                                                                  |
  +--------------------------------------------------------------------------------------------+
-   ^ shadow appears after 8 px of scroll          ^ account menu: [Currency USD|LBP] [Log Out]
+   ^ shadow appears after 8 px of scroll          ^ Log Out stays a button (no account menu)
    ^ active link: 2 px accent bar under the label (not only a colour change)
 
  My Car menu (grouped, same keyboard behaviour as today)
@@ -193,8 +221,8 @@ CSS only, no library. All motion is off or static under `prefers-reduced-motion:
 - **Active-link indicator:** a 2 px bar in the accent colour. It must reach 3:1 against the header on every theme (a test over all themes, like CAR-69's).
 - **Wordmark:** "CarSage" as text beside a smaller logo mark (Stitch does this), logo height 40 px.
 - **Grouped My Car menu:** unchanged in behaviour (arrow keys, Home, End, Escape, outside click), with a divider before "Add a car" and icons from D2.
-- **Account menu:** an avatar button (the first letter of the email's local part; **the email itself is never shown**, as today) opening a small menu with Log Out. It replaces the standalone Log Out button, which frees header width. It reuses the existing tested `NavMenu` component, so no new keyboard code.
-- **Currency switch:** stays inline on pages that show prices (as CAR-54 decided) and in the mobile panel. It is not duplicated in the account menu.
+- **No account menu (decided).** Log Out stays a plain button; a menu is only worth it with 3 or more items. The email is never shown, as today.
+- **Currency switch:** stays inline on pages that show prices (as CAR-54 decided) and in the mobile panel.
 - **Mobile:** the CAR-74 menu stays as it is (one 64 px row, Menu button, panel). It only gains sticky and the new icons.
 
 ### 3.4 Dashboard v2
@@ -350,7 +378,7 @@ For comparison, the whole Dashboard route chunk is **3.7 kB gzip** today and the
 
 Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except where noted: **T10's icon part moves to D2, T11 is replaced by D4 and D5, and T13 is replaced by D6.** T12, T14 to T21 follow the new icons and motion tokens when they are built.
 
-### D1. Motion tokens and system
+### D1 (CAR-75). Motion tokens and system
 - **Summary:** add the §3.2 tokens, move every existing transition onto them, add the page fade, the first-render card entrance, hover lift, button colour transitions, menu fades, and a reduced-motion safety net.
 - **Acceptance criteria:**
   1. `--motion-fast`, `--motion-base`, `--motion-slow`, `--ease-out`, `--ease-in-out` exist and every non-looping transition or animation uses them (a CSS test lists any literal duration left).
@@ -361,7 +389,7 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
 - **Recommended model:** Sonnet 5.5. **Estimate:** 3 h.
 - **Retest:** `App.pending.test.jsx`, `accessibilityCss.test.js`, `headerCss.test.js`, every page's visual smoke at 1280 and 390 px, layout shift.
 
-### D2. Icons: Lucide set in `icons.jsx`
+### D2 (CAR-76). Icons: Lucide set in `icons.jsx`
 - **Summary:** create `src/components/icons.jsx` from §3.1 and replace every emoji and glyph icon outside the photo-adjacent files.
 - **Acceptance criteria:**
   1. `icons.jsx` holds the listed Lucide icons, its header carries the ISC and MIT notices with the Feather-derived names, and `package.json` gains no dependency.
@@ -372,29 +400,29 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
 - **Recommended model:** Sonnet 5.5. **Estimate:** 4 h. Replaces the icon part of T10 (about 2.5 h of it).
 - **Retest:** Landing, Dashboard, Car Profile, Trip Planner, AI Advisor, Auth, Reset and Onboarding tests (some match text such as "Default car" with its check mark), axe on all screens, bundle guard.
 
-### D3. Desktop header v2
-- **Summary:** sticky header with scroll shadow, active-link bar, wordmark, divider in the My Car menu, and an account menu.
+### D3 (CAR-77). Desktop header v2
+- **Summary:** sticky header with scroll shadow, active-link bar, wordmark and a divider in the My Car menu. Log Out stays a button.
 - **Acceptance criteria:**
   1. The header is sticky at every width, the Landing anchors are not hidden under it (`scroll-margin-top`), and it is 72 px tall at 861 px and wider (64 px below, unchanged).
   2. The shadow appears after 8 px of scroll and not at the top, causes no layout shift, and has no transition under reduced motion.
   3. The active link has a 2 px bar, at least 3:1 against the header on every brand theme (a test over all themes).
-  4. The account menu shows the initial only (never the email), contains Log Out, and is keyboard-complete like the My Car menu (Escape, outside click, focus returns to its button), reusing `NavMenu`.
+  4. There is no account menu: Log Out stays a plain button (a menu is only worth building with 3 or more items), and the email is never shown.
   5. USD | LBP stays inline on price pages and in the mobile panel; the CAR-74 mobile menu behaves exactly as before.
   6. Axe finds no violations on any screen at 1280 and 390 px.
 - **Recommended model:** Opus 5.5 (the header is on every page). **Estimate:** 6 h.
 - **Retest:** `SiteNav.test.jsx`, `headerCss.test.js`, `App.test.jsx`, `App.authRedirect.test.jsx` (the Log Out flow), `currencyToggle.integration.test.jsx`, layout shift on Dashboard and Landing, mobile menu walk-through.
 
-### D4. Dashboard data layer
+### D4 (CAR-78). Dashboard data layer
 - **Summary:** one `fuel_logs` read for the page and a pure helper that derives each car's snapshot. No UI.
 - **Acceptance criteria:**
   1. The Dashboard sends one `fuel_logs` query (union columns, scoped to the user) instead of two; total requests go from 6 to 5.
   2. `lib/carSnapshot.js` returns odometer, real economy, last fill-up and next service for a car, using only existing helpers, with unit tests for: no data, one reading, partial fills, an unrealistic km/L (ignored as today), and a car with no fuel logs.
   3. A failed `fuel_logs` request produces one error state with a retry; the maintenance, month and DIY data are unaffected.
   4. No new table, column, policy or backend call; the queries are still filtered by the signed-in user.
-- **Recommended model:** Sonnet 5.5. **Estimate:** 4 h.
+- **Recommended model:** Opus 5.5 (decided). **Estimate:** 4 h.
 - **Retest:** `DashboardPage.test.jsx` (its fuel_logs mocks change), `activeCarPages.test.jsx`, `protectedRoutesNoData.test.jsx`.
 
-### D5. Dashboard v2 UI
+### D5 (CAR-79). Dashboard v2 UI
 - **Summary:** the §3.4 layout: active-car hero with four tiles and quick actions, car switcher chips, and three equal-width cards below.
 - **Acceptance criteria:**
   1. The hero shows the active car in its brand theme with the Default car badge, display-only formatted specs (RWD, Automatic, unit-tested) and a primary "Plan a trip" action; the other cars are chips, never full cards.
@@ -406,7 +434,7 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
 - **Recommended model:** Opus 5.5. **Estimate:** 9 h. Replaces T11 (5 h).
 - **Retest:** `DashboardPage.test.jsx` (largely rewritten), `activeCarPages.test.jsx`, `ActiveCarContext.test.jsx`, the CAR-74 loading-skeleton tests, layout shift, axe.
 
-### D6. Landing refresh
+### D6 (CAR-80). Landing refresh
 - **Summary:** Landing with D2 icons, a static "Example" preview, bento CSS, a fixed headline and a lazy chunk for everything below the hero. Replaces T13.
 - **Acceptance criteria:**
   1. Everything below the hero loads as a lazy chunk with a fixed-height placeholder; the entry chunk grows by at most 0.2 kB gzip net, and the bundle guard passes.
@@ -417,7 +445,7 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
 - **Recommended model:** Sonnet 5.5. **Estimate:** 6 h. Replaces T13 (5 h).
 - **Retest:** `LandingPage.test.jsx`, `Logo.test.jsx`, `SiteNav.test.jsx` (anchors), bundle guard, layout shift, axe.
 
-### D7. Status colours that do not depend on the brand
+### D7 (CAR-81). Status colours that do not depend on the brand (required)
 - **Summary:** fixed semantic colours for Overdue, Due soon and OK.
 - **Acceptance criteria:**
   1. Overdue is red, Due soon amber and OK green, from fixed tokens that do not use `--color-accent` or `--color-primary`.
@@ -427,16 +455,17 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
 - **Recommended model:** Sonnet 5.5. **Estimate:** 2.5 h.
 - **Retest:** `MaintenancePage.test.jsx`, `DashboardPage.test.jsx`, `themeContrast.test.js`.
 
-### D8. Favicon weight and unused assets (droppable)
+### D8 (CAR-82). Favicon weight and unused assets
 - **Summary:** shrink the favicon and remove files that are not shipped.
 - **Acceptance criteria:**
   1. `public/favicon.svg` is 5 kB or less and looks the same at 16, 32 and 48 px.
-  2. The unused `Gemini_Generated_Image_*.svg`, `logo-svg.svg` and `background-texture-svg.svg` are removed, and `favicon-icon.svg` matches the new favicon; a build before and after is identical apart from the favicon.
+  2. Each unused file (`Gemini_Generated_Image_*.svg`, `logo-svg.svg`, `background-texture-svg.svg`, and `favicon-icon.svg` if nothing uses it) is removed only after proof that no import, `index.html`, CSS or script references it; a build before and after is identical apart from the favicon.
   3. `index.html` and the font and bundle guards are unchanged and pass.
-- **Recommended model:** Haiku 5.5. **Estimate:** 1.5 h. Deleting files needs your OK.
+- **Recommended model:** Haiku 5.5. **Estimate:** 1.5 h. A file is deleted only after proof that nothing references it (decided).
 - **Retest:** build, `seoFiles.test.js`.
 
-### D9. Optional hand-drawn underline (droppable, recommend dropping)
+### D9. Optional hand-drawn underline (DROPPED, decided)
+- **Dropped.** Any underline is plain CSS inside D6. The text below is kept only as the record of what was considered.
 - **Summary:** Componentry `annotated-text` (MIT) on "one place", loaded after first paint.
 - **Acceptance criteria:**
   1. The component loads through `import()` after first paint; entry grows at most 0.1 kB gzip and the lazy chunk is at most 3 kB gzip.
@@ -445,13 +474,13 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
 - **Recommended model:** Sonnet 5.5. **Estimate:** 2 h.
 - **Retest:** `LandingPage.test.jsx`, bundle guard.
 
-### D10. Category icons for Expenses and Maintenance (droppable)
+### D10 (CAR-83). Category icons for Expenses and Maintenance (droppable)
 - **Summary:** an icon for each of the 9 expense categories and 5 maintenance presets, for faster scanning.
 - **Acceptance criteria:**
   1. Each category and preset has a Lucide icon next to its label, `aria-hidden`, and the label stays the accessible name.
   2. The icons add at most 1.2 kB gzip to the Expenses and Maintenance chunks and nothing to the entry.
   3. The photo notes, upload and form behaviour are untouched.
-- **Recommended model:** Haiku 5.5. **Estimate:** 3 h. Touches `ExpensesPage.jsx`, which is photo-adjacent, so it needs your OK.
+- **Recommended model:** Haiku 5.5. **Estimate:** 3 h. Touches `ExpensesPage.jsx`, which is photo-adjacent; icon markup only is allowed (decided).
 - **Retest:** `ExpensesPage.test.jsx`, `MaintenancePage.test.jsx`, `RecordPhotos.test.jsx`.
 
 ### Order, dependencies and what can be dropped
@@ -460,18 +489,18 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
 |---|---|---|---|
 | D1 Motion | 3 | none | Yes, but D3 to D6 lose their entrance and hover polish |
 | D2 Icons | 4 | none | No: D5 and D6 use the icons |
-| D7 Status colours | 2.5 | none | Yes, the Due soon problem stays |
+| D7 Status colours | 2.5 | none | No: required (decided) |
 | D4 Dashboard data | 4 | none | No: D5 needs it |
 | D3 Header v2 | 6 | D1, D2 | Yes, the CAR-74 header stays as it is |
 | D5 Dashboard UI | 9 | D2, D4 (D1 optional) | No: it is the main user-visible goal |
 | D6 Landing | 6 | D1, D2 | Yes |
 | D8 Favicon and assets | 1.5 | none | Yes |
-| D9 Underline | 2 | D6 | Yes, recommended |
+| D9 Underline | 2 | D6 | Dropped (decided) |
 | D10 Category icons | 3 | D2 | Yes |
 
-- **Core (D1, D2, D4, D5, D7):** 22.5 h. With D3: 28.5 h. With D6: 34.5 h. Everything: 41 h.
+- **Core (D1, D2, D4, D5, D7):** 22.5 h. With D3: 28.5 h. With D6: 34.5 h. Everything except the dropped D9: 39 h.
 - **Net effect on the pending plan:** D2 takes about 2.5 h out of T10, D5 replaces T11 (5 h), D6 replaces T13 (5 h).
-- **Suggested order:** D2, D1, D7, D4, D5, D3, D6, then D8, D10 and D9 if wanted.
+- **Suggested order:** D2, D1, D7, D8, D4, D5, D3, D6, then D10 if wanted.
 
 ## 5. Bundle and CSS budget
 
@@ -481,27 +510,23 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
 | Item | Change |
 |---|---|
 | D2 entry icons (measured) | +0.35 kB |
-| D3 scroll-shadow observer and account menu data | +0.3 kB |
+| D3 scroll-shadow observer | +0.15 kB |
 | D6 below-the-fold Landing moves to a lazy chunk (63% of the file's source) | about -0.8 kB |
 | D6 lazy-loading glue and the Example card | +0.3 kB |
 | **Net** | **about +0.15 kB, inside the 0.84 kB** |
 
 - **If the estimate is wrong,** the lever is D6's split (move more of Landing out), not raising the 150 kB initial limit.
 - **Route chunks** (limit 60 kB gzip each): the Dashboard is 3.7 kB today and D5 plus its icons should land at about 8 to 10 kB.
-- **CSS:** D1 to D6 add roughly 3 to 4 kB minified. I recommend setting a CSS budget of 72 kB min and 13 kB gzip and adding it to the guard in D1, with the reason stated. Raising any budget needs your OK.
+- **CSS (decided):** budget 72 kB min and 13 kB gzip, measured in every ticket and enforced by `scripts/check-bundle.mjs` from CAR-75. D1 to D6 add roughly 3 to 4 kB minified. Raising it further needs your OK.
 
-## 6. Decisions for you
+## 6. Decisions (answered 2026-10-22)
 
-1. **Photo-adjacent places** (Fuel Log 📷, camera SVGs in Car Profile, Onboarding and Advisor, the optional car photo in the Dashboard hero, D10): each needs your OK, as before.
-2. **Account menu with only Log Out:** is the avatar worth it? D3 still works without it (keep the plain button).
-3. **D9 and D8 deletions:** do you want the hand-drawn underline, and may I delete the unused asset files?
-4. **CSS budget:** agree to a 72 kB min and 13 kB gzip budget?
-5. **Licence caution:** I recommend not copying any Aceternity source. Do you want to rule that out in writing for the capstone?
+See the "Decisions" section at the top. In short: photo-adjacent icon markup is allowed, no account menu, D9 dropped, assets deleted only after proof, CSS budget 72 kB min and 13 kB gzip measured per ticket, no Aceternity source and no animation library, D7 required, D4 on Opus.
 
 ## Appendix: how things were measured
 
 - **Sizes:** esbuild minified output, Node zlib gzip level 9, in kB of 1000 bytes (the unit of `scripts/check-bundle.mjs`). Libraries were measured on their own in a scratch folder outside the repo (nothing was added to `package.json`).
-- **Library views:** `npx shadcn view` (`@aceternity/...` through the registry in `components.json`, Componentry by its registry URL), read-only, output outside the repo. Licences came from the publishers' own pages and the Componentry GitHub repo.
+- **Library views:** `npx shadcn view` (`@aceternity/...` through the registry that `components.json` listed at the time, Componentry by its registry URL), read-only, output outside the repo. Licences came from the publishers' own pages and the Componentry GitHub repo.
 - **Icons:** the Lucide 1.61.0 SVG files and `LICENSE`, converted to JSX the way `icons.jsx` would hold them.
 - **Fonts:** glyph coverage read from the two WOFF2 files with `fontkit`.
 - **Layout shift and screenshots:** Playwright, Chromium, production build or dev server as noted.
