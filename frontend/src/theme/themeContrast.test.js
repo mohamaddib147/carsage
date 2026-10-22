@@ -149,9 +149,11 @@ describe("the stylesheet keeps the accent colour for fills", () => {
 
   it("every rule that fills with the accent and sets a text colour uses --color-on-accent", () => {
     const fills = rules.filter((r) => /var\(--color-accent\)/.test(r.decls["background-color"] ?? r.decls.background ?? "") && r.decls.color);
-    // btn-accent, nav auth link, cold-start banner. (The DIY and due-soon badges used to be here; CAR-81 moved them to the fixed
-    // --status-* colours, which no theme changes: see statusColours.test.js.)
-    expect(fills.length).toBeGreaterThanOrEqual(3);
+    // Exactly these rules fill with the accent and set a text colour. A rule that loses the accent fails here by name, and a new accent
+    // fill must be added on purpose. (.advisor-badge--diy and .maintenance-badge--due_soon used to be here; CAR-81 moved those two to
+    // the fixed --status-* colours, which no theme changes: see statusColours.test.js.)
+    const ACCENT_FILLS = [".btn-accent", ".cold-start-banner", ".site-nav__auth-link"];
+    expect(fills.map((r) => r.selector).sort()).toEqual(ACCENT_FILLS);
     for (const r of fills) expect(r.decls.color, r.selector).toBe("var(--color-on-accent)");
   });
 
