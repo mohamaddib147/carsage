@@ -328,6 +328,17 @@ export function realEfficiency(entries) {
 }
 
 /**
+ * Whether Trip Planner uses this real average (both floors met), the frontend copy of the
+ * backend gate in trip_planner.py (MIN_INTERVALS_FOR_ESTIMATE, MIN_DISTANCE_KM_FOR_ESTIMATE).
+ * Shared by the Fuel Log's note and the Dashboard's car snapshot (CAR-78).
+ * @param {{ intervalCount: number, distanceKm: number } | null} real - realEfficiency()'s result.
+ * @returns {boolean}
+ */
+export function meetsTripPlannerFloor(real) {
+  return Boolean(real) && real.intervalCount >= MIN_INTERVALS_FOR_TRIP_PLANNER && real.distanceKm >= MIN_DISTANCE_FOR_TRIP_PLANNER;
+}
+
+/**
  * The car's latest odometer reading (by fill-up date), for distance-based
  * features such as maintenance reminders (CAR-62).
  * @param {object[]} entries - ONE car's fill-ups.

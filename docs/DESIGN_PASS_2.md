@@ -432,6 +432,11 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
   4. No new table, column, policy or backend call; the queries are still filtered by the signed-in user.
 - **Recommended model:** Opus 5.5 (decided). **Estimate:** 4 h.
 - **Retest:** `DashboardPage.test.jsx` (its fuel_logs mocks change), `activeCarPages.test.jsx`, `protectedRoutesNoData.test.jsx`.
+- **Implementation note (CAR-78, 2026-10-22): where the build differs from the plan above, and why.**
+  - **A small visible part:** each car card gets an "at a glance" list from `carSnapshot()` (odometer, economy, last fill-up, next service) in the existing spec-grid styles (no new CSS), so the data layer can be checked before D5 replaces the cards. The rated km/L moved from the specs list into the Economy row, labelled "(rated)".
+  - **Economy rule:** the Trip Planner's (new shared `meetsTripPlannerFloor()`, also used by the Fuel Log): real average once over 3 measured fill-ups and 500 km, else rated, else "Not enough data yet". If the fill-ups cannot be read, the rated figure stays, as Trip Planner falls back.
+  - **Failure:** a failed `fuel_logs` read is one alert with "Try again" below the car list; the month tile says "Shown once your fill-ups load" instead of a second error (its total needs the fill-ups); the maintenance card still shows its items. The retry refetches `fuel_logs` only.
+  - **Requests:** the page's own requests go from 6 to 5. The app shell's own `cars` read (the active-car theme) is separate and unchanged.
 
 ### D5 (CAR-79). Dashboard v2 UI
 - **Summary:** the §3.4 layout: active-car hero with four tiles and quick actions, car switcher chips, and three equal-width cards below.

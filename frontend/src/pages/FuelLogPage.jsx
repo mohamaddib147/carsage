@@ -68,6 +68,7 @@ import {
   formatKmPerLiter,
   getOdometerError,
   getOdometerOrderWarning,
+  meetsTripPlannerFloor,
   MIN_DISTANCE_FOR_TRIP_PLANNER,
   MIN_INTERVALS_FOR_TRIP_PLANNER,
   readingOf,
@@ -90,8 +91,7 @@ function RealAverageLine({ real, ratedKmPerLiter }) {
   if (!real) return null;
   const rated = Number(ratedKmPerLiter);
   // Trip Planner needs enough fill-ups AND enough distance (both floors).
-  const trusted =
-    real.intervalCount >= MIN_INTERVALS_FOR_TRIP_PLANNER && real.distanceKm >= MIN_DISTANCE_FOR_TRIP_PLANNER;
+  const trusted = meetsTripPlannerFloor(real);
   const fillUps = `${real.intervalCount} measured ${real.intervalCount === 1 ? "fill-up" : "fill-ups"}`;
   return (
     <div className="fuel-log-real-average">

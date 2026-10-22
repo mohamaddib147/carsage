@@ -30,8 +30,12 @@ import {
   dashboardMaintenance,
   describeRemaining,
   itemAnchorId,
+  STATUS_LABELS,
   todayInBeirut,
 } from "../lib/maintenance.js";
+import { carSnapshot, ECONOMY_LABELS, ECONOMY_SOURCE } from "../lib/carSnapshot.js";
+import { formatFillDate, formatLiters } from "../lib/fuelLog.js";
+import { formatKm, formatKmPerLiter } from "../lib/odometer.js";
 import { supabase } from "../lib/supabaseClient.js";
 import BrandBadge from "../theme/BrandBadge.jsx";
 import { ArrowRight } from "../components/icons.jsx";
@@ -44,6 +48,8 @@ const DASHBOARD_ITEM_COLUMNS =
   "id, car_id, name, interval_km, interval_months, baseline_date, baseline_km, created_at, " +
   "maintenance_records(id, done_on, odometer_km, created_at)";
 const MAX_DUE_SHOWN = 5;
+// CAR-78: the one fuel_logs read serves the month's fuel costs, the maintenance readings and each car's snapshot.
+const DASHBOARD_FUEL_COLUMNS = "id, car_id, filled_at, created_at, liters, odometer_km, cost_amount, cost_currency";
 
 
 // How long the sections below "Your Cars" stay hidden while the car list loads (prevents a layout jump on a
@@ -59,15 +65,13 @@ function carMetaLine(car) {
 
 /**
  * The specs saved on a car, as label/value pairs for its summary grid. Only
- * fields that are actually set are returned, so a card never shows blanks.
+ * fields that are actually set are returned, so a card never shows blanks. (The rated
+ * km/L is shown by the snapshot's Economy row since CAR-78, labelled as rated.)
  * @param {object} car - a `cars` row.
  * @returns {{ label: string, value: string }[]}
  */
 function carSpecs(car) {
   const specs = [];
-  if (car.fuel_efficiency != null) {
-    specs.push({ label: "Efficiency", value: `${Number(car.fuel_efficiency)} km/L` });
-  }
   if (car.cylinders != null) {
     specs.push({ label: "Cylinders", value: String(car.cylinders) });
   }
@@ -77,6 +81,67 @@ function carSpecs(car) {
     specs.push({ label: "Fuel tank", value: `${Number(car.fuel_tank_capacity_liters)} L` });
   }
   return specs;
+}
+
+/**
+ * CAR-78: a car's odometer, economy, last fill-up and next service (lib/carSnapshot.js), as rows of the
+ * card's spec grid. A figure that could not be loaded is left out (the page shows the one error state);
+ * a figure with no data says so in words. Numbers are plain text; money goes through <Price>.
+ * @param {{ car: object, snapshot: ReturnType<typeof carSnapshot> }} props
+ * @returns {JSX.Element}
+ */
+function CarSnapshotList({ car, snapshot }) {
+  const { odometer, economy, lastFillUp, nextService, fuelLogsFailed, maintenanceFailed } = snapshot;
+  const rows = [];
+  if (!fuelLogsFailed) {
+    rows.push({ label: "Odometer", value: odometer ? formatKm(odometer.km) : "No reading yet" });
+  }
+  if (economy.source !== ECONOMY_SOURCE.UNAVAILABLE) {
+    rows.push({
+      label: "Economy",
+      value:
+        economy.kmPerLiter == null
+          ? ECONOMY_LABELS[economy.source]
+          : `${formatKmPerLiter(economy.kmPerLiter)} km/L (${ECONOMY_LABELS[economy.source].toLowerCase()})`,
+    });
+  }
+  if (!fuelLogsFailed) {
+    rows.push({
+      label: "Last fill-up",
+      value: lastFillUp ? (
+        <>
+          {formatFillDate(lastFillUp.filledAt)}
+          {lastFillUp.liters != null && `, ${formatLiters(lastFillUp.liters)} L`}
+          {lastFillUp.costAmount != null && lastFillUp.costCurrency && (
+            <>
+              {", "}
+              <Price amount={lastFillUp.costAmount} currency={lastFillUp.costCurrency} />
+            </>
+          )}
+        </>
+      ) : (
+        "None yet"
+      ),
+    });
+  }
+  if (!maintenanceFailed) {
+    rows.push({
+      label: "Next service",
+      value: nextService
+        ? `${nextService.item.name}: ${describeRemaining(nextService.status) || STATUS_LABELS[nextService.status.status]}`
+        : "Nothing tracked",
+    });
+  }
+  return (
+    <dl className="dashboard-car-card__specs" aria-label={`${car.make} ${car.model} at a glance`}>
+      {rows.map((row) => (
+        <div key={row.label} className="dashboard-car-card__spec">
+          <dt>{row.label}</dt>
+          <dd>{row.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 /**
@@ -106,61 +171,103 @@ function DashboardPage() {
   // fixRate: null while loading OR once loaded, null means "no feedback given
   // anywhere yet" (the empty state) rather than a real 0%.
   const [diyStats, setDiyStats] = useState({ loading: true, fixRate: null, latestFix: null });
-  // CAR-64: null while loading; { summary, failed } once loaded.
-  const [monthCosts, setMonthCosts] = useState(null);
+  // CAR-78: ONE fuel_logs read for the whole page (it used to be two: the month tile's costs and the maintenance
+  // card's odometer readings), with the union of the columns both need. { status: "loading" | "ok" | "failed", rows }.
+  // A failure is one error state with a retry (below the car list); the maintenance items, this month's other
+  // costs and the DIY stats are separate requests and are not refetched by the retry.
+  const [fuel, setFuel] = useState({ status: "loading", rows: null });
+  const [fuelAttempt, setFuelAttempt] = useState(0);
+  const [fuelRetrying, setFuelRetrying] = useState(false);
 
   useEffect(() => {
     if (!user) return undefined;
     let cancelled = false;
 
-    async function loadMonthCosts() {
-      const [fuelReply, expensesReply] = await Promise.all([
-        supabase.from("fuel_logs").select("id, car_id, filled_at, cost_amount, cost_currency").eq("user_id", user.id),
-        supabase.from("car_expenses").select("id, car_id, spent_on, category, amount, currency").eq("user_id", user.id),
-      ]);
-      if (cancelled) return;
-      if (fuelReply.error || expensesReply.error) {
-        setMonthCosts({ summary: null, failed: true });
-        return;
+    async function loadFuelLogs() {
+      let reply;
+      try {
+        reply = await supabase.from("fuel_logs").select(DASHBOARD_FUEL_COLUMNS).eq("user_id", user.id);
+      } catch {
+        reply = { data: null, error: { message: "network error" } };
       }
-      // Kept in LBP; <Price> shows both currencies in the user's chosen order.
-      const month = monthOf(todayInBeirut());
-      setMonthCosts({ summary: monthlySummary(fuelReply.data ?? [], expensesReply.data ?? [], month, "LBP"), month, failed: false });
+      if (cancelled) return;
+      setFuelRetrying(false);
+      setFuel(reply?.error || !reply?.data ? { status: "failed", rows: null } : { status: "ok", rows: reply.data });
     }
 
-    loadMonthCosts();
+    loadFuelLogs();
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, fuelAttempt]);
 
-  // CAR-62: null while loading; { due, needsReading, total } once loaded.
-  const [maintenance, setMaintenance] = useState(null);
+  // CAR-64: this month's other costs. null while loading; { rows } or { failed: true } once loaded.
+  const [expenses, setExpenses] = useState(null);
 
   useEffect(() => {
     if (!user) return undefined;
     let cancelled = false;
 
-    async function loadMaintenance() {
-      const [itemsReply, readingsReply] = await Promise.all([
-        supabase.from("maintenance_items").select(DASHBOARD_ITEM_COLUMNS).eq("user_id", user.id),
-        supabase.from("fuel_logs").select("id, car_id, filled_at, created_at, liters, odometer_km").eq("user_id", user.id),
-      ]);
+    async function loadExpenses() {
+      const reply = await supabase.from("car_expenses").select("id, car_id, spent_on, category, amount, currency").eq("user_id", user.id);
       if (cancelled) return;
-      if (itemsReply.error || !itemsReply.data) {
-        setMaintenance({ due: [], needsReading: 0, total: 0, failed: true });
-        return;
-      }
-      setMaintenance(
-        dashboardMaintenance(itemsReply.data, readingsReply.error ? [] : (readingsReply.data ?? []), todayInBeirut()),
-      );
+      setExpenses(reply.error || !reply.data ? { failed: true } : { rows: reply.data });
     }
 
-    loadMaintenance();
+    loadExpenses();
     return () => {
       cancelled = true;
     };
   }, [user]);
+
+  // CAR-62: the maintenance items. null while loading; { rows } or { failed: true } once loaded.
+  const [items, setItems] = useState(null);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let cancelled = false;
+
+    async function loadMaintenanceItems() {
+      const reply = await supabase.from("maintenance_items").select(DASHBOARD_ITEM_COLUMNS).eq("user_id", user.id);
+      if (cancelled) return;
+      setItems(reply.error || !reply.data ? { failed: true } : { rows: reply.data });
+    }
+
+    loadMaintenanceItems();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const today = todayInBeirut();
+  const fuelSettled = fuel.status !== "loading";
+  const fuelRows = fuel.status === "ok" ? fuel.rows : null;
+
+  // CAR-64: null while loading; { summary, month } or { failed } / { fuelFailed } once loaded. Without the fill-ups the
+  // month total would be wrong, so it waits for them, and a fill-up failure is reported once (the error state below).
+  let monthCosts = null;
+  if (expenses && fuelSettled) {
+    const month = monthOf(today);
+    if (expenses.failed) monthCosts = { failed: true, month };
+    else if (!fuelRows) monthCosts = { fuelFailed: true, month };
+    // Kept in LBP; <Price> shows both currencies in the user's chosen order.
+    else monthCosts = { summary: monthlySummary(fuelRows, expenses.rows, month, "LBP"), month };
+  }
+
+  // CAR-62: null while loading; { due, needsReading, total } once loaded. Readings come from the one fuel_logs read;
+  // if it failed, the items still show (as before), with every km-based item asking for a reading.
+  let maintenance = null;
+  if (items && fuelSettled) {
+    maintenance = items.failed
+      ? { due: [], needsReading: 0, total: 0, failed: true }
+      : dashboardMaintenance(items.rows, fuelRows ?? [], today);
+  }
+
+  /** CAR-78: each car's snapshot, once its fill-ups and maintenance items have settled (null before). */
+  function snapshotFor(car) {
+    if (!fuelSettled || !items) return null;
+    return carSnapshot(car, { fuelLogs: fuelRows, maintenanceItems: items.failed ? null : items.rows, today });
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -301,6 +408,7 @@ function DashboardPage() {
             {cars.map((car, index) => {
               const meta = carMetaLine(car);
               const specs = carSpecs(car);
+              const snapshot = snapshotFor(car);
               return (
                 // --i staggers the card entrance (CAR-75); only the first six are delayed.
                 <li key={car.id} className="dashboard-car-card" style={{ "--i": Math.min(index, 5) }}>
@@ -313,6 +421,7 @@ function DashboardPage() {
                   {meta && (
                     <p className="dashboard-car-card__meta">{meta}</p>
                   )}
+                  {snapshot && <CarSnapshotList car={car} snapshot={snapshot} />}
                   {specs.length > 0 ? (
                     <dl
                       className="dashboard-car-card__specs"
@@ -336,6 +445,25 @@ function DashboardPage() {
             })}
           </ul>
         )}
+        {fuel.status === "failed" && (
+          <>
+            <p role="alert" className="dashboard-error">
+              Couldn&apos;t load your fill-ups, so fuel figures and this month&apos;s costs are missing. Check your connection
+              and try again.
+            </p>
+            <button
+              className="btn-primary"
+              type="button"
+              disabled={fuelRetrying}
+              onClick={() => {
+                setFuelRetrying(true);
+                setFuelAttempt((count) => count + 1);
+              }}
+            >
+              {fuelRetrying ? "Trying again..." : "Try again"}
+            </button>
+          </>
+        )}
       </section>
 
       <section className="dashboard-section" aria-label="All cars, this month">
@@ -351,6 +479,10 @@ function DashboardPage() {
               <div className="skeleton-bar skeleton-bar--stat-label" />
             </div>
           </>
+        ) : monthCosts.fuelFailed ? (
+          <p className="dashboard-diy-empty">
+            Shown once your fill-ups load. See <Link to="/expenses">Expenses</Link>.
+          </p>
         ) : monthCosts.failed ? (
           <p className="dashboard-diy-empty">
             Couldn&apos;t load this month&apos;s costs right now. See <Link to="/expenses">Expenses</Link>.

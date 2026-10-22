@@ -213,7 +213,9 @@ describe("DashboardPage — specs summary on each car", () => {
     renderDashboard();
 
     const specs = await screen.findByLabelText("Mercedes-Benz C230 Kompressor specifications");
-    expect(specs).toHaveTextContent("Efficiency9.5 km/L");
+    // CAR-78: the rated km/L moved to the snapshot's Economy row, labelled as rated (no fill-ups logged here).
+    expect(specs).not.toHaveTextContent("Efficiency");
+    expect(await screen.findByLabelText("Mercedes-Benz C230 Kompressor at a glance")).toHaveTextContent("Economy9.5 km/L (rated)");
     expect(specs).toHaveTextContent("Cylinders4");
     expect(specs).toHaveTextContent("Drivetrainrwd");
     expect(specs).toHaveTextContent("TransmissionAutomatic");
@@ -245,7 +247,7 @@ describe("DashboardPage — specs summary on each car", () => {
     renderDashboard();
 
     const specs = await screen.findByLabelText("Honda Civic specifications");
-    expect(specs).toHaveTextContent("Efficiency11.5 km/L");
+    expect(await screen.findByLabelText("Honda Civic at a glance")).toHaveTextContent("Economy11.5 km/L (rated)");
     expect(specs).toHaveTextContent("Fuel tank47 L");
   });
 
