@@ -478,6 +478,11 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
   2. Each unused file (`Gemini_Generated_Image_*.svg`, `logo-svg.svg`, `background-texture-svg.svg`, and `favicon-icon.svg` if nothing uses it) is removed only after proof that no import, `index.html`, CSS or script references it; a build before and after is identical apart from the favicon.
   3. `index.html` and the font and bundle guards are unchanged and pass.
 - **Recommended model:** Haiku 5.5. **Estimate:** 1.5 h. A file is deleted only after proof that nothing references it (decided).
+- **Implementation note (CAR-82, 2026-10-22): where the build differs from the plan above, and why.**
+  - **Favicon:** 343,049 B to 3,881 B. Two of its four paths (`#FEFEFE`, `#CBCBCB`, 310 kB) were `display="none"`; the two drawn paths were sampled along their real outlines in a browser and simplified (Ramer-Douglas-Peucker, tolerance 1 unit on the 1024 grid). Renders at 16, 32, 48 and 256 px in light and dark differ from the original by a mean of about 2/255 per channel.
+  - **Removed after proof (no import, `index.html`, CSS or script reference; only docs and provenance comments named them):** `Gemini_Generated_Image_kop49lkop49lkop4.svg` (342 kB), `logo-svg.svg` (34 kB) and `background-texture-svg.svg` (54 kB). All three stay in git history. `favicon-icon.svg` is kept: `index.html` and `logo.svg` name it as the favicon's design source, so it is now a byte-identical copy of `public/favicon.svg`.
+  - **Proof of an identical build:** 45 files before and after; only `favicon.svg` differs, the other 44 are byte-identical.
+  - **Guard:** `assetWeight.test.js` (favicon size and content, copy identity, no unreferenced file in `src/assets`).
 - **Retest:** build, `seoFiles.test.js`.
 
 ### D9. Optional hand-drawn underline (DROPPED, decided)
