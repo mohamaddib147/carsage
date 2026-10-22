@@ -149,7 +149,9 @@ describe("the stylesheet keeps the accent colour for fills", () => {
 
   it("every rule that fills with the accent and sets a text colour uses --color-on-accent", () => {
     const fills = rules.filter((r) => /var\(--color-accent\)/.test(r.decls["background-color"] ?? r.decls.background ?? "") && r.decls.color);
-    expect(fills.length).toBeGreaterThanOrEqual(5);   // btn-accent, nav auth link, cold-start banner, DIY badge, due-soon badge
+    // btn-accent, nav auth link, cold-start banner. (The DIY and due-soon badges used to be here; CAR-81 moved them to the fixed
+    // --status-* colours, which no theme changes: see statusColours.test.js.)
+    expect(fills.length).toBeGreaterThanOrEqual(3);
     for (const r of fills) expect(r.decls.color, r.selector).toBe("var(--color-on-accent)");
   });
 

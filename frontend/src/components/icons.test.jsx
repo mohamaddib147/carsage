@@ -1,4 +1,4 @@
-// CAR-76: the icon set (icons.jsx: the shared Icon wrapper and the four entry-chunk icons; iconsMore.jsx: the other 23). Every icon renders one
+// CAR-76: the icon set (icons.jsx: the shared Icon wrapper and the four entry-chunk icons; iconsMore.jsx: the other 26, three added for the CAR-81 status badges). Every icon renders one
 // SVG that is hidden from assistive tech by default, becomes a labelled image when given a title, takes the shared size and class; both files
 // keep the licence notices Lucide's licences require (ISC for Lucide, MIT for the Feather-derived icons); no icon library was added to
 // package.json; and icons.jsx stays at its four icons, because anything exported from the file the entry chunk imports is built into the
@@ -22,11 +22,11 @@ describe("the icon set", () => {
     expect(Object.keys(entryIcons).sort()).toEqual(["ArrowRight", "Check", "ChevronDown", "Sparkle"]);
   });
 
-  it("iconsMore.jsx holds the other 23, so 27 icons in all with no duplicates", () => {
-    expect(Object.keys(more)).toHaveLength(23);
-    expect(names).toHaveLength(27);
-    expect(new Set(names).size).toBe(27);
-    for (const expected of ["Camera", "Trash2", "MapPin", "Play", "Car", "Fuel", "Lock"]) {
+  it("iconsMore.jsx holds the other 26, so 30 icons in all with no duplicates", () => {
+    expect(Object.keys(more)).toHaveLength(26);
+    expect(names).toHaveLength(30);
+    expect(new Set(names).size).toBe(30);
+    for (const expected of ["Camera", "Trash2", "MapPin", "Play", "Car", "Fuel", "Lock", "TriangleAlert", "Clock", "CircleCheck"]) {
       expect(Object.keys(more)).toContain(expected);
     }
   });
@@ -85,7 +85,7 @@ describe("licence notices and rules", () => {
 
   it("each file names the Feather-derived icons it contains", () => {
     expect(/derived from the Feather project \(([^)]*)\)/.exec(entrySource)?.[1]).toBe("arrow-right, check, chevron-down");
-    expect(/derived from the Feather project \(([^)]*)\)/.exec(moreSource)?.[1]).toBe("lock, hash, trash-2");
+    expect(/derived from the Feather project \(([^)]*)\)/.exec(moreSource)?.[1]).toBe("lock, hash, trash-2, triangle-alert, clock");
   });
 
   it("adds no icon library or other dependency: package.json lists no lucide or icon package", () => {

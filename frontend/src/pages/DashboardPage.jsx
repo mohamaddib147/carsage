@@ -22,6 +22,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import Price from "../components/Price.jsx";
+import StatusBadge from "../components/StatusBadge.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { formatMonth, monthlySummary, monthOf } from "../lib/costs.js";
 import { diyFixRate, latestFixedMessage, timeAgo } from "../lib/diySuccess.js";
@@ -29,7 +30,6 @@ import {
   dashboardMaintenance,
   describeRemaining,
   itemAnchorId,
-  STATUS_LABELS,
   todayInBeirut,
 } from "../lib/maintenance.js";
 import { supabase } from "../lib/supabaseClient.js";
@@ -420,9 +420,7 @@ function DashboardPage() {
                         className="dashboard-maintenance__item"
                         to={`/maintenance?car=${encodeURIComponent(item.car_id)}#${itemAnchorId(item.id)}`}
                       >
-                        <span className={`maintenance-badge maintenance-badge--${status.status}`}>
-                          {STATUS_LABELS[status.status]}
-                        </span>
+                        <StatusBadge status={status.status} />
                         <span className="dashboard-maintenance__name">{item.name}</span>
                         {car && (
                           <span className="dashboard-maintenance__car">

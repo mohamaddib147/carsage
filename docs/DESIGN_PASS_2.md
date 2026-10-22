@@ -465,6 +465,11 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
   4. The Dashboard list, the Maintenance page and the Advisor recommendation chips (T16) use the same tokens.
 - **Recommended model:** Sonnet 5.5. **Estimate:** 2.5 h.
 - **Retest:** `MaintenancePage.test.jsx`, `DashboardPage.test.jsx`, `themeContrast.test.js`.
+- **Implementation note (CAR-81, 2026-10-22): where the build differs from the plan above, and why.**
+  - **One shared `StatusBadge`** (words plus an icon: warning triangle, clock, check, gauge) now serves the Dashboard list and the Maintenance page; three icons were added to `iconsMore.jsx` for it.
+  - **Colours:** Overdue `#b3261e` on white (6.54:1), Due soon `#f5b400` with `#2b2b2b` text (7.69:1), OK `#1b7a3d` on white (5.39:1). Measured in a browser from the computed colours with each of the nine themes applied: identical on all of them.
+  - **The Advisor chips** (T16's recommendation chips) take the same pairs now: DIY Fixable is the OK green, See a Mechanic the Overdue red, each with an icon. T16 still owns their size and the banner layout.
+  - "Needs an odometer reading" keeps its neutral dashed outline (it is not a warning level), now with a gauge icon.
 
 ### D8 (CAR-82). Favicon weight and unused assets
 - **Summary:** shrink the favicon and remove files that are not shipped.

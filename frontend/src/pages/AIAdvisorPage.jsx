@@ -49,7 +49,7 @@ import { isStillFromPhoto, mergeFlag, toRequestFlag } from "../lib/advisorPhoto.
 import { supabase } from "../lib/supabaseClient.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 import { Check } from "../components/icons.jsx";
-import { MapPin, Play } from "../components/iconsMore.jsx";
+import { MapPin, Play, TriangleAlert, Wrench } from "../components/iconsMore.jsx";
 
 const EXAMPLE_PROMPTS = [
   "Squeaking brakes at low speed",
@@ -462,6 +462,7 @@ function AIAdvisorPage() {
               <span
                 className={`advisor-badge advisor-badge--${message.recommendation}`}
               >
+                {message.recommendation === "diy" ? <Wrench size={12} /> : <TriangleAlert size={12} />}
                 {message.recommendation === "diy"
                   ? "DIY Fixable"
                   : "See a Mechanic"}

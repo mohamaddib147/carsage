@@ -44,10 +44,10 @@ import {
   PRESETS,
   sortByUrgency,
   STATUS,
-  STATUS_LABELS,
   todayInBeirut,
 } from "../lib/maintenance.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
+import StatusBadge from "../components/StatusBadge.jsx";
 
 const ITEM_COLUMNS =
   "id, car_id, name, interval_km, interval_months, baseline_date, baseline_km, notes, created_at, " +
@@ -617,9 +617,7 @@ function MaintenancePage() {
                 <li key={item.id} id={itemAnchorId(item.id)} className="maintenance-card">
                   <div className="maintenance-card__header">
                     <h3>{item.name}</h3>
-                    <span className={`maintenance-badge maintenance-badge--${status.status}`}>
-                      {STATUS_LABELS[status.status]}
-                    </span>
+                    <StatusBadge status={status.status} />
                   </div>
                   <p className="maintenance-card__due">
                     {describeDue(status)}
