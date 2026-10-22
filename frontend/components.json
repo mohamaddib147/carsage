@@ -5,6 +5,5 @@
   "tsx": false,
   "tailwind": { "config": "", "css": "src/tailwind.css", "baseColor": "neutral", "cssVariables": true, "prefix": "" },
   "aliases": { "components": "@/components", "utils": "@/lib/utils", "ui": "@/components/ui", "lib": "@/lib", "hooks": "@/hooks" },
-  "iconLibrary": "lucide",
-  "registries": { "@aceternity": "https://ui.aceternity.com/registry/{name}.json" }
+  "iconLibrary": "lucide"
 }
