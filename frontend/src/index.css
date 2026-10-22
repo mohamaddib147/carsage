@@ -1625,7 +1625,7 @@ textarea:focus {
 }
 
 .trip-result__icon {
-  display: inline-flex;
+  display: flex;   /* inside the <dt> (valid <dl>), on its own line above the label */
   margin-bottom: calc(var(--spacing-unit) * 1);
   font-size: 1.125rem;
 }
@@ -1651,10 +1651,18 @@ textarea:focus {
   font-size: 0.875rem;
 }
 
-.trip-result__caption {
+/* The caption and the traffic badge are <dd>s of their row (a <dl> row may hold only <dt> and <dd>), so they undo the value styling. */
+.trip-result__field .trip-result__caption {
   margin: 4px 0 0;
   font-size: 0.75rem;
+  font-weight: 400;
   color: var(--color-text-muted);
+}
+
+.trip-result__field .trip-result__badge {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 400;
 }
 
 .trip-result__explainer {

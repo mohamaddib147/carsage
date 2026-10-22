@@ -550,8 +550,8 @@ function TripPlannerPage() {
 
           <dl className="trip-result">
             <div className="trip-result__field">
-              <span className="trip-result__icon" aria-hidden="true"><Fuel size={20} /></span>
               <dt>
+                <span className="trip-result__icon" aria-hidden="true"><Fuel size={20} /></span>
                 Fuel Cost{hasTrafficComparison ? " (Light Traffic)" : ""}
                 <InfoTip label="About this fuel cost estimate">
                   {result.efficiency_source === "real" ? (
@@ -572,69 +572,67 @@ function TripPlannerPage() {
               <dd>
                 <Price amount={result.estimated_cost_lbp} currency="LBP" />
               </dd>
-              <p className="trip-result__caption">
+              <dd className="trip-result__caption">
                 Based on{" "}
                 <Price amount={result.fuel_price_used_lbp} currency="LBP" suffix="/L" />
-              </p>
+              </dd>
             </div>
             {hasTrafficComparison && (
               <div className="trip-result__field">
-                <span className="trip-result__icon" aria-hidden="true"><TrafficCone size={20} /></span>
-                <dt>Fuel Cost (Current Traffic)</dt>
+                <dt><span className="trip-result__icon" aria-hidden="true"><TrafficCone size={20} /></span>Fuel Cost (Current Traffic)</dt>
                 <dd>
                   <Price amount={result.estimated_cost_current_traffic_lbp} currency="LBP" />
                 </dd>
-                <p className="trip-result__caption">
+                <dd className="trip-result__caption">
                   Adjusted for current congestion
-                </p>
+                </dd>
               </div>
             )}
             <div className="trip-result__field">
-              <span className="trip-result__icon" aria-hidden="true"><Timer size={20} /></span>
-              <dt>Duration</dt>
+              <dt><span className="trip-result__icon" aria-hidden="true"><Timer size={20} /></span>Duration</dt>
               <dd>{result.duration_in_traffic_min} min</dd>
               {trafficLevel && (
-                <span
+                <dd className="trip-result__badge">
+                  <span
                   className={`traffic-badge traffic-badge--${trafficLevel.level}`}
                 >
                   <span className="traffic-badge__dot" aria-hidden="true" />
                   {trafficLevel.label}
                 </span>
+                </dd>
               )}
-              <p className="trip-result__caption">Traffic-adjusted estimate</p>
+              <dd className="trip-result__caption">Traffic-adjusted estimate</dd>
             </div>
             <div className="trip-result__field">
-              <span className="trip-result__icon" aria-hidden="true"><MapPin size={20} /></span>
-              <dt>Distance</dt>
+              <dt><span className="trip-result__icon" aria-hidden="true"><MapPin size={20} /></span>Distance</dt>
               <dd>{result.distance_km} km</dd>
             </div>
             <div className="trip-result__field">
-              <span className="trip-result__icon" aria-hidden="true"><Droplets size={20} /></span>
-              <dt>Full Tank Cost</dt>
+              <dt><span className="trip-result__icon" aria-hidden="true"><Droplets size={20} /></span>Full Tank Cost</dt>
               {tankCostLbp != null ? (
                 <>
                   <dd>
                     <Price amount={tankCostLbp} currency="LBP" />
                   </dd>
-                  <p className="trip-result__caption">
+                  <dd className="trip-result__caption">
                     {tankSizeLiters}L at{" "}
                     <Price amount={result.fuel_price_used_lbp} currency="LBP" suffix="/L" />
-                  </p>
+                  </dd>
                 </>
               ) : tankSizeError ? (
                 <>
                   <dd>Tank size out of range</dd>
-                  <p className="trip-result__caption">
+                  <dd className="trip-result__caption">
                     Enter a tank size between 5 and 200 L to see this figure.
-                  </p>
+                  </dd>
                 </>
               ) : (
                 <>
                   <dd>Tank size not set</dd>
-                  <p className="trip-result__caption">
+                  <dd className="trip-result__caption">
                     Enter a tank size under Advanced options, or add it on{" "}
                     <Link to={`/cars/${selectedCarId}`}>this car&apos;s profile</Link>.
-                  </p>
+                  </dd>
                 </>
               )}
             </div>
