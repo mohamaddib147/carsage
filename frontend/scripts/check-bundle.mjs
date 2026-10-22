@@ -11,8 +11,13 @@ import { gzipSync } from "node:zlib";
 
 // Recorded after CAR-67 (entry 456.51 / 129.57, initial 505.51 / 146.92)
 // plus 2%. Raise only on purpose, with the reason in the commit message.
+// Raised once, after CAR-74 (entry 463.29 / 131.81, initial 512.29 / 149.16): the entry
+// budget to 470 / 134. The entry chunk had grown 6.8 kB min / 2.2 kB gzip from real
+// behaviour that has to load with the first screen (the theme follows the car, the signed-in
+// redirect, the mobile menu), leaving 0.2 kB of gzip room. The ticket limit on the entry
+// chunk is 480 / 150, so this stays well inside it. The initial budget is unchanged.
 const BUDGET = {
-  entry: { minKB: 466, gzipKB: 132 },
+  entry: { minKB: 470, gzipKB: 134 },
   initial: { minKB: 516, gzipKB: 150 },
 };
 
