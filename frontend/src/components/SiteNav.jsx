@@ -21,6 +21,7 @@ import { useAuthStatus } from "../auth/AuthContext.jsx";
 import Logo from "./Logo.jsx";
 import CurrencyToggle from "./CurrencyToggle.jsx";
 import { PRICE_PAGES } from "../lib/currency.js";
+import { ChevronDown } from "./icons.jsx";
 
 // CAR-62: the per-car screens sit under one "My Car" menu so the bar stays at four
 // items (and doesn't wrap on phones) as Maintenance and, later, Expenses are added.
@@ -142,9 +143,7 @@ function NavMenu({ label, links }) {
         onKeyDown={handleButtonKeyDown}
       >
         {label}
-        <span className="site-nav__menu-caret" aria-hidden="true">
-          ▾
-        </span>
+        <ChevronDown size={16} className="site-nav__menu-caret" />
       </button>
       {open && (
         <ul id={menuId} className="site-nav__menu-list" onKeyDown={handleMenuKeyDown}>

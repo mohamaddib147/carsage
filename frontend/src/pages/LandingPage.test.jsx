@@ -4,6 +4,7 @@
 // are absent while the session is still loading. The Supabase client is
 // mocked so no real network calls happen.
 
+import { readFileSync } from "node:fs";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -124,9 +125,18 @@ describe("LandingPage sections and anchors", () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
   });
 
+  // CAR-76: everything below the hero is a lazy chunk (LandingSections), so these wait for it.
+  // (React.lazy keeps a loaded module for the rest of the file, so the placeholder can only be checked in the source.)
+  it("loads the sections below the hero as a separate chunk, holding their place with a screen-tall placeholder", () => {
+    const page = readFileSync("src/pages/LandingPage.jsx", "utf8");
+    expect(page).toMatch(/<Suspense fallback=\{<div className="landing-sections-placeholder" aria-hidden="true" \/>\}>/);
+    expect(page).not.toContain("landing-features");
+    expect(readFileSync("src/index.css", "utf8")).toMatch(/\.landing-sections-placeholder \{\s*min-height: 100vh;/);
+  });
+
   it("has a Features section and a How it works section (the nav's anchor targets)", async () => {
     renderPage();
-    await screen.findByText("Everything about your car, in one place");
+    await screen.findByRole("heading", { name: "How it works" });
 
     expect(document.getElementById("features")).not.toBeNull();
     const howItWorks = document.getElementById("how-it-works");

@@ -32,6 +32,12 @@ iframe#nl-badge-frame {
   --color-text-muted: #6b6a63;
   --color-danger: #b3261e;
 
+  /* CAR-76: icons (components/icons.jsx). One stroke weight for every icon, and the tint behind
+     an icon tile: the car's accent at 16% over white. The icon on a tile uses --color-accent-text;
+     theme/iconTileContrast.test.js checks that pair is at least 3:1 on every theme. */
+  --icon-stroke: 1.75;
+  --color-icon-tile: color-mix(in srgb, var(--color-accent) 16%, #ffffff);
+
   /* CAR-68: the brand fonts are declared in fonts.css. Each stack lists the web
      font, then its metric-matched Arial fallback (limits layout shift while the
      font loads), then the system fonts this app used before. */
@@ -209,10 +215,6 @@ button {
 .site-nav__menu-btn:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 4px;
-}
-
-.site-nav__menu-caret {
-  font-size: 0.75rem;
 }
 
 .site-nav__menu-list {
@@ -996,7 +998,7 @@ textarea:focus {
 /* CAR-58 restyle (no Jira task, direct feedback): the car's photo fills
    this same round identity icon instead of a separate box above the
    header — round, cropped to fit (`object-fit: cover`), no photo at all
-   shown when none is set (just the usual BrandBadge/🚗 fallback). Small
+   shown when none is set (just the usual BrandBadge or car-icon fallback). Small
    edit buttons (`.overlay-icon-btn--sm`, shared with Car Onboarding's
    larger frame — see the comment above `.overlay-icon-btn`) sit right on
    the circle's own edge, like a typical profile-picture editor, rather
@@ -1055,20 +1057,18 @@ textarea:focus {
   border-bottom: none;
 }
 
-.car-profile__field::before {
-  content: attr(data-icon);
-  /* Decorative: an empty alternative text keeps the emoji out of speech where supported. */
-  content: attr(data-icon) / "";
-  grid-column: 1;
-  grid-row: 1 / span 2;
+/* CAR-76: the icon sits inside the <dt> (hidden from assistive tech) so the row stays a valid
+   <div><dt/><dd/></div>; it is placed in the empty first grid column, level with the label. */
+.car-profile__field-icon {
+  position: absolute;
+  top: 0;
+  right: calc(100% + var(--spacing-unit) * 2);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 36px;
   height: 36px;
   border-radius: var(--radius-base);
-  background-color: var(--color-input-bg);
-  font-size: 1rem;
 }
 
 .car-profile__field dt,
@@ -1077,6 +1077,7 @@ textarea:focus {
 }
 
 .car-profile__field dt {
+  position: relative;
   font-weight: 600;
   font-size: 0.75rem;
   letter-spacing: 0.04em;
@@ -2678,14 +2679,22 @@ textarea:focus {
   display: none;
 }
 
+/* CAR-76: the disclosure caret is drawn with borders (the fonts have no small right-pointing triangle): a chevron pointing
+   right, turned to point down when the section is open. */
 .advanced-options__toggle::before {
-  content: "▸";
+  content: "";
   display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  margin-left: 0.1em;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: rotate(45deg);
   transition: transform 0.15s ease;
 }
 
 .advanced-options[open] > .advanced-options__toggle::before {
-  transform: rotate(90deg);
+  transform: rotate(135deg);
 }
 
 .advanced-options__toggle:focus-visible {
@@ -3639,4 +3648,54 @@ textarea[aria-invalid="true"] {
 .form-actions .btn-block {
   flex: 1;
   width: auto;
+}
+
+/* CAR-76: icons. The base class for every <Icon> (components/icons.jsx): one stroke weight, sits on the
+   text baseline when inline, never shrinks inside a flex row. */
+.icon {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: -0.2em;
+  stroke-width: var(--icon-stroke);
+}
+
+.icon--turn {
+  transform: rotate(90deg);
+}
+
+.icon--route {
+  margin: 0 0.35em;
+}
+
+/* Tiles that hold an icon share one tint, and the icon takes the AA-safe accent text colour. */
+.scan-card__icon,
+.dashboard-module-card__icon,
+.landing-feature-card__icon,
+.landing-pillar__icon,
+.car-profile__field-icon {
+  background-color: var(--color-icon-tile);
+  color: var(--color-accent-text);
+}
+
+.trip-result__icon {
+  color: var(--color-accent-text);
+}
+
+/* The Advisor's play marks are solid triangles. */
+.advisor-video-card__play .icon,
+.advisor-video-card__cta .icon {
+  fill: currentColor;
+}
+
+/* The Landing hero's small inline icons line up with their text. */
+.landing-trust-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Holds the place of the lazy Landing sections: a full screen tall, so the footer starts below the
+   fold while they load and nothing visible jumps when they arrive. */
+.landing-sections-placeholder {
+  min-height: 100vh;
 }

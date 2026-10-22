@@ -12,7 +12,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
+import Logo from "../components/Logo.jsx";
 import { LIMITS, describeAuthError } from "../lib/limits.js";
+import { ArrowRight } from "../components/icons.jsx";
 
 /**
  * Lets someone who followed a password-reset email link set a new password.
@@ -61,10 +63,7 @@ function ResetPasswordPage() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-card__badge" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M3 11.5 12 4l9 7.5" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <Logo size={36} />
         </div>
 
         <h1 className="auth-card__title">Set a new password</h1>
@@ -138,7 +137,7 @@ function ResetPasswordPage() {
 
             <button className="btn-primary auth-card__submit" type="submit" disabled={submitting}>
               Set new password
-              <span aria-hidden="true">→</span>
+              <ArrowRight size={18} />
             </button>
           </form>
         )}

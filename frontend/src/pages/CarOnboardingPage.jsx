@@ -40,6 +40,8 @@ import {
 } from "../lib/limits.js";
 import { getCarPhotoError, uploadCarPhoto } from "../lib/carPhoto.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
+import { ArrowRight, Check } from "../components/icons.jsx";
+import { Camera, Trash2 } from "../components/iconsMore.jsx";
 
 // How long to wait after the user stops typing Make/Model/Year before
 // firing the autofill lookup, so it doesn't fire on every keystroke.
@@ -129,7 +131,7 @@ function validate(form) {
 function AutoFilledTag() {
   return (
     <span className="autofill-tag" title="Filled in automatically, feel free to edit it">
-      <span aria-hidden="true">✓</span> Auto-filled
+      <Check size={14} /> Auto-filled
     </span>
   );
 }
@@ -151,21 +153,12 @@ function LabelRow({ htmlFor, source, children }) {
 
 /** Small camera icon for the Photo field's upload well and overlay button (CAR-58 restyle). */
 function CameraIcon({ className }) {
-  return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path d="M4 8h3l2-2h6l2 2h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="12" cy="14" r="3.5" />
-    </svg>
-  );
+  return <Camera size={16} className={className} />;
 }
 
 /** Small trash icon for the Photo field's "remove" overlay button. */
 function TrashIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <Trash2 size={16} />;
 }
 
 /**
@@ -743,7 +736,7 @@ function CarOnboardingPage() {
             disabled={submitting}
           >
             Add Car
-            <span aria-hidden="true">→</span>
+            <ArrowRight size={18} />
           </button>
         </div>
       </form>

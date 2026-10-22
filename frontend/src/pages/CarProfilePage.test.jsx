@@ -171,7 +171,10 @@ describe("CarProfilePage — viewing", () => {
     for (const row of list.children) {
       expect(row.tagName).toBe("DIV");
       expect([...row.children].map((child) => child.tagName)).toEqual(["DT", "DD"]);
-      expect(row.dataset.icon).toBeTruthy();
+      // CAR-76: the icon is an aria-hidden SVG inside the term, so the row stays a valid description list item.
+      const icon = row.querySelector("dt > .car-profile__field-icon");
+      expect(icon).toHaveAttribute("aria-hidden", "true");
+      expect(icon.querySelector("svg.icon")).toBeInTheDocument();
     }
     // Every term and value sits directly in a row, and every row directly in the list (what axe checks).
     expect(list.querySelectorAll("dt, dd")).toHaveLength(24);
@@ -359,7 +362,7 @@ describe("CarProfilePage — car switcher and default car (mentor feedback, no J
     expect(await screen.findByText("Corolla")).toBeInTheDocument();
   });
 
-  it("shows a 'Set as Default' button for a non-default car, and it saves and flips to the '✓ Default car' badge", async () => {
+  it("shows a 'Set as Default' button for a non-default car, and it saves and flips to the 'Default car' badge", async () => {
     const user = userEvent.setup();
     const { profilesUpdate, eqForProfileUpdate } = mockCarsTable({
       carsById: {
@@ -373,16 +376,16 @@ describe("CarProfilePage — car switcher and default car (mentor feedback, no J
     renderAt("/cars/car-456");
     await screen.findByText("Toyota");
 
-    expect(screen.queryByText("✓ Default car")).not.toBeInTheDocument();
+    expect(screen.queryByText("Default car")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Set as Default" }));
 
-    expect(await screen.findByText("✓ Default car")).toBeInTheDocument();
+    expect(await screen.findByText("Default car")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Set as Default" })).not.toBeInTheDocument();
     expect(profilesUpdate).toHaveBeenCalledWith({ default_car_id: "car-456" });
     expect(eqForProfileUpdate).toHaveBeenCalledWith("id", "user-123");
   });
 
-  it("shows the '✓ Default car' badge (no button) for the car that's already the default", async () => {
+  it("shows the 'Default car' badge (no button) for the car that's already the default", async () => {
     mockCarsTable({
       carsById: {
         "car-456": { data: SAMPLE_CAR, error: null },
@@ -394,7 +397,7 @@ describe("CarProfilePage — car switcher and default car (mentor feedback, no J
 
     renderAt("/cars/car-456");
 
-    expect(await screen.findByText("✓ Default car")).toBeInTheDocument();
+    expect(await screen.findByText("Default car")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Set as Default" })).not.toBeInTheDocument();
   });
 

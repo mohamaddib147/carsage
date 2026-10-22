@@ -11,8 +11,10 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
+import Logo from "../components/Logo.jsx";
 import { loginDestination } from "../auth/loginDestination.js";
 import { LIMITS, describeAuthError } from "../lib/limits.js";
+import { ArrowRight } from "../components/icons.jsx";
 
 /** The standard multi-color Google "G" mark, per Google's own Sign In
  * branding guidelines (developers.google.com/identity/branding-guidelines)
@@ -162,10 +164,7 @@ function AuthPage() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-card__badge" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M3 11.5 12 4l9 7.5" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <Logo size={36} />
         </div>
 
         <div className="auth-tabs">
@@ -228,7 +227,7 @@ function AuthPage() {
 
               <button className="btn-primary auth-card__submit" type="submit" disabled={submitting}>
                 Send reset link
-                <span aria-hidden="true">→</span>
+                <ArrowRight size={18} />
               </button>
             </form>
 
@@ -336,7 +335,7 @@ function AuthPage() {
 
               <button className="btn-primary auth-card__submit" type="submit" disabled={submitting}>
                 {isSignUp ? "Sign Up" : "Log In"}
-                <span aria-hidden="true">→</span>
+                <ArrowRight size={18} />
               </button>
             </form>
 

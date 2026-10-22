@@ -48,6 +48,8 @@ import { apiFetch } from "../lib/apiClient.js";
 import { isStillFromPhoto, mergeFlag, toRequestFlag } from "../lib/advisorPhoto.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
+import { Check } from "../components/icons.jsx";
+import { MapPin, Play } from "../components/iconsMore.jsx";
 
 const EXAMPLE_PROMPTS = [
   "Squeaking brakes at low speed",
@@ -75,22 +77,7 @@ const FIND_MECHANIC_URL = `https://www.google.com/maps/search/?api=1&query=${enc
  * @returns {JSX.Element}
  */
 function PinIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11z" />
-      <circle cx="12" cy="10" r="2.5" />
-    </svg>
-  );
+  return <MapPin size={14} />;
 }
 
 const YOUTUBE_HOSTS = new Set(["www.youtube.com", "youtube.com", "m.youtube.com"]);
@@ -513,7 +500,7 @@ function AIAdvisorPage() {
                       alt=""
                     />
                     <span className="advisor-video-card__play" aria-hidden="true">
-                      ▶
+                      <Play size={14} />
                     </span>
                   </span>
                   <span className="advisor-video-card__body">
@@ -521,7 +508,8 @@ function AIAdvisorPage() {
                       {message.videoTitle}
                     </span>
                     <span className="advisor-video-card__cta">
-                      ▶ Watch on YouTube
+                      <Play size={12} />
+                      Watch on YouTube
                     </span>
                   </span>
                 </a>
@@ -552,9 +540,13 @@ function AIAdvisorPage() {
                     </>
                   ) : (
                     <span className="advisor-fix-feedback__answered">
-                      {message.markedFixed
-                        ? "✓ You said this fixed it"
-                        : "You said this didn't fix it"}{" "}
+                      {message.markedFixed ? (
+                        <>
+                          <Check size={14} /> You said this fixed it
+                        </>
+                      ) : (
+                        "You said this didn't fix it"
+                      )}{" "}
                       <button
                         type="button"
                         className="advisor-fix-feedback__change"

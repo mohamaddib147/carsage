@@ -202,7 +202,7 @@ describe("legal pages", () => {
 describe("landing page trust badge", () => {
   it("says the data is never sold, not the broader 'stays private'", async () => {
     renderAt("/");
-    expect(await screen.findByText("✓ Your data is never sold")).toBeInTheDocument();
+    expect(await screen.findByText("Your data is never sold")).toBeInTheDocument();
     expect(screen.queryByText(/stays private/)).not.toBeInTheDocument();
   });
 });

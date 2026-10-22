@@ -2,7 +2,7 @@
 // frontend folder, because Vitest turns a stylesheet imported with ?raw into an empty string):
 //  - the cold-start spinner and the Advisor typing dots stop under prefers-reduced-motion but stay visible as static dots;
 //  - the Fuel Log scroll region shows a brand-coloured focus ring;
-//  - the Car Profile row draws its icon from data-icon (the markup is checked in CarProfilePage.test.jsx).
+//  - the Car Profile row places its icon beside the label (the markup is checked in CarProfilePage.test.jsx).
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -48,11 +48,13 @@ describe("keyboard focus ring on the Fuel Log scroll region (CAR-72)", () => {
 });
 
 describe("Car Profile spec rows (CAR-72)", () => {
-  it("draw the icon box as the row's ::before from data-icon, spanning both lines of the grid", () => {
-    const before = rule(".car-profile__field::before");
-    expect(before).toMatch(/content: attr\(data-icon\)/);
-    expect(before).toMatch(/grid-row: 1 \/ span 2/);
+  it("place the icon (inside the term) in the empty first column, level with the label (CAR-76)", () => {
+    const icon = rule(".car-profile__field-icon");
+    expect(icon).toMatch(/position: absolute/);
+    expect(icon).toMatch(/top: 0/);
+    expect(icon).toMatch(/right: calc\(100% \+ var\(--spacing-unit\) \* 2\)/);
+    expect(rule(".car-profile__field dt")).toMatch(/position: relative/);
     expect(rule(".car-profile__field")).toMatch(/display: grid/);
-    expect(css).not.toContain(".car-profile__field-icon");
+    expect(css).not.toContain("content: attr(data-icon)");
   });
 });

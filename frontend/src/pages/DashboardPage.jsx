@@ -34,6 +34,8 @@ import {
 } from "../lib/maintenance.js";
 import { supabase } from "../lib/supabaseClient.js";
 import BrandBadge from "../theme/BrandBadge.jsx";
+import { ArrowRight } from "../components/icons.jsx";
+import { Fuel, MessageCircle, Route } from "../components/iconsMore.jsx";
 
 // CAR-62: the Maintenance card reads every item (with its history) and every fill-up
 // reading of the user, then works out each item's status per car, with that car's
@@ -378,7 +380,7 @@ function DashboardPage() {
               </div>
             </dl>
             <Link className="dashboard-maintenance__all" to="/expenses">
-              See expenses <span aria-hidden="true">→</span>
+              See expenses <ArrowRight size={16} />
             </Link>
           </div>
         )}
@@ -445,7 +447,7 @@ function DashboardPage() {
               </p>
             )}
             <Link className="dashboard-maintenance__all" to="/maintenance">
-              See all maintenance <span aria-hidden="true">→</span>
+              See all maintenance <ArrowRight size={16} />
             </Link>
           </div>
         )}
@@ -491,32 +493,32 @@ function DashboardPage() {
         <div className="dashboard-modules">
           <Link className="dashboard-module-card" to="/trip-planner">
             <span className="dashboard-module-card__icon" aria-hidden="true">
-              🧭
+              <Route size={20} />
             </span>
             <h3>Trip Planner</h3>
             <p>Estimate fuel cost and travel time for a destination.</p>
             <span className="dashboard-module-card__cta">
-              Plan a trip <span aria-hidden="true">→</span>
+              Plan a trip <ArrowRight size={16} />
             </span>
           </Link>
           <Link className="dashboard-module-card" to="/advisor">
             <span className="dashboard-module-card__icon" aria-hidden="true">
-              💬
+              <MessageCircle size={20} />
             </span>
             <h3>AI Advisor</h3>
             <p>Describe a car issue and get DIY-vs-mechanic guidance.</p>
             <span className="dashboard-module-card__cta">
-              Ask advisor <span aria-hidden="true">→</span>
+              Ask advisor <ArrowRight size={16} />
             </span>
           </Link>
           <Link className="dashboard-module-card" to="/fuel-log">
             <span className="dashboard-module-card__icon" aria-hidden="true">
-              ⛽
+              <Fuel size={20} />
             </span>
             <h3>Fuel Log</h3>
             <p>Log each fill-up and see what you pay per liter.</p>
             <span className="dashboard-module-card__cta">
-              Log a fill-up <span aria-hidden="true">→</span>
+              Log a fill-up <ArrowRight size={16} />
             </span>
           </Link>
         </div>

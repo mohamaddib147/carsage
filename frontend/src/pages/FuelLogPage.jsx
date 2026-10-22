@@ -76,6 +76,7 @@ import {
   stepDispositions,
 } from "../lib/odometer.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
+import { Camera } from "../components/iconsMore.jsx";
 
 const ENTRY_COLUMNS = "id, filled_at, liters, cost_amount, cost_currency, created_at, odometer_km";
 
@@ -650,7 +651,7 @@ function FuelLogPage() {
           </div>
 
           <div className="scan-card scan-card--compact">
-            <span className="scan-card__icon" aria-hidden="true">📷</span>
+            <span className="scan-card__icon" aria-hidden="true"><Camera size={22} /></span>
             <div className="scan-card__text">
               <p className="scan-card__title">Scan the Pump</p>
               <p className="scan-card__desc">Fills in Liters and Cost from a photo of the pump's display.</p>
@@ -725,7 +726,7 @@ function FuelLogPage() {
           </div>
 
           <div className="scan-card scan-card--compact">
-            <span className="scan-card__icon" aria-hidden="true">📷</span>
+            <span className="scan-card__icon" aria-hidden="true"><Camera size={22} /></span>
             <div className="scan-card__text">
               <p className="scan-card__title">Scan the Odometer</p>
               <p className="scan-card__desc">Fills in the Odometer field from a photo of your dashboard.</p>

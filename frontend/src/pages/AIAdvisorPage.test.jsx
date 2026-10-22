@@ -642,7 +642,7 @@ describe("AIAdvisorPage — DIY fix feedback (mentor feedback, no Jira task)", (
 
     await user.click(screen.getByRole("button", { name: "Yes" }));
 
-    expect(await screen.findByText("✓ You said this fixed it")).toBeInTheDocument();
+    expect(await screen.findByText("You said this fixed it")).toBeInTheDocument();
     expect(screen.queryByText("Did this fix it?")).not.toBeInTheDocument();
     expect(updateCalls).toEqual([{ id: "msg-99", marked_fixed: true }]);
   });
@@ -686,7 +686,7 @@ describe("AIAdvisorPage — DIY fix feedback (mentor feedback, no Jira task)", (
     expect(screen.getByText("Did this fix it?")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Yes" }));
 
-    expect(await screen.findByText("✓ You said this fixed it")).toBeInTheDocument();
+    expect(await screen.findByText("You said this fixed it")).toBeInTheDocument();
     expect(updateCalls).toEqual([
       { id: "msg-99", marked_fixed: false },
       { id: "msg-99", marked_fixed: true },
@@ -757,7 +757,7 @@ describe("AIAdvisorPage — DIY fix feedback (mentor feedback, no Jira task)", (
 
     renderPage();
 
-    expect(await screen.findByText("✓ You said this fixed it")).toBeInTheDocument();
+    expect(await screen.findByText("You said this fixed it")).toBeInTheDocument();
     expect(screen.queryByText("Did this fix it?")).not.toBeInTheDocument();
   });
 

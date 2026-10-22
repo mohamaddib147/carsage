@@ -398,6 +398,11 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
   4. The entry chunk gains at most 0.4 kB gzip of icons (arrow-right, check, chevron-down); every other icon is imported only by a route or lazy chunk; the bundle guard passes.
   5. Meaningful icons have a text alternative, icon-only buttons have accessible names, and the tile icon contrast is at least 3:1 on every theme.
 - **Recommended model:** Sonnet 5.5. **Estimate:** 4 h. Replaces the icon part of T10 (about 2.5 h of it).
+- **Implementation note (CAR-76, 2026-10-22): where the build differs from the plan above, and why.**
+  - **Two files, not one.** A module shared by the entry chunk and a lazy chunk is built into the entry chunk whole (measured: all 27 icons landed in the entry with a single `icons.jsx`). `icons.jsx` therefore holds the `Icon` wrapper and the four entry icons (ArrowRight, Check, ChevronDown, Sparkle), and `iconsMore.jsx` holds the other 23 for route chunks and the lazy Landing sections. Both carry the licence notices. A test keeps `icons.jsx` at those four.
+  - **The Landing split was pulled forward from D6** (criterion 1 there), because the Landing feature icons could not load lazily otherwise: everything below the hero is now the `LandingSections` chunk behind a screen-tall placeholder.
+  - **Entry cost, measured:** `icons.jsx` is 0.52 kB gzip (wrapper 0.29, four icons 0.23) against the 0.35 kB estimate, which covered three icons. With the Landing split the entry chunk is 130.89 kB gzip, 0.92 kB smaller than before (131.81).
+  - **Also changed:** the house icon on Log In, Sign Up and Reset is the logo mark; the Advanced options caret (a text glyph in CSS) is drawn with borders; the Car Profile spec icons moved inside each `<dt>` (aria-hidden) because an SVG cannot come from CSS `content`.
 - **Retest:** Landing, Dashboard, Car Profile, Trip Planner, AI Advisor, Auth, Reset and Onboarding tests (some match text such as "Default car" with its check mark), axe on all screens, bundle guard.
 
 ### D3 (CAR-77). Desktop header v2

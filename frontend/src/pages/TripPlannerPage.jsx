@@ -86,6 +86,8 @@ import {
   MIN_INTERVALS_FOR_TRIP_PLANNER,
 } from "../lib/odometer.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
+import { ArrowRight } from "../components/icons.jsx";
+import { Droplets, Fuel, MapPin, Timer, TrafficCone } from "../components/iconsMore.jsx";
 
 /**
  * CAR-61: one line saying which km/L the estimate used. The figure and the
@@ -518,7 +520,7 @@ function TripPlannerPage() {
             disabled={submitting}
           >
             {submitting ? "Planning..." : "Plan Trip"}
-            {!submitting && <span aria-hidden="true">→</span>}
+            {!submitting && <ArrowRight size={18} />}
           </button>
         </form>
       </div>
@@ -533,15 +535,22 @@ function TripPlannerPage() {
             />
           )}
           <p className="trip-result-card__route">
-            {origin ? `${origin} → ${destination}` : destination}
+            {origin ? (
+              <>
+                {origin}
+                <span className="sr-only"> to </span>
+                <ArrowRight size={16} className="icon--route" />
+                {destination}
+              </>
+            ) : (
+              destination
+            )}
           </p>
           <EfficiencyBasis result={result} />
 
           <dl className="trip-result">
             <div className="trip-result__field">
-              <span className="trip-result__icon" aria-hidden="true">
-                ⛽
-              </span>
+              <span className="trip-result__icon" aria-hidden="true"><Fuel size={20} /></span>
               <dt>
                 Fuel Cost{hasTrafficComparison ? " (Light Traffic)" : ""}
                 <InfoTip label="About this fuel cost estimate">
@@ -570,9 +579,7 @@ function TripPlannerPage() {
             </div>
             {hasTrafficComparison && (
               <div className="trip-result__field">
-                <span className="trip-result__icon" aria-hidden="true">
-                  🚦
-                </span>
+                <span className="trip-result__icon" aria-hidden="true"><TrafficCone size={20} /></span>
                 <dt>Fuel Cost (Current Traffic)</dt>
                 <dd>
                   <Price amount={result.estimated_cost_current_traffic_lbp} currency="LBP" />
@@ -583,9 +590,7 @@ function TripPlannerPage() {
               </div>
             )}
             <div className="trip-result__field">
-              <span className="trip-result__icon" aria-hidden="true">
-                ⏱️
-              </span>
+              <span className="trip-result__icon" aria-hidden="true"><Timer size={20} /></span>
               <dt>Duration</dt>
               <dd>{result.duration_in_traffic_min} min</dd>
               {trafficLevel && (
@@ -599,16 +604,12 @@ function TripPlannerPage() {
               <p className="trip-result__caption">Traffic-adjusted estimate</p>
             </div>
             <div className="trip-result__field">
-              <span className="trip-result__icon" aria-hidden="true">
-                📍
-              </span>
+              <span className="trip-result__icon" aria-hidden="true"><MapPin size={20} /></span>
               <dt>Distance</dt>
               <dd>{result.distance_km} km</dd>
             </div>
             <div className="trip-result__field">
-              <span className="trip-result__icon" aria-hidden="true">
-                🛢️
-              </span>
+              <span className="trip-result__icon" aria-hidden="true"><Droplets size={20} /></span>
               <dt>Full Tank Cost</dt>
               {tankCostLbp != null ? (
                 <>
