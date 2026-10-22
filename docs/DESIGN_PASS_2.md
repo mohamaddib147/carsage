@@ -449,6 +449,13 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
   6. Layout shift is under 0.1 at 390, 320 and 1280 px for 0, 1 and 4 cars, and axe finds no violations.
 - **Recommended model:** Opus 5.5. **Estimate:** 9 h. Replaces T11 (5 h).
 - **Retest:** `DashboardPage.test.jsx` (largely rewritten), `activeCarPages.test.jsx`, `ActiveCarContext.test.jsx`, the CAR-74 loading-skeleton tests, layout shift, axe.
+- **Implementation note (CAR-79, 2026-10-22): where the build differs from the plan above, and why.**
+  - **Hero data:** the odometer, last fill-up and next service come from `carSnapshot()` (CAR-78); the economy tile shows `realEfficiency()` directly (the real average with its fill-up count, empty below one measured interval), not the snapshot's rated fallback, matching the §3.4 tile.
+  - **Default badge:** sourced from `profiles.default_car_id` with a new user-scoped read (approved), so the page now makes six reads, not five; a failed profiles read just hides the badge. White on the brand primary (AA), not the 16% accent tile (which only reaches ~4:1 for small text).
+  - **Car photo:** intentionally omitted (declined at the photo-code boundary); the hero uses the `BrandBadge`, as the mobile reference does.
+  - **Display formatting:** `lib/carFormat.js` tidies drivetrain/transmission for the spec line (unit-tested); it never changes what is stored.
+  - **Layout shift on Slow 4G (DevTools preset, data delayed after the cars):** the hero reserves the loading skeleton's height (19.5rem, 33.5rem at phone width) so the empty/error card does not shrink it; each tile reserves 7.5rem; the lower cards reserve 13rem with a taller month skeleton. Measured CLS: 0 cars ~0.00; 1 and 3 cars at 1280/390/320 px all under 0.1 (most 0.01-0.04). A hand-written test cannot see layout, so `DashboardPage.data.test.jsx` guards the reserve rules and the skeleton shapes instead, and the CLS was measured in a real browser.
+  - **Dead CSS removed:** the old `.dashboard-car-card*`, `.dashboard-module-card*`, `.dashboard-car-list*` and the CAR-74 `--waiting` visibility rule; the CAR-75 card-entrance fade and the hover-lift/reduced-motion rules were repointed to `.dashboard-hero`/`.dashboard-lower__card` and `.dashboard-action`, and the icon-tile rule to `.dashboard-tile__icon` (tests updated).
 
 ### D6 (CAR-80). Landing refresh
 - **Summary:** Landing with D2 icons, a static "Example" preview, bento CSS, a fixed headline and a lazy chunk for everything below the hero. Replaces T13.

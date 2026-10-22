@@ -88,7 +88,7 @@ describe("no layout jump while a page loads (CAR-74)", () => {
     expect(rule(".route-loading")).toMatch(/min-height: 100vh/);
   });
 
-  it("the Dashboard sections after Your Cars stay invisible only while the car list is still 'waiting' (which the page drops after 1.5 s)", () => {
-    expect(rule(".dashboard-section:has(.dashboard-car-list--waiting) ~ *")).toMatch(/visibility: hidden/);
-  });
+  // CAR-79 replaced the Dashboard's "Your Cars" list (and its --waiting visibility trick) with the hero and the three
+  // lower cards; those reserve their own height (min-height on the tiles and the title block), so no visibility trick
+  // is needed. See DashboardPage.data.test.jsx for the reserved-height guards.
 });

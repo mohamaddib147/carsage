@@ -44,7 +44,7 @@ describe("icon tiles (CAR-76)", () => {
   it("every icon tile uses the tile colour with the accent text colour", () => {
     const block = /(\.scan-card__icon,[^{]*)\{([^}]*)\}/.exec(css);
     expect(block, "the shared icon tile rule").not.toBeNull();
-    for (const selector of [".scan-card__icon", ".dashboard-module-card__icon", ".landing-feature-card__icon", ".landing-pillar__icon", ".car-profile__field-icon"]) {
+    for (const selector of [".scan-card__icon", ".dashboard-tile__icon", ".landing-feature-card__icon", ".landing-pillar__icon", ".car-profile__field-icon"]) {
       expect(block[1]).toContain(selector);
     }
     expect(block[2]).toMatch(/background-color: var\(--color-icon-tile\)/);

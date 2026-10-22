@@ -101,8 +101,8 @@ describe("the control: the same app does send requests once signed in (so the sp
     supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: "token-1" } } });
     renderApp("/dashboard");
 
-    expect(await screen.findByRole("heading", { level: 1, name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Welcome back" })).toBeInTheDocument();
     await settle();
-    expect(requests()).toEqual(expect.arrayContaining(["from(cars)", "from(fuel_logs)", "from(maintenance_items)"]));
+    expect(requests()).toEqual(expect.arrayContaining(["from(cars)", "from(fuel_logs)", "from(maintenance_items)", "from(profiles)"]));
   });
 });

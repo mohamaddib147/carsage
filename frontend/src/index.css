@@ -1146,22 +1146,13 @@ textarea:focus {
   margin-top: calc(var(--spacing-unit) * 5);
 }
 
-.dashboard-section__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: calc(var(--spacing-unit) * 2);
-  flex-wrap: wrap;
-}
 
-.dashboard-section__header h2 {
-  margin-bottom: 0;
-}
 
 .dashboard-add-car {
   display: inline-flex;
   align-items: center;
   gap: calc(var(--spacing-unit) * 0.75);
+  flex-shrink: 0;
   padding: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 2);
   border-radius: 999px;
   background-color: var(--color-input-bg);
@@ -1169,27 +1160,14 @@ textarea:focus {
   text-decoration: none;
   font-weight: 600;
   font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .dashboard-add-car:hover {
   background-color: var(--color-border);
 }
 
-.dashboard-car-list {
-  list-style: none;
-  margin: calc(var(--spacing-unit) * 2) 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--spacing-unit) * 1.5);
-}
 
-.dashboard-car-card {
-  padding: calc(var(--spacing-unit) * 2.5);
-  background-color: var(--color-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
-}
 
 /* CAR-55: a small brand-identifying badge — the manufacturer's real logo
    mark (.brand-badge--logo) where BrandBadge has one, else a colored
@@ -1213,81 +1191,17 @@ textarea:focus {
   vertical-align: -0.2em;
 }
 
-.dashboard-car-card__title {
-  display: block;
-  font-weight: 700;
-  font-size: 1.125rem;
-  color: var(--color-primary);
-  text-decoration: none;
-  overflow-wrap: break-word;
-}
 
-.dashboard-car-card__title:hover {
-  text-decoration: underline;
-}
 
-.dashboard-car-card__meta {
-  margin: calc(var(--spacing-unit) * 0.5) 0 0;
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-  overflow-wrap: break-word;
-}
 
-.dashboard-car-card__specs {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: var(--spacing-unit) calc(var(--spacing-unit) * 2);
-  margin: calc(var(--spacing-unit) * 1.5) 0 0;
-  padding-top: calc(var(--spacing-unit) * 1.5);
-  border-top: 1px solid var(--color-border);
-  /* CAR-78 slow-connection fix: the at-a-glance figures arrive after the car list, so this reserves the tallest
-     realistic block for both the skeleton and the loaded data (a long "Last fill-up" value wraps to three lines at
-     phone width). Short cars keep a little spare room; nothing below the card moves when the data lands. Replaced
-     by the hero tiles in CAR-79. align-content keeps the rows at the top of the reserved area. */
-  min-height: 7rem;
-  align-content: start;
-}
 
-@media (max-width: 600px) {
-  .dashboard-car-card__specs {
-    min-height: 12rem;
-  }
-}
 
 /* The skeleton rows reserve the same height as a loaded row (a label line plus a value that can wrap to two). */
-.skeleton-bar--snapshot-label {
-  width: 60%;
-  height: 0.7rem;
-  margin-bottom: calc(var(--spacing-unit) * 0.5);
-}
 
-.skeleton-bar--snapshot-value {
-  width: 85%;
-  height: 2.4rem;
-}
 
-.dashboard-car-card__spec dt {
-  color: var(--color-text-muted);
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
 
-.dashboard-car-card__spec dd {
-  margin: calc(var(--spacing-unit) * 0.25) 0 0;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
 
-.dashboard-car-card__hint {
-  margin: calc(var(--spacing-unit) * 1.5) 0 0;
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-}
 
-.dashboard-car-card__hint a {
-  color: var(--color-primary);
-}
 
 .dashboard-diy-empty {
   color: var(--color-text-muted);
@@ -1368,26 +1282,9 @@ textarea:focus {
    skeletons or data, as soon as the cars are in (well under a second). The
    page drops the --waiting class after 1.5 s (CARS_WAIT_MS), so a slow or
    failing connection never keeps them hidden. */
-.dashboard-section:has(.dashboard-car-list--waiting) ~ * {
-  visibility: hidden;
-}
 
-.dashboard-car-card--skeleton .skeleton-bar--title {
-  width: 55%;
-  height: 1.25rem;
-  margin-bottom: calc(var(--spacing-unit) * 1.5);
-}
 
-.dashboard-car-card--skeleton .skeleton-bar--meta {
-  width: 40%;
-  height: 0.875rem;
-  margin-bottom: calc(var(--spacing-unit) * 2);
-}
 
-.dashboard-car-card--skeleton .skeleton-bar--specs {
-  width: 100%;
-  height: 2.5rem;
-}
 
 .dashboard-stat-tile--skeleton .skeleton-bar--stat-value {
   width: 4rem;
@@ -1519,54 +1416,372 @@ textarea:focus {
   font-size: 0.8125rem;
 }
 
-.dashboard-modules {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: calc(var(--spacing-unit) * 3);
+/* ---- CAR-79 Dashboard v2: hero, tiles, switcher chips and the three lower cards. ---- */
+
+.dashboard-hero-section {
   margin-top: calc(var(--spacing-unit) * 2);
 }
 
-.dashboard-module-card {
-  display: block;
+/* The hero card for the active car. A soft surface card; the four tiles sit inside it. The min-height matches the
+   loading skeleton (measured), so whichever resolves — the real hero, the empty card or the error card — the hero box
+   is the same size and nothing below it moves when the cars arrive (CLS measured on Slow 4G). Taller at phone width,
+   where the tiles stack two by two. */
+.dashboard-hero {
   padding: calc(var(--spacing-unit) * 3);
   background-color: var(--color-surface);
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+  min-height: 19.5rem;
+}
+
+@media (max-width: 719px) {
+  .dashboard-hero {
+    min-height: 33.5rem;
+  }
+}
+
+/* The empty ("Add your first car") and error states reuse the hero card, centred in its reserved height. */
+.dashboard-hero--message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.dashboard-hero--message .btn-primary {
+  margin-top: calc(var(--spacing-unit) * 2);
+}
+
+.dashboard-hero__empty-icon {
+  display: inline-flex;
+  color: var(--color-accent-text);
+}
+
+.dashboard-hero__empty-title {
+  margin: calc(var(--spacing-unit) * 1.5) 0 calc(var(--spacing-unit) * 0.5);
+}
+
+.dashboard-hero__head {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--spacing-unit) * 2);
+}
+
+.dashboard-hero__badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.dashboard-hero__title-block {
+  min-width: 0;
+  flex: 1;
+  /* Reserve the name-plus-specs height so the Default badge (loaded from profiles a moment later) and a wrapped name
+     never push the tiles down (CLS measured on Slow 4G). Taller at phone width, where the name and specs wrap. */
+  min-height: 3.75rem;
+}
+
+@media (max-width: 600px) {
+  .dashboard-hero__title-block {
+    min-height: 6rem;
+  }
+}
+
+.dashboard-hero__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 1.5);
+  margin: 0;
+  font-size: 1.375rem;
+}
+
+.dashboard-hero__name {
+  color: var(--color-primary);
   text-decoration: none;
-  color: var(--color-text);
+  overflow-wrap: anywhere;
 }
 
-.dashboard-module-card:hover {
-  box-shadow: 0 4px 16px rgba(43, 43, 43, 0.08);
+.dashboard-hero__name:hover {
+  text-decoration: underline;
 }
 
-.dashboard-module-card__icon {
+.dashboard-hero__default {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px calc(var(--spacing-unit) * 1.25);
+  border-radius: 999px;
+  /* White on the brand primary (AA on every theme, guaranteed by themeContrast.test.js); the 16% accent tile only
+     reaches ~4:1 for small text, so it is kept for icons, not for this badge's words. */
+  background-color: var(--color-primary);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.dashboard-hero__specs {
+  margin: calc(var(--spacing-unit) * 0.75) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+/* The four stat tiles: two by two at phone width, four across when there is room. */
+.dashboard-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin: calc(var(--spacing-unit) * 2.5) 0;
+}
+
+@media (min-width: 720px) {
+  .dashboard-tiles {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.dashboard-tile {
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--spacing-unit) * 2);
+  background-color: var(--color-input-bg);
+  border-radius: var(--radius-base);
+  /* Every state (skeleton, empty, value) is reserved to this height, so the hero never grows when the data lands. */
+  min-height: 7.5rem;
+}
+
+.dashboard-tile__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  margin-bottom: calc(var(--spacing-unit) * 1.5);
+  width: 36px;
+  height: 36px;
+  margin-bottom: calc(var(--spacing-unit) * 1);
   border-radius: var(--radius-base);
-  background-color: var(--color-input-bg);
+}
+
+.dashboard-tile__label {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dashboard-tile__value {
+  margin: calc(var(--spacing-unit) * 0.5) 0 0;
   font-size: 1.25rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
-.dashboard-module-card h3 {
-  margin-top: 0;
+.dashboard-tile__caption {
+  margin: calc(var(--spacing-unit) * 0.25) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
 }
 
-.dashboard-module-card p {
-  margin-bottom: 0;
+.dashboard-tile__empty {
+  margin: calc(var(--spacing-unit) * 0.5) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
 }
 
-.dashboard-module-card__cta {
-  display: inline-block;
-  margin-top: calc(var(--spacing-unit) * 2);
+.dashboard-tile__empty a {
+  color: var(--color-primary);
+}
+
+.dashboard-tile__loading {
+  margin-top: calc(var(--spacing-unit) * 0.5);
+}
+
+.skeleton-bar--tile-value {
+  display: block;
+  width: 70%;
+  height: 1.25rem;
+  margin-bottom: calc(var(--spacing-unit) * 0.75);
+}
+
+.skeleton-bar--tile-caption {
+  display: block;
+  width: 50%;
+  height: 0.8125rem;
+}
+
+.skeleton-bar--action {
+  display: block;
+  height: 44px;
+  border-radius: var(--radius-base);
+}
+
+/* The three fuel tiles share one request, so one error line (with Try again) spans their columns. */
+.dashboard-tiles__fuel-error {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1.5);
+  padding: calc(var(--spacing-unit) * 2);
+  background-color: var(--color-input-bg);
+  border-radius: var(--radius-base);
+}
+
+.dashboard-tiles__service-error {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 0.5);
+  padding: calc(var(--spacing-unit) * 2);
+  background-color: var(--color-input-bg);
+  border-radius: var(--radius-base);
+  min-height: 7.5rem;
+}
+
+.dashboard-tile__error-text {
+  margin: 0;
+  color: var(--color-danger);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.dashboard-tile__error-link {
   color: var(--color-primary);
   font-weight: 600;
   font-size: 0.875rem;
 }
+
+/* Quick actions: links styled as buttons, 44 px tall, two by two at phone width. */
+.dashboard-hero__actions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: calc(var(--spacing-unit) * 1.5);
+}
+
+@media (min-width: 720px) {
+  .dashboard-hero__actions {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.dashboard-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--spacing-unit) * 1);
+  min-height: 44px;
+  padding: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 1.5);
+  border-radius: var(--radius-base);
+  background-color: var(--color-primary);
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.dashboard-action:hover {
+  background-color: var(--color-primary-hover);
+}
+
+/* The car switcher: a chip per car (the active one pressed), plus Add another car. Chips scroll sideways on a phone. */
+.dashboard-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--spacing-unit) * 2);
+  margin-top: calc(var(--spacing-unit) * 2);
+}
+
+.dashboard-switcher__list {
+  display: flex;
+  gap: calc(var(--spacing-unit) * 1);
+  margin: 0;
+  padding: calc(var(--spacing-unit) * 0.5) 0;
+  list-style: none;
+  overflow-x: auto;
+}
+
+.dashboard-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 0.75);
+  min-height: 40px;
+  padding: calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 1.5);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dashboard-chip:hover {
+  border-color: var(--color-primary);
+}
+
+.dashboard-chip[aria-pressed="true"] {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+  color: #ffffff;
+}
+
+.dashboard-chip__name {
+  overflow-wrap: anywhere;
+}
+
+/* The three summary cards below the hero, equal width on a wide screen and stacked on a phone. */
+.dashboard-lower {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: calc(var(--spacing-unit) * 2.5);
+  margin-top: calc(var(--spacing-unit) * 4);
+}
+
+@media (min-width: 900px) {
+  .dashboard-lower {
+    grid-template-columns: repeat(3, 1fr);
+    align-items: start;
+  }
+}
+
+.dashboard-lower__card {
+  margin-top: 0;
+  padding: calc(var(--spacing-unit) * 3);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+  /* Reserve each card's height so its own skeleton -> data swap, which arrives after the cars, does not push the cards
+     below it (stacked at phone width) or the page footer (CLS measured on Slow 4G). A card with a lot of content (a
+     long maintenance list, or the month card's cost breakdown) still grows past this, but the common and empty cases
+     do not; the skeletons below are sized close to their loaded content to keep that growth small. */
+  min-height: 13rem;
+}
+
+/* The month card's skeleton stands in for the value, label, the fuel/other split and the link, so it is close to the
+   loaded height (the cost breakdown is the tallest of the three cards). */
+.dashboard-stat-tile--skeleton-tall {
+  min-height: 11rem;
+}
+
+.dashboard-lower__card > h2 {
+  margin-top: 0;
+}
+
+/* A smaller secondary button, for the inline "Try again" in the fuel-tiles error. */
+.btn-secondary--sm {
+  padding: calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 1.5);
+  font-size: 0.875rem;
+}
+
+
+
+
+
+
+
 
 .route-params-card {
   max-width: 480px;
@@ -3727,7 +3942,7 @@ textarea[aria-invalid="true"] {
 
 /* Tiles that hold an icon share one tint, and the icon takes the AA-safe accent text colour. */
 .scan-card__icon,
-.dashboard-module-card__icon,
+.dashboard-tile__icon,
 .landing-feature-card__icon,
 .landing-pillar__icon,
 .car-profile__field-icon {
@@ -3783,9 +3998,10 @@ textarea[aria-invalid="true"] {
   animation: fade-in var(--motion-slow) var(--ease-out) backwards;
 }
 
-/* Card entrance: the Dashboard's real car cards (not their skeletons) fade in one after another,
-   40 ms apart, the first six only (--i is set in DashboardPage.jsx), after an in-app navigation only. */
-:root[data-routed] .dashboard-car-card:not(.dashboard-car-card--skeleton) {
+/* Card entrance (CAR-79): the Dashboard's hero and the three lower cards fade in one after another, 40 ms apart
+   (--i is set on the lower cards in DashboardPage.jsx; the hero has none, so it is first), after an in-app
+   navigation only. */
+:root[data-routed] .dashboard-hero, :root[data-routed] .dashboard-lower__card {
   animation: fade-in var(--motion-slow) var(--ease-out) backwards;
   animation-delay: calc(var(--i, 0) * 40ms);
 }
@@ -3803,15 +4019,15 @@ textarea[aria-invalid="true"] {
     opacity var(--motion-fast) var(--ease-in-out);
 }
 
-.dashboard-module-card,
+.dashboard-action,
 .landing-feature-card {
   transition:
     transform var(--motion-fast) var(--ease-out),
     box-shadow var(--motion-fast) var(--ease-out);
 }
 
-.dashboard-module-card:hover,
-.dashboard-module-card:focus-visible,
+.dashboard-action:hover,
+.dashboard-action:focus-visible,
 .landing-feature-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 18px rgba(43, 43, 43, 0.1);
@@ -3826,7 +4042,7 @@ textarea[aria-invalid="true"] {
    its static form above). */
 @media (prefers-reduced-motion: reduce) {
   :root[data-routed] .app-main > :not(.site-footer):not(.route-loading),
-  :root[data-routed] .dashboard-car-card:not(.dashboard-car-card--skeleton),
+  :root[data-routed] .dashboard-hero, :root[data-routed] .dashboard-lower__card,
   .site-nav__menu-list {
     animation: none;
   }
@@ -3836,13 +4052,13 @@ textarea[aria-invalid="true"] {
   .btn-accent,
   .site-nav__logout,
   .site-nav__auth-link,
-  .dashboard-module-card,
+  .dashboard-action,
   .landing-feature-card {
     transition: none;
   }
 
-  .dashboard-module-card:hover,
-  .dashboard-module-card:focus-visible,
+  .dashboard-action:hover,
+  .dashboard-action:focus-visible,
   .landing-feature-card:hover {
     transform: none;
   }

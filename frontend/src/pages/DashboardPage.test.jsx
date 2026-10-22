@@ -1,8 +1,10 @@
-// Tests for the Dashboard / Home screen: the empty state (no car yet),
-// showing the user's saved car(s), "Add Another Car" routing to Car
-// Onboarding, and the two Trip Planner / AI Advisor module cards.
+// Tests for the Dashboard / Home screen lower cards: the DIY fix-rate stat, the Maintenance-due card and the
+// "This month, all cars" cost card (CAR-62/CAR-64). The CAR-79 hero, tiles, switcher, requests and per-state
+// behaviour are covered in DashboardPage.data.test.jsx; the lower cards were kept largely unchanged by CAR-79 and
+// their detailed logic is tested here. useActiveCar falls back to inert defaults without a provider (the hero shows
+// the first car), which is all these lower-card tests need.
 
-import { act, render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -75,6 +77,8 @@ function mockCarsList(
     if (table === "maintenance_items") return userScoped(table, maintenanceItems);
     if (table === "fuel_logs") return userScoped(table, readings);
     if (table === "car_expenses") return userScoped(table, expenses);
+    // CAR-79: the Default-car badge reads profiles.default_car_id (no default here, so the badge never shows).
+    if (table === "profiles") return { select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { default_car_id: null }, error: null }) }) }) };
     throw new Error(`mockCarsList: unexpected table "${table}"`);
   });
 
@@ -103,177 +107,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   supabase.auth.getSession.mockResolvedValue({
     data: { session: { user: LOGGED_IN_USER } },
-  });
-});
-
-describe("DashboardPage — vehicle summary", () => {
-  it("shows an empty state prompting onboarding when the user has no car (edge case)", async () => {
-    mockCarsList({ data: [], error: null });
-
-    renderDashboard();
-
-    expect(
-      await screen.findByText("You haven't added a car yet."),
-    ).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: "Add Your Car" });
-    expect(link).toHaveAttribute("href", "/cars/new");
-  });
-
-  it("shows the user's saved car with an Add Another Car link to Car Onboarding (normal case)", async () => {
-    mockCarsList({
-      data: [{ id: "car-1", make: "Toyota", model: "Corolla", year: 2020 }],
-      error: null,
-    });
-
-    renderDashboard();
-
-    expect(await screen.findByText("2020 Toyota Corolla")).toBeInTheDocument();
-    const addAnother = screen.getByRole("link", { name: "Add Another Car" });
-    expect(addAnother).toHaveAttribute("href", "/cars/new");
-  });
-
-  it("lists more than one saved car if present", async () => {
-    mockCarsList({
-      data: [
-        { id: "car-1", make: "Toyota", model: "Corolla", year: 2020 },
-        { id: "car-2", make: "Honda", model: "Civic", year: 2019 },
-      ],
-      error: null,
-    });
-
-    renderDashboard();
-
-    expect(await screen.findByText("2020 Toyota Corolla")).toBeInTheDocument();
-    expect(screen.getByText("2019 Honda Civic")).toBeInTheDocument();
-  });
-
-  it("shows a brand badge next to a recognized make, and none for an unrecognized one (CAR-55)", async () => {
-    mockCarsList({
-      data: [
-        { id: "car-1", make: "Ferrari", model: "488 GTB", year: 2019 },
-        { id: "car-2", make: "Yugo", model: "45", year: 1985 },
-      ],
-      error: null,
-    });
-
-    renderDashboard();
-
-    expect(await screen.findByLabelText("Ferrari brand badge")).toBeInTheDocument();
-    expect(screen.getByText("2019 Ferrari 488 GTB")).toBeInTheDocument();
-    expect(screen.getByText("1985 Yugo 45")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Yugo brand badge")).not.toBeInTheDocument();
-  });
-
-  // CAR-74 follow-up: a failed lookup used to be shown as "no car yet", which is wrong and has no way out.
-  it("shows an error, not the empty state, if loading the cars fails (details in the failure tests below)", async () => {
-    mockCarsList({ data: null, error: { message: "network error" } });
-
-    renderDashboard();
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't load your cars.");
-    expect(screen.queryByText("You haven't added a car yet.")).not.toBeInTheDocument();
-  });
-});
-
-describe("DashboardPage — quick access", () => {
-  it("shows the three module cards, linking to Trip Planner, AI Advisor and the Fuel Log (CAR-53)", async () => {
-    mockCarsList({ data: [], error: null });
-
-    renderDashboard();
-    await screen.findByText("You haven't added a car yet.");
-
-    // Scoped to the Quick Access section: the DIY empty state (a different
-    // section, shown here since there's no feedback yet) also links to "AI Advisor".
-    const quickAccess = within(screen.getByRole("heading", { name: "Quick Access" }).closest("section"));
-    expect(quickAccess.getByRole("link", { name: /Trip Planner/ })).toHaveAttribute("href", "/trip-planner");
-    expect(quickAccess.getByRole("link", { name: /AI Advisor/ })).toHaveAttribute("href", "/advisor");
-    expect(quickAccess.getByRole("link", { name: /Fuel Log/ })).toHaveAttribute("href", "/fuel-log");
-  });
-});
-
-describe("DashboardPage — specs summary on each car", () => {
-  const FULL_CAR = {
-    id: "car-1",
-    make: "Mercedes-Benz",
-    model: "C230 Kompressor",
-    year: 2005,
-    engine_type: "1.8L Inline-4",
-    fuel_type: "Gasoline",
-    license_plate: "B 123456",
-    fuel_efficiency: 9.5,
-    cylinders: 4,
-    drivetrain: "rwd",
-    transmission: "Automatic",
-    fuel_tank_capacity_liters: 62,
-  };
-
-  it("shows the saved specs with units next to the car's name (normal case)", async () => {
-    mockCarsList({ data: [FULL_CAR], error: null });
-
-    renderDashboard();
-
-    const specs = await screen.findByLabelText("Mercedes-Benz C230 Kompressor specifications");
-    // CAR-78: the rated km/L moved to the snapshot's Economy row, labelled as rated (no fill-ups logged here).
-    expect(specs).not.toHaveTextContent("Efficiency");
-    expect(await screen.findByLabelText("Mercedes-Benz C230 Kompressor at a glance")).toHaveTextContent("Economy9.5 km/L (rated)");
-    expect(specs).toHaveTextContent("Cylinders4");
-    expect(specs).toHaveTextContent("Drivetrainrwd");
-    expect(specs).toHaveTextContent("TransmissionAutomatic");
-    expect(specs).toHaveTextContent("Fuel tank62 L");
-    // the existing meta line is still there
-    expect(screen.getByText("1.8L Inline-4 • Gasoline • B 123456")).toBeInTheDocument();
-  });
-
-  it("shows only the specs that are set — no blanks or dashes (edge case)", async () => {
-    mockCarsList({
-      data: [{ id: "car-1", make: "Toyota", model: "Corolla", year: 2020, cylinders: 4, fuel_tank_capacity_liters: 50 }],
-      error: null,
-    });
-
-    renderDashboard();
-
-    const specs = await screen.findByLabelText("Toyota Corolla specifications");
-    expect(specs).toHaveTextContent("Cylinders4");
-    expect(specs).toHaveTextContent("Fuel tank50 L");
-    expect(specs).not.toHaveTextContent(/Efficiency|Drivetrain|Transmission|—/);
-  });
-
-  it("formats numbers that arrive as strings (Postgres numeric) without extra zeros", async () => {
-    mockCarsList({
-      data: [{ id: "car-1", make: "Honda", model: "Civic", year: 2019, fuel_efficiency: "11.50", fuel_tank_capacity_liters: "47.0" }],
-      error: null,
-    });
-
-    renderDashboard();
-
-    const specs = await screen.findByLabelText("Honda Civic specifications");
-    expect(await screen.findByLabelText("Honda Civic at a glance")).toHaveTextContent("Economy11.5 km/L (rated)");
-    expect(specs).toHaveTextContent("Fuel tank47 L");
-  });
-
-  it("keeps each car's specs on its own card, never mixing them", async () => {
-    mockCarsList({
-      data: [
-        { id: "car-1", make: "Toyota", model: "Corolla", year: 2020, cylinders: 4 },
-        { id: "car-2", make: "Ford", model: "Mustang", year: 2018, cylinders: 8 },
-      ],
-      error: null,
-    });
-
-    renderDashboard();
-
-    expect(await screen.findByLabelText("Toyota Corolla specifications")).toHaveTextContent("Cylinders4");
-    expect(screen.getByLabelText("Ford Mustang specifications")).toHaveTextContent("Cylinders8");
-  });
-
-  it("points a car with no specs at its profile instead of leaving the card bare (edge case)", async () => {
-    mockCarsList({ data: [{ id: "car-9", make: "Kia", model: "Rio", year: 2016 }], error: null });
-
-    renderDashboard();
-
-    const hint = await screen.findByRole("link", { name: "car profile" });
-    expect(hint).toHaveAttribute("href", "/cars/car-9");
-    expect(screen.queryByLabelText("Kia Rio specifications")).not.toBeInTheDocument();
   });
 });
 
@@ -530,7 +363,7 @@ describe("DashboardPage — All cars, this month (CAR-64)", () => {
     renderWithSwitch();
 
     await within(await screen.findByRole("region", { name: "All cars, this month" })).findByText("spent on all your cars this month");
-    expect(within(tile()).getByRole("heading")).toHaveTextContent("All cars, this month (October 2026)");
+    expect(within(tile()).getByRole("heading")).toHaveTextContent("This month, all cars (October 2026)");
     const total = () => tile().querySelector(".dashboard-stat-tile__value").textContent;
     expect(total()).toBe("$70.00 (6,279,000 LBP)");
     expect(tile().querySelector(".dashboard-costs__split").textContent).toBe("Fuel$60.00 (5,382,000 LBP)Other costs$10.00 (897,000 LBP)");
@@ -570,131 +403,5 @@ describe("DashboardPage — All cars, this month (CAR-64)", () => {
 
     const message = await within(await screen.findByRole("region", { name: "All cars, this month" })).findByText(/Couldn't load this month's costs/);
     expect(message).not.toHaveTextContent(/relation/);
-  });
-});
-
-describe("DashboardPage — the car list fails to load, or is empty (CAR-74 follow-up)", () => {
-  const ONE_CAR = { data: [{ id: "car-1", make: "Honda", model: "CR-V", year: 2018 }], error: null };
-
-  // Each way the request can fail. The first three come back as { error } (what supabase-js does for a network
-  // failure, an expired or missing token, and a server fault); the last is a request that THROWS.
-  const FAILURES = [
-    ["a network error (status 0)", { kind: "reply", reply: { data: null, error: { message: "TypeError: Failed to fetch" }, status: 0 } }],
-    ["a 401 (token expired or missing)", { kind: "reply", reply: { data: null, error: { code: "PGRST301", message: "JWT expired" }, status: 401 } }],
-    ["a 500 (server fault)", { kind: "reply", reply: { data: null, error: { code: "XX000", message: "internal error" }, status: 500 } }],
-    ["a request that throws", { kind: "throw" }],
-  ];
-
-  /** Mocks the car list to fail the given way, and returns the mock so a test can change the next answer. */
-  function mockFailure(failure) {
-    const mocks = mockCarsList({ data: [], error: null });
-    if (failure.kind === "throw") mocks.order.mockRejectedValue(new TypeError("Failed to fetch"));
-    else mocks.order.mockResolvedValue(failure.reply);
-    return mocks;
-  }
-
-  describe.each(FAILURES)("when the request fails with %s", (_label, failure) => {
-    it("shows a clear error with a Try again button, not 'no car yet', and the sections below are shown", async () => {
-      mockFailure(failure);
-      renderDashboard();
-    const container = document.body;
-
-      const alert = await screen.findByRole("alert");
-      expect(alert).toHaveTextContent("Couldn't load your cars. Check your connection and try again.");
-      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
-      expect(screen.queryByText("You haven't added a car yet.")).not.toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: "Add Your Car" })).not.toBeInTheDocument();
-      // Nothing from the server's reply is shown.
-      expect(alert.textContent).not.toMatch(/JWT|PGRST|internal error|Failed to fetch/);
-
-      // The sections below "Your Cars" are hidden by CSS only while the car list is a skeleton: it must be gone.
-      expect(container.querySelector(".dashboard-car-card--skeleton")).not.toBeInTheDocument();
-      expect(screen.queryByText("Loading your cars...")).not.toBeInTheDocument();
-      for (const name of ["All cars, this month", "Maintenance due", "DIY suggestion success rate"]) {
-        expect(screen.getByRole("region", { name })).toBeInTheDocument();
-      }
-      expect(screen.getByRole("heading", { name: "Quick Access" })).toBeInTheDocument();
-    });
-
-    it("Try again after the server recovers shows the cars", async () => {
-      const user = userEvent.setup();
-      const mocks = mockFailure(failure);
-      renderDashboard();
-      const retry = await screen.findByRole("button", { name: "Try again" });
-
-      mocks.order.mockReset();
-      mocks.order.mockResolvedValue(ONE_CAR);
-      await user.click(retry);
-
-      expect(await screen.findByText(/CR-V/)).toBeInTheDocument();
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
-      expect(mocks.order).toHaveBeenCalledTimes(1);
-    });
-
-    it("if it fails again, the error and the button are still there to try once more", async () => {
-      const user = userEvent.setup();
-      const mocks = mockFailure(failure);
-      renderDashboard();
-      await user.click(await screen.findByRole("button", { name: "Try again" }));
-
-      expect(await screen.findByRole("alert")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
-      expect(mocks.order).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  it("while the request is out the sections stay behind the skeleton; when it fails they are released", async () => {
-    const mocks = mockCarsList({ data: [], error: null });
-    let fail;
-    mocks.order.mockReturnValue(new Promise((resolve) => { fail = resolve; }));
-    renderDashboard();
-    const container = document.body;
-
-    expect(await screen.findByText("Loading your cars...")).toBeInTheDocument();
-    expect(container.querySelector(".dashboard-car-card--skeleton")).toBeInTheDocument();
-    expect(container.querySelector(".dashboard-car-list--waiting")).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-
-    await act(async () => fail({ data: null, error: { message: "boom" }, status: 500 }));
-
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
-    expect(container.querySelector(".dashboard-car-card--skeleton")).not.toBeInTheDocument();
-  });
-
-  it("a request that stays out (quiet retries on a bad connection) releases the sections after 1.5 s, still showing the skeleton, and ends in the error", async () => {
-    const mocks = mockCarsList({ data: [], error: null });
-    let fail;
-    mocks.order.mockReturnValue(new Promise((resolve) => { fail = resolve; }));
-    renderDashboard();
-    await screen.findByText("Loading your cars...");
-    const list = () => document.querySelector(".dashboard-car-list");
-
-    // At first the sections below are held back (the layout-shift protection)...
-    expect(list()).toHaveClass("dashboard-car-list--waiting");
-    await act(() => new Promise((resolve) => setTimeout(resolve, 1000)));
-    expect(list()).toHaveClass("dashboard-car-list--waiting");
-
-    // ...but only briefly: past 1.5 s they are released although the list is still loading.
-    await act(() => new Promise((resolve) => setTimeout(resolve, 700)));
-    expect(list()).not.toHaveClass("dashboard-car-list--waiting");
-    expect(screen.getByText("Loading your cars...")).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-
-    await act(async () => fail({ data: null, error: { message: "boom" }, status: 0 }));
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
-    expect(document.querySelector(".dashboard-car-list--waiting")).not.toBeInTheDocument();
-  });
-
-  it("no cars (a good reply with an empty list) is not an error: the 'add your first car' prompt, no alert, no Try again", async () => {
-    mockCarsList({ data: [], error: null, status: 200 });
-    renderDashboard();
-    const container = document.body;
-
-    expect(await screen.findByText("You haven't added a car yet.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Add Your Car" })).toHaveAttribute("href", "/cars/new");
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
-    expect(container.querySelector(".dashboard-car-card--skeleton")).not.toBeInTheDocument();
   });
 });

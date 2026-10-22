@@ -123,7 +123,7 @@ describe("what moves is a fixed list (CAR-75)", () => {
 
   it("the page fade and the card entrance are the fade; the menu is the only thing that rises", () => {
     const users = (name) => normal.filter((rule) => new RegExp(`(^|\\s)${name}(\\s|$)`).test(prop(rule, "animation") ?? "")).map((rule) => rule.selector);
-    expect(users("fade-in").sort()).toEqual([":root[data-routed] .app-main > :not(.site-footer):not(.route-loading)", ":root[data-routed] .dashboard-car-card:not(.dashboard-car-card--skeleton)"].sort());
+    expect(users("fade-in").sort()).toEqual([":root[data-routed] .app-main > :not(.site-footer):not(.route-loading)", ":root[data-routed] .dashboard-hero, :root[data-routed] .dashboard-lower__card"].sort());
     expect(users("menu-in")).toEqual([".site-nav__menu-list"]);
   });
 
@@ -133,10 +133,11 @@ describe("what moves is a fixed list (CAR-75)", () => {
     expect(page.selector).toContain(":not(.route-loading)");
   });
 
-  it("the card entrance staggers 40 ms apart, only the first six cards", () => {
-    const card = normal.find((rule) => rule.selector === ":root[data-routed] .dashboard-car-card:not(.dashboard-car-card--skeleton)");
+  it("the hero and the three lower cards stagger 40 ms apart (--i)", () => {
+    const card = normal.find((rule) => rule.selector === ":root[data-routed] .dashboard-hero, :root[data-routed] .dashboard-lower__card");
     expect(prop(card, "animation-delay")).toBe("calc(var(--i, 0) * 40ms)");
-    expect(readFileSync("src/pages/DashboardPage.jsx", "utf8")).toMatch(/"--i": Math\.min\(index, 5\)/);
+    // CAR-79: the three lower cards each carry an --i (0, 1, 2) so they stagger; the hero has none, so it is first.
+    expect(readFileSync("src/pages/DashboardPage.jsx", "utf8")).toMatch(/"--i": 2 \}/);
   });
 });
 
@@ -164,14 +165,14 @@ describe("reduced motion (CAR-75)", () => {
     expect(net.decls).toMatch(/animation-duration: 0\.01ms !important/);
     expect(net.decls).toMatch(/animation-iteration-count: 1 !important/);
     expect(net.decls).toMatch(/transition-duration: 0\.01ms !important/);
-    const off = reduced.find((rule) => rule.selector.includes(".dashboard-module-card") && prop(rule, "transition") === "none");
+    const off = reduced.find((rule) => rule.selector.includes(".dashboard-action") && prop(rule, "transition") === "none");
     expect(off.selector).toContain(".btn-primary");
     expect(off.selector).toContain(".landing-feature-card");
   });
 
   it("the lifts do not happen under reduced motion", () => {
     const lift = reduced.find((rule) => /:hover/.test(rule.selector) && prop(rule, "transform") === "none");
-    expect(lift.selector).toContain(".dashboard-module-card:focus-visible");
+    expect(lift.selector).toContain(".dashboard-action:focus-visible");
     expect(lift.selector).toContain(".landing-feature-card:hover");
   });
 });
@@ -190,7 +191,7 @@ describe("money, km, km/L, percentages and advice are never animated beyond a fa
 
   it("the fade keyframes change opacity and nothing else, and the page and card rules never set a transform", () => {
     expect(keyframes["fade-in"]).toBe("from { opacity: 0; }");
-    for (const rule of normal.filter((r) => r.selector.startsWith(":root[data-routed] .app-main >") || r.selector.startsWith(":root[data-routed] .dashboard-car-card:not"))) {
+    for (const rule of normal.filter((r) => r.selector.startsWith(":root[data-routed] .app-main >") || r.selector.startsWith(":root[data-routed] .dashboard-hero"))) {
       expect(rule.decls).not.toMatch(/transform|translate/);
     }
   });
