@@ -88,7 +88,7 @@ describe("no layout jump while a page loads (CAR-74)", () => {
     expect(rule(".route-loading")).toMatch(/min-height: 100vh/);
   });
 
-  it("the Dashboard sections after Your Cars stay invisible while the car list is a skeleton", () => {
-    expect(rule(".dashboard-section:has(.dashboard-car-card--skeleton) ~ *")).toMatch(/visibility: hidden/);
+  it("the Dashboard sections after Your Cars stay invisible only while the car list is still 'waiting' (which the page drops after 1.5 s)", () => {
+    expect(rule(".dashboard-section:has(.dashboard-car-list--waiting) ~ *")).toMatch(/visibility: hidden/);
   });
 });

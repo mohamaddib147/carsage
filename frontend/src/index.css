@@ -1252,6 +1252,13 @@ textarea:focus {
   color: var(--color-primary);
 }
 
+/* The car list failed to load: a plain error above its Try again button. */
+.dashboard-error {
+  margin: 0 0 var(--spacing-unit);
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
 .dashboard-diy-stats {
   display: flex;
   flex-wrap: wrap;
@@ -1308,13 +1315,15 @@ textarea:focus {
   }
 }
 
-/* CAR-74: while "Your Cars" still shows its skeleton, the Dashboard sections
-   after it are laid out but not shown. The real list is usually a different
-   height (it depends on how many cars there are), and pushing visible sections
-   down or up when it arrives was the page's main layout shift; hidden boxes
-   that move don't count. They appear, with their own skeletons or data, as
-   soon as the cars are in (well under a second). */
-.dashboard-section:has(.dashboard-car-card--skeleton) ~ * {
+/* CAR-74: while "Your Cars" is still waiting for its list, the Dashboard
+   sections after it are laid out but not shown. The real list is usually a
+   different height (it depends on how many cars there are), and pushing
+   visible sections down or up when it arrives was the page's main layout
+   shift; hidden boxes that move don't count. They appear, with their own
+   skeletons or data, as soon as the cars are in (well under a second). The
+   page drops the --waiting class after 1.5 s (CARS_WAIT_MS), so a slow or
+   failing connection never keeps them hidden. */
+.dashboard-section:has(.dashboard-car-list--waiting) ~ * {
   visibility: hidden;
 }
 

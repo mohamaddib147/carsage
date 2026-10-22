@@ -2,7 +2,7 @@
 // showing the user's saved car(s), "Add Another Car" routing to Car
 // Onboarding, and the two Trip Planner / AI Advisor module cards.
 
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -164,14 +164,14 @@ describe("DashboardPage — vehicle summary", () => {
     expect(screen.queryByLabelText("Yugo brand badge")).not.toBeInTheDocument();
   });
 
-  it("falls back to the empty state without crashing if loading the cars fails", async () => {
+  // CAR-74 follow-up: a failed lookup used to be shown as "no car yet", which is wrong and has no way out.
+  it("shows an error, not the empty state, if loading the cars fails (details in the failure tests below)", async () => {
     mockCarsList({ data: null, error: { message: "network error" } });
 
     renderDashboard();
 
-    expect(
-      await screen.findByText("You haven't added a car yet."),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't load your cars.");
+    expect(screen.queryByText("You haven't added a car yet.")).not.toBeInTheDocument();
   });
 });
 
@@ -568,5 +568,131 @@ describe("DashboardPage — All cars, this month (CAR-64)", () => {
 
     const message = await within(await screen.findByRole("region", { name: "All cars, this month" })).findByText(/Couldn't load this month's costs/);
     expect(message).not.toHaveTextContent(/relation/);
+  });
+});
+
+describe("DashboardPage — the car list fails to load, or is empty (CAR-74 follow-up)", () => {
+  const ONE_CAR = { data: [{ id: "car-1", make: "Honda", model: "CR-V", year: 2018 }], error: null };
+
+  // Each way the request can fail. The first three come back as { error } (what supabase-js does for a network
+  // failure, an expired or missing token, and a server fault); the last is a request that THROWS.
+  const FAILURES = [
+    ["a network error (status 0)", { kind: "reply", reply: { data: null, error: { message: "TypeError: Failed to fetch" }, status: 0 } }],
+    ["a 401 (token expired or missing)", { kind: "reply", reply: { data: null, error: { code: "PGRST301", message: "JWT expired" }, status: 401 } }],
+    ["a 500 (server fault)", { kind: "reply", reply: { data: null, error: { code: "XX000", message: "internal error" }, status: 500 } }],
+    ["a request that throws", { kind: "throw" }],
+  ];
+
+  /** Mocks the car list to fail the given way, and returns the mock so a test can change the next answer. */
+  function mockFailure(failure) {
+    const mocks = mockCarsList({ data: [], error: null });
+    if (failure.kind === "throw") mocks.order.mockRejectedValue(new TypeError("Failed to fetch"));
+    else mocks.order.mockResolvedValue(failure.reply);
+    return mocks;
+  }
+
+  describe.each(FAILURES)("when the request fails with %s", (_label, failure) => {
+    it("shows a clear error with a Try again button, not 'no car yet', and the sections below are shown", async () => {
+      mockFailure(failure);
+      renderDashboard();
+    const container = document.body;
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Couldn't load your cars. Check your connection and try again.");
+      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+      expect(screen.queryByText("You haven't added a car yet.")).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Add Your Car" })).not.toBeInTheDocument();
+      // Nothing from the server's reply is shown.
+      expect(alert.textContent).not.toMatch(/JWT|PGRST|internal error|Failed to fetch/);
+
+      // The sections below "Your Cars" are hidden by CSS only while the car list is a skeleton: it must be gone.
+      expect(container.querySelector(".dashboard-car-card--skeleton")).not.toBeInTheDocument();
+      expect(screen.queryByText("Loading your cars...")).not.toBeInTheDocument();
+      for (const name of ["All cars, this month", "Maintenance due", "DIY suggestion success rate"]) {
+        expect(screen.getByRole("region", { name })).toBeInTheDocument();
+      }
+      expect(screen.getByRole("heading", { name: "Quick Access" })).toBeInTheDocument();
+    });
+
+    it("Try again after the server recovers shows the cars", async () => {
+      const user = userEvent.setup();
+      const mocks = mockFailure(failure);
+      renderDashboard();
+      const retry = await screen.findByRole("button", { name: "Try again" });
+
+      mocks.order.mockReset();
+      mocks.order.mockResolvedValue(ONE_CAR);
+      await user.click(retry);
+
+      expect(await screen.findByText(/CR-V/)).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+      expect(mocks.order).toHaveBeenCalledTimes(1);
+    });
+
+    it("if it fails again, the error and the button are still there to try once more", async () => {
+      const user = userEvent.setup();
+      const mocks = mockFailure(failure);
+      renderDashboard();
+      await user.click(await screen.findByRole("button", { name: "Try again" }));
+
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+      expect(mocks.order).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("while the request is out the sections stay behind the skeleton; when it fails they are released", async () => {
+    const mocks = mockCarsList({ data: [], error: null });
+    let fail;
+    mocks.order.mockReturnValue(new Promise((resolve) => { fail = resolve; }));
+    renderDashboard();
+    const container = document.body;
+
+    expect(await screen.findByText("Loading your cars...")).toBeInTheDocument();
+    expect(container.querySelector(".dashboard-car-card--skeleton")).toBeInTheDocument();
+    expect(container.querySelector(".dashboard-car-list--waiting")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    await act(async () => fail({ data: null, error: { message: "boom" }, status: 500 }));
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(container.querySelector(".dashboard-car-card--skeleton")).not.toBeInTheDocument();
+  });
+
+  it("a request that stays out (quiet retries on a bad connection) releases the sections after 1.5 s, still showing the skeleton, and ends in the error", async () => {
+    const mocks = mockCarsList({ data: [], error: null });
+    let fail;
+    mocks.order.mockReturnValue(new Promise((resolve) => { fail = resolve; }));
+    renderDashboard();
+    await screen.findByText("Loading your cars...");
+    const list = () => document.querySelector(".dashboard-car-list");
+
+    // At first the sections below are held back (the layout-shift protection)...
+    expect(list()).toHaveClass("dashboard-car-list--waiting");
+    await act(() => new Promise((resolve) => setTimeout(resolve, 1000)));
+    expect(list()).toHaveClass("dashboard-car-list--waiting");
+
+    // ...but only briefly: past 1.5 s they are released although the list is still loading.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 700)));
+    expect(list()).not.toHaveClass("dashboard-car-list--waiting");
+    expect(screen.getByText("Loading your cars...")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    await act(async () => fail({ data: null, error: { message: "boom" }, status: 0 }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(document.querySelector(".dashboard-car-list--waiting")).not.toBeInTheDocument();
+  });
+
+  it("no cars (a good reply with an empty list) is not an error: the 'add your first car' prompt, no alert, no Try again", async () => {
+    mockCarsList({ data: [], error: null, status: 200 });
+    renderDashboard();
+    const container = document.body;
+
+    expect(await screen.findByText("You haven't added a car yet.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add Your Car" })).toHaveAttribute("href", "/cars/new");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+    expect(container.querySelector(".dashboard-car-card--skeleton")).not.toBeInTheDocument();
   });
 });

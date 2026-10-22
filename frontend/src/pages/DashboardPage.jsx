@@ -44,6 +44,10 @@ const DASHBOARD_ITEM_COLUMNS =
 const MAX_DUE_SHOWN = 5;
 
 
+// How long the sections below "Your Cars" stay hidden while the car list loads (prevents a layout jump on a
+// normal load, which takes well under this); after it they show even if the list is still on its way.
+const CARS_WAIT_MS = 1500;
+
 /** Builds the "Engine Type • Fuel Type • Plate" meta line, skipping any fields the car doesn't have set. */
 function carMetaLine(car) {
   return [car.engine_type, car.fuel_type, car.license_plate]
@@ -83,6 +87,20 @@ function DashboardPage() {
   const { user } = useAuth();
   const [cars, setCars] = useState([]);
   const [loading, setLoading] = useState(true);
+  // The car list failed to load (any reason): shown as an error with a retry, never as "no cars yet".
+  const [carsFailed, setCarsFailed] = useState(false);
+  const [carsAttempt, setCarsAttempt] = useState(0);
+  // The sections below "Your Cars" wait for the car list only briefly (see .dashboard-car-list--waiting in
+  // index.css): a request that is retried quietly on a bad connection can take several seconds to fail.
+  const [carsSlow, setCarsSlow] = useState(false);
+  useEffect(() => {
+    if (!loading) return undefined;
+    const timer = setTimeout(() => setCarsSlow(true), CARS_WAIT_MS);
+    return () => {
+      clearTimeout(timer);
+      setCarsSlow(false);
+    };
+  }, [loading]);
   // fixRate: null while loading OR once loaded, null means "no feedback given
   // anywhere yet" (the empty state) rather than a real 0%.
   const [diyStats, setDiyStats] = useState({ loading: true, fixRate: null, latestFix: null });
@@ -149,13 +167,22 @@ function DashboardPage() {
 
     async function loadCars() {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("cars")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true });
+      // A network error normally comes back as { error }, but one THROWN by the request must not leave the
+      // page loading forever (the sections below stay hidden while the car list is a skeleton).
+      let result;
+      try {
+        result = await supabase
+          .from("cars")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: true });
+      } catch {
+        result = { data: null, error: { message: "network error" } };
+      }
+      const { data, error } = result ?? {};
 
       if (cancelled) return;
+      setCarsFailed(Boolean(error || !data));
       setCars(error || !data ? [] : data);
       setLoading(false);
     }
@@ -164,7 +191,7 @@ function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, carsAttempt]);
 
   // DIY fix-rate stat (mentor feedback, no Jira task): every 'ai' DIY reply the
   // user has given feedback on (RLS already scopes this to their own rows), plus
@@ -241,7 +268,7 @@ function DashboardPage() {
         {loading ? (
           <>
             <p role="status" className="sr-only">Loading your cars...</p>
-            <ul className="dashboard-car-list" aria-hidden="true">
+            <ul className={`dashboard-car-list${carsSlow ? "" : " dashboard-car-list--waiting"}`} aria-hidden="true">
               {[0, 1].map((index) => (
                 <li key={index} className="dashboard-car-card dashboard-car-card--skeleton">
                   <div className="skeleton-bar skeleton-bar--title" />
@@ -250,6 +277,15 @@ function DashboardPage() {
                 </li>
               ))}
             </ul>
+          </>
+        ) : carsFailed ? (
+          <>
+            <p role="alert" className="dashboard-error">
+              Couldn&apos;t load your cars. Check your connection and try again.
+            </p>
+            <button className="btn-primary" type="button" onClick={() => setCarsAttempt((count) => count + 1)}>
+              Try again
+            </button>
           </>
         ) : cars.length === 0 ? (
           <>
