@@ -422,6 +422,12 @@ Existing pending tickets (T9 to T21 in `docs/UI_TICKETS.md`) are kept except whe
   6. Axe finds no violations on any screen at 1280 and 390 px.
 - **Recommended model:** Opus 5.5 (the header is on every page). **Estimate:** 6 h.
 - **Retest:** `SiteNav.test.jsx`, `headerCss.test.js`, `App.test.jsx`, `App.authRedirect.test.jsx` (the Log Out flow), `currencyToggle.integration.test.jsx`, layout shift on Dashboard and Landing, mobile menu walk-through.
+- **Implementation note (CAR-77, 2026-10-23): where the build differs from the plan above, and why.**
+  - **The active bar is white, not the accent.** The accent is only 1.35:1 (Audi), 1.99:1 (Honda), 2.07:1 (Toyota) and 2.58:1 (BMW) against the header, so it cannot meet criterion 3; white is at least 5.5:1 on all nine. `theme/headerActiveBar.test.js` checks every theme. In the mobile panel the bar is a 3 px left-edge bar, since a full-width row would read a bottom bar as a divider.
+  - **Sticky at every width**, 72 px on desktop (it was about 80 px, set by padding) and the unchanged 64 px narrow row. The mobile panel is still absolute and drops from the sticky bar.
+  - **Clearance:** one `scroll-padding-top` on `<html>` (88 px desktop, 80 px narrow) now serves Landing anchors, the Maintenance card and keyboard focus; it replaces the card's own `scroll-margin-top: 96px`. Checked in a real browser by Shift+Tab-ing up through every control from the bottom of the Dashboard: the closest sits 15 px below the header, and with the padding removed a control is fully covered.
+  - **Not built (decided in the plan):** the wordmark and the My Car divider (listed in the D3 summary but not in the acceptance criteria); no account menu.
+  - **Layout shift:** the header is a fixed height and the shadow is a box-shadow, so it adds none; Dashboard CLS on a production build on Slow 4G is in the commit message.
 
 ### D4 (CAR-78). Dashboard data layer
 - **Summary:** one `fuel_logs` read for the page and a pure helper that derives each car's snapshot. No UI.

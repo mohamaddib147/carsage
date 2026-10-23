@@ -14,6 +14,11 @@
 // wide screens it is `display: contents`, so the desktop bar is unchanged; on
 // narrow ones it drops down under the bar when the button opens it. Escape,
 // a click outside, Tab-ing out of it and any navigation close it.
+//
+// CAR-77: the bar is sticky at every width (72 px on desktop, the 64 px row below 861 px) and casts a shadow once the
+// page scrolls past 8 px. The screen you are on is marked by a 2 px white bar (a left-edge bar in the mobile panel);
+// `scroll-padding-top` on <html> keeps anchors and anything that takes focus clear of the sticky bar. There is still
+// no account menu: Log Out stays a plain button and the email is never shown.
 
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -166,6 +171,9 @@ const MARKETING_LINKS = [
   { hash: "#how-it-works", label: "How it works" },
 ];
 
+/** CAR-77: how far the page must scroll before the sticky header casts its shadow. */
+const SHADOW_AFTER_PX = 8;
+
 /**
  * Renders the top-level navigation bar: brand (left), the centered links
  * (marketing anchors when signed out, app screens when signed in, none
@@ -178,6 +186,17 @@ function SiteNav() {
   const { pathname, key: locationKey } = useLocation();
   // The USD | LBP switch only appears on screens that show prices (Trip Planner, Fuel Log).
   const showCurrencyToggle = PRICE_PAGES.includes(pathname.replace(/\/+$/, ""));
+
+  // CAR-77: the sticky header casts a shadow once the page has scrolled past 8 px, and none at the very top. A
+  // passive listener that only flips a boolean, so a scroll costs nothing but a comparison; the shadow itself is a
+  // box-shadow, so showing it never moves the layout.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const update = () => setScrolled(window.scrollY > SHADOW_AFTER_PX);
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
 
   // CAR-74: the narrow-screen panel. Like NavMenu, it is open only on the
   // location it was opened on, so any navigation (a hash link too) closes it.
@@ -235,7 +254,12 @@ function SiteNav() {
   }
 
   return (
-    <nav className="site-nav" ref={navRef} onKeyDown={handleNavKeyDown} onBlur={handleNavBlur}>
+    <nav
+      className={`site-nav${scrolled ? " is-scrolled" : ""}`}
+      ref={navRef}
+      onKeyDown={handleNavKeyDown}
+      onBlur={handleNavBlur}
+    >
       <NavLink to="/" end className="site-nav__brand" aria-label="CarSage home">
         <Logo onDark size={48} />
       </NavLink>

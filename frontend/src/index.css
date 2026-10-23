@@ -80,6 +80,12 @@ body,
   height: 100%;
 }
 
+/* CAR-77: the header is sticky, so anything scrolled to (a Landing anchor, a maintenance card, or an element the
+   browser scrolls into view when it takes focus) must stop below it, never under it. 72 px bar + 16 px of air. */
+html {
+  scroll-padding-top: 88px;
+}
+
 body {
   margin: 0;
   font-family: var(--font-family-base);
@@ -156,14 +162,26 @@ button {
   gap: calc(var(--spacing-unit) * 1);
 }
 
+/* CAR-77: sticky at every width (the narrow block keeps its own 64 px row), above the page but below the route
+   loading bar. The shadow only appears once the page has scrolled past 8 px (SiteNav adds .is-scrolled), and it is a
+   box-shadow, so it never moves the layout. */
 .site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: 72px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: calc(var(--spacing-unit) * 2);
-  padding: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 3);
+  padding: 0 calc(var(--spacing-unit) * 3);
   background-color: var(--color-primary);
   color: #ffffff;
+  transition: box-shadow var(--motion-fast) var(--ease-out);
+}
+
+.site-nav.is-scrolled {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
 }
 
 .site-nav__brand {
@@ -194,9 +212,26 @@ button {
 .site-nav__links a:hover,
 .site-nav__links a.active {
   opacity: 1;
-  text-decoration: underline;
-  text-decoration-color: var(--color-accent);
-  text-underline-offset: 6px;
+}
+
+/* CAR-77: the screen you are on carries a 2 px bar. It is WHITE, not the accent: the accent reaches only 1.35:1 on
+   the Audi header (and under 3:1 on Toyota, Honda and BMW), while white is at least 5.5:1 on all nine brand headers
+   (theme/headerActiveBar.test.js checks every theme). Only the top-level rows get it — the My Car dropdown sits on a
+   light panel and keeps its own active style. */
+.site-nav__links > li > a,
+.site-nav__menu-btn {
+  position: relative;
+}
+
+.site-nav__links > li > a.active::after,
+.site-nav__menu-btn.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  height: 2px;
+  background-color: #ffffff;
 }
 
 /* CAR-62: the "My Car" disclosure menu in the header (Car Profile, Fuel Log,
@@ -226,11 +261,6 @@ button {
   opacity: 1;
 }
 
-.site-nav__menu-btn.active {
-  text-decoration: underline;
-  text-decoration-color: var(--color-accent);
-  text-underline-offset: 6px;
-}
 
 .site-nav__menu-btn:focus-visible {
   outline: 2px solid var(--color-accent);
@@ -312,9 +342,11 @@ button {
 }
 
 @media (max-width: 860px) {
-  /* One fixed 64 px row from the first paint, whatever the session state. */
+  /* One fixed 64 px row from the first paint, whatever the session state. Sticky here too (CAR-77); the panel below
+     is absolute and still anchors to this bar, because a sticky box is a positioned box. */
   .site-nav {
-    position: relative;
+    position: sticky;
+    top: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -322,6 +354,11 @@ button {
     box-sizing: border-box;
     height: 64px;
     padding: 0 calc(var(--spacing-unit) * 2);
+  }
+
+  /* The bar is 64 px here, so anything scrolled to needs less clearance than on the desktop header. */
+  html {
+    scroll-padding-top: 80px;
   }
 
   .site-nav__brand {
@@ -428,6 +465,18 @@ button {
 
   .site-nav__menu-btn {
     justify-content: space-between;
+  }
+
+  /* In the panel the rows are full width, so the desktop bar under a row would read as a divider: the active row
+     gets a 3 px bar down its left edge instead, in the same white (CAR-77). The rows themselves are unchanged. */
+  .site-nav__links > li > a.active::after,
+  .site-nav__menu-btn.active::after {
+    top: 6px;
+    right: auto;
+    bottom: 6px;
+    left: calc(var(--spacing-unit) * -1);
+    width: 3px;
+    height: auto;
   }
 
   /* My Car opens in place inside the panel instead of as a floating card. */
@@ -3244,7 +3293,7 @@ textarea:focus {
   background-color: var(--color-surface);
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
-  scroll-margin-top: 96px;
+  /* CAR-77: the clearance under the sticky header is now `scroll-padding-top` on <html>, for every scroll target. */
 }
 
 .maintenance-card:target {
@@ -4050,6 +4099,7 @@ textarea[aria-invalid="true"] {
   .btn-primary,
   .btn-secondary,
   .btn-accent,
+  .site-nav,
   .site-nav__logout,
   .site-nav__auth-link,
   .dashboard-action,

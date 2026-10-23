@@ -10,7 +10,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SiteNav from "./SiteNav.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { CurrencyProvider } from "../currency/CurrencyContext.jsx";
@@ -651,5 +651,131 @@ describe("SiteNav narrow-screen menu (CAR-74)", () => {
     await user.click(menu());
     await user.click(within(panel()).getByRole("link", { name: "How it works" }));
     expect(menu()).toHaveAttribute("aria-expanded", "false");
+  });
+});
+
+describe("SiteNav sticky header, active state and keyboard (CAR-77)", () => {
+  /** Renders the nav signed in, at `path`, and waits for the signed-in bar. */
+  async function renderSignedIn(path = "/dashboard") {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <AuthProvider><CurrencyProvider>
+          <SiteNav />
+          <Routes>
+            <Route path="*" element={<p>Some screen</p>} />
+          </Routes>
+        </CurrencyProvider></AuthProvider>
+      </MemoryRouter>,
+    );
+    await screen.findByRole("button", { name: "Log Out" });
+  }
+
+  const nav = () => document.querySelector(".site-nav");
+
+  /** Moves the window to `y` and fires the scroll the header listens for. */
+  function scrollTo(y) {
+    window.scrollY = y;
+    act(() => {
+      window.dispatchEvent(new Event("scroll"));
+    });
+  }
+
+  afterEach(() => {
+    window.scrollY = 0;
+  });
+
+  it("casts no shadow at the top, and does once the page is past 8 px", async () => {
+    await renderSignedIn();
+    expect(nav()).not.toHaveClass("is-scrolled");
+
+    scrollTo(9);
+    expect(nav()).toHaveClass("is-scrolled");
+
+    scrollTo(0);
+    expect(nav()).not.toHaveClass("is-scrolled");
+  });
+
+  it("does not cast it at exactly 8 px (the threshold is past 8, not at it)", async () => {
+    await renderSignedIn();
+    scrollTo(8);
+    expect(nav()).not.toHaveClass("is-scrolled");
+    scrollTo(8.5);
+    expect(nav()).toHaveClass("is-scrolled");
+  });
+
+  it("starts with the shadow when the page is already scrolled (a reload part-way down)", async () => {
+    window.scrollY = 400;
+    await renderSignedIn();
+    expect(nav()).toHaveClass("is-scrolled");
+  });
+
+  it("stops listening when the header unmounts", async () => {
+    const remove = vi.spyOn(window, "removeEventListener");
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
+    const { unmount } = render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <AuthProvider><CurrencyProvider><SiteNav /></CurrencyProvider></AuthProvider>
+      </MemoryRouter>,
+    );
+    await screen.findByRole("button", { name: "Log Out" });
+    unmount();
+    expect(remove).toHaveBeenCalledWith("scroll", expect.any(Function));
+    remove.mockRestore();
+  });
+
+  it("marks the screen you are on, and only that one (aria-current, which the 2 px bar is drawn from)", async () => {
+    await renderSignedIn("/trip-planner");
+    expect(screen.getByRole("link", { name: "Trip Planner" })).toHaveAttribute("aria-current", "page");
+    for (const label of ["Dashboard", "AI Advisor"]) {
+      expect(screen.getByRole("link", { name: label })).not.toHaveAttribute("aria-current");
+    }
+    expect(screen.getByRole("link", { name: "Trip Planner" })).toHaveClass("active");
+  });
+
+  it("marks the My Car button on each of its screens, and not elsewhere", async () => {
+    await renderSignedIn("/fuel-log");
+    expect(screen.getByRole("button", { name: "My Car" })).toHaveClass("active");
+  });
+
+  it("is fully keyboard operable: Tab reaches the links, the menu and Log Out in order", async () => {
+    const user = userEvent.setup();
+    await renderSignedIn();
+
+    await user.tab(); // the brand
+    expect(screen.getByRole("link", { name: "CarSage home" })).toHaveFocus();
+    // The narrow-screen Menu button is always in the DOM; on a desktop width CSS hides it with display: none (so it
+    // is skipped there) — headerCss.test.js guards that rule, since jsdom applies no media queries.
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Menu" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "My Car" })).toHaveFocus();
+    // ArrowDown opens the menu and moves into it (CAR-62), Escape returns focus to the button.
+    await user.keyboard("{ArrowDown}");
+    await waitFor(() => expect(screen.getByRole("link", { name: "Car Profile" })).toHaveFocus());
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.getByRole("button", { name: "My Car" })).toHaveFocus());
+    // Past the menu: the remaining top-level links, then Log Out.
+    await user.tab();
+    expect(screen.getByRole("link", { name: "Trip Planner" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("link", { name: "AI Advisor" })).toHaveFocus();
+    // The Dashboard shows prices, so the USD | LBP switch is inline in the bar, before Log Out (CAR-64).
+    await user.tab();
+    expect(screen.getByRole("button", { name: "USD" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "LBP" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Log Out" })).toHaveFocus();
+  });
+
+  it("still has no account menu: Log Out is a plain button and the email is never shown", async () => {
+    await renderSignedIn();
+    const logOutButton = screen.getByRole("button", { name: "Log Out" });
+    expect(logOutButton).not.toHaveAttribute("aria-expanded");
+    expect(logOutButton).not.toHaveAttribute("aria-haspopup");
+    expect(nav()).not.toHaveTextContent(LOGGED_IN_USER.email);
   });
 });
