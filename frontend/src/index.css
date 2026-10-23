@@ -3630,6 +3630,36 @@ textarea:focus {
   gap: var(--spacing-unit);
 }
 
+/* CAR-83: expense category icons. The name is always drawn beside the icon; the icon takes the AA-safe accent text colour. */
+.category-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.category-name .icon,
+.category-select__icon {
+  flex-shrink: 0;
+  color: var(--color-accent-text);
+}
+
+/* The chosen category's icon sits inside the select's left padding, which is there with or without it, so the field never changes width or text position. */
+.category-select {
+  position: relative;
+}
+
+.category-select__icon {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--spacing-unit) * 1.5);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.category-select select {
+  padding-left: calc(var(--spacing-unit) * 4.5);
+}
+
 .costs-confirm {
   font-weight: 600;
   white-space: nowrap;

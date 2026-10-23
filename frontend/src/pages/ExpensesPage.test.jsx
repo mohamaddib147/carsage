@@ -7,6 +7,7 @@
 // confirmation; and two cars never mixing. Supabase is mocked; that another USER can't
 // reach these rows is proven against the live project by backend/scripts/verify_rls.py.
 
+import { readFileSync } from "node:fs";
 import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -437,5 +438,116 @@ describe("ExpensesPage — several cars", () => {
 
     await waitFor(() => expect(calls.inserts).toHaveLength(1));
     expect(calls.inserts[0]).toMatchObject({ car_id: "car-2", user_id: "user-123" });
+  });
+});
+
+// CAR-83: each expense category has an icon beside its name in the add form, the history table and the
+// category breakdown. The word is always drawn too, and the icon is decorative (aria-hidden), so the
+// label stays the accessible name. Keys, labels and the rows saved are unchanged (tested above).
+describe("ExpensesPage — category icons (CAR-83)", () => {
+  const CATEGORY_KEYS = ["repair", "maintenance", "insurance", "registration", "parking", "car_wash", "tolls", "fines", "other"];
+  const LABELS = ["Repair", "Maintenance", "Insurance", "Registration / Inspection", "Parking", "Car wash", "Tolls", "Fines", "Other"];
+  const ALL_NINE = {
+    expensesByCar: { "car-1": CATEGORY_KEYS.map((key, index) => expense(`e${index}`, "2026-10-10", key, 5)) },
+  };
+
+  it("shows no icon before a category is chosen, then the chosen one's, hidden from assistive technology", async () => {
+    const user = userEvent.setup();
+    mockDatabase();
+    renderPage();
+
+    const select = await screen.findByLabelText("Category *");
+    expect(document.querySelector(".category-select__icon")).toBeNull();
+
+    await user.selectOptions(select, "tolls");
+    const icon = document.querySelector(".category-select__icon");
+    expect(icon.tagName.toLowerCase()).toBe("svg");
+    expect(icon).toHaveAttribute("aria-hidden", "true");
+    // The select is still named by its label and still reads as the same words.
+    expect(screen.getByLabelText("Category *")).toHaveDisplayValue("Tolls");
+
+    await user.selectOptions(select, "");
+    expect(document.querySelector(".category-select__icon")).toBeNull();
+  });
+
+  it("gives every category its own icon, so none is told apart by colour or by a shared shape", async () => {
+    const user = userEvent.setup();
+    mockDatabase();
+    renderPage();
+
+    const select = await screen.findByLabelText("Category *");
+    const shapes = [];
+    for (const key of CATEGORY_KEYS) {
+      await user.selectOptions(select, key);
+      shapes.push(document.querySelector(".category-select__icon").innerHTML);
+    }
+    expect(shapes.every((shape) => shape.length > 0)).toBe(true);
+    expect(new Set(shapes).size).toBe(CATEGORY_KEYS.length);
+  });
+
+  it("history table: every row shows its icon (decorative) and its name, and the cell reads as the name alone", async () => {
+    mockDatabase(ALL_NINE);
+    renderPage();
+
+    const table = await screen.findByRole("table");
+    const cells = within(table).getAllByRole("row").slice(1).map((row) => row.querySelector(".category-name"));
+    expect(cells.map((cell) => cell.textContent).sort()).toEqual([...LABELS].sort());
+    for (const cell of cells) {
+      const icon = cell.querySelector("svg");
+      expect(icon).toHaveAttribute("aria-hidden", "true");
+      expect(icon).toHaveAttribute("width", "16");
+    }
+  });
+
+  it("breakdown: each category line shows its icon and name, and the line's text is unchanged", async () => {
+    mockDatabase({
+      expensesByCar: { "car-1": [expense("e1", "2026-10-05", "parking", 5), expense("e2", "2026-10-12", "insurance", 4)] },
+    });
+    renderPage();
+
+    await screen.findByText("Total this month");
+    const rows = within(screen.getByRole("list", { name: "Other costs by category" })).getAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(row.querySelector(".category-name svg")).toHaveAttribute("aria-hidden", "true");
+    expect(rows.map((row) => row.textContent)).toEqual(["Parking$5.00 (448,500 LBP)", "Insurance$4.00 (358,800 LBP)"]);
+  });
+
+  it("a category outside the fixed list keeps its own text and gets the generic tag icon (never hidden)", async () => {
+    mockDatabase({ expensesByCar: { "car-1": [expense("e1", "2026-10-05", "legacy_thing", 5)] } });
+    renderPage();
+
+    const table = await screen.findByRole("table");
+    const name = within(table).getAllByRole("row")[1].querySelector(".category-name");
+    expect(name.textContent).toBe("legacy_thing");
+    expect(name.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  // A stored key is data: one that is also a property name of every object ("constructor") must not pick up an inherited function.
+  it.each(["constructor", "toString", "__proto__"])("a stored category named %s shows as text with the generic tag icon, and the page still renders", async (key) => {
+    mockDatabase({ expensesByCar: { "car-1": [expense("e1", "2026-10-05", key, 5)] } });
+    renderPage();
+
+    const table = await screen.findByRole("table");
+    const name = within(table).getAllByRole("row")[1].querySelector(".category-name");
+    expect(name.textContent).toBe(key);
+    expect(name.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  // jsdom cannot draw the chart's legend, so the icon each series gets is tied to the chart's series names on the source:
+  // renaming a <Bar name="..."> without renaming its LEGEND_ICONS key would drop the icon and fail nothing else.
+  it("every chart series name has a legend icon", () => {
+    const source = readFileSync("src/pages/ExpensesPage.jsx", "utf8");
+    const seriesNames = [...source.matchAll(/<Bar [^>]*\bname="([^"]+)"/g)].map((match) => match[1]);
+    const iconKeys = /const LEGEND_ICONS = \{([^}]*)\}/.exec(source)[1];
+    expect(seriesNames).toEqual(["Fuel", "Other costs"]);
+    for (const name of seriesNames) expect(iconKeys).toMatch(new RegExp(`(^|[\\s,{])"?${name}"?\\s*[:,}]`));
+  });
+
+  // jsdom applies no stylesheet, so the layout rules that keep the select from changing width are checked on the CSS text.
+  it("the select keeps its icon room whether or not a category is chosen (no shift when one is picked)", () => {
+    const css = readFileSync("src/index.css", "utf8");
+    expect(css).toMatch(/\.category-select select \{\s*padding-left: calc\(var\(--spacing-unit\) \* 4\.5\);/);
+    expect(css).toMatch(/\.category-select__icon \{[^}]*position: absolute;[^}]*pointer-events: none;/);
+    expect(css).toMatch(/\.category-name \.icon,\s*\.category-select__icon \{[^}]*color: var\(--color-accent-text\);/);
   });
 });

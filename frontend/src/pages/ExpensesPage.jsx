@@ -21,6 +21,7 @@ import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import PageShell from "../components/PageShell.jsx";
 import Price from "../components/Price.jsx";
+import { Droplets, Fuel, IdCard, Lock, MapPin, ReceiptText, Route, Settings2, Tag, TriangleAlert, Wrench } from "../components/iconsMore.jsx";
 import { addPhoto, MAX_MAINTENANCE_PHOTOS } from "../lib/recordPhotos.js";
 import PendingPhotos from "../components/PendingPhotos.jsx";
 import RecordPhotos from "../components/RecordPhotos.jsx";
@@ -49,16 +50,58 @@ import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 const EXPENSE_COLUMNS = "id, spent_on, category, amount, currency, note, created_at";
 const FUEL_COST_COLUMNS = "id, filled_at, cost_amount, cost_currency";
 
+// One icon per expense category (CAR-83), from the shared set. Every category has its own, so the list
+// scans by shape as well as by word; the word is always drawn too, so meaning never rests on the icon.
+// Insurance is a lock (the set has no shield) and parking a map pin (no parking sign). No prototype (`__proto__: null`),
+// so a stored key like "constructor" finds nothing instead of an inherited function (categoryLabel shows unknown keys as-is).
+const CATEGORY_ICONS = {
+  __proto__: null,
+  repair: Wrench,
+  maintenance: Settings2,
+  insurance: Lock,
+  registration: IdCard,
+  parking: MapPin,
+  car_wash: Droplets,
+  tolls: Route,
+  fines: TriangleAlert,
+  other: Tag,
+};
+
+// The chart's two series are not categories, so each gets its own icon in the legend (CAR-83).
+const LEGEND_ICONS = { Fuel, "Other costs": ReceiptText };
+
+/**
+ * A category's name with its icon beside it. The icon is decorative (aria-hidden), so the label stays
+ * the accessible name. A key outside the fixed list (categoryLabel shows it as-is) gets the generic tag.
+ * @param {{ categoryKey: string }} props
+ * @returns {JSX.Element}
+ */
+function CategoryName({ categoryKey }) {
+  const CategoryIcon = CATEGORY_ICONS[categoryKey] ?? Tag;
+  return (
+    <span className="category-name">
+      <CategoryIcon size={16} />
+      {categoryLabel(categoryKey)}
+    </span>
+  );
+}
+
 /**
  * Chart legend label (CAR-69). Recharts draws a legend's text in the series colour, and the
  * "Other costs" accent colour is far too light to read as text on most themes (1.2 to 3:1).
  * The coloured square beside the label still shows which series is which; the words use the
- * normal text colour.
+ * normal text colour. CAR-83: each series also has an icon beside its name.
  * @param {string} value the series name
  * @returns {JSX.Element}
  */
 function legendLabel(value) {
-  return <span style={{ color: "var(--color-text)" }}>{value}</span>;
+  const SeriesIcon = LEGEND_ICONS[value];
+  return (
+    <span className="category-name" style={{ color: "var(--color-text)" }}>
+      {SeriesIcon && <SeriesIcon size={16} />}
+      {value}
+    </span>
+  );
 }
 
 /** "2005 Mercedes-Benz C230" — the car as the user knows it. */
@@ -291,6 +334,7 @@ function ExpensesPage() {
 
   const label = selectedCar ? carLabel(selectedCar) : "";
   const monthName = formatMonth(thisMonth);
+  const SelectedCategoryIcon = CATEGORY_ICONS[category];
   const fieldError = (name) => (fieldErrors[name] ? <p role="alert" className="auth-form__error">{fieldErrors[name]}</p> : null);
 
   return (
@@ -332,19 +376,23 @@ function ExpensesPage() {
 
           <div className="form-field">
             <label htmlFor="expenseCategory">Category *</label>
-            <select
-              id="expenseCategory"
-              value={category}
-              aria-invalid={fieldErrors.category ? "true" : undefined}
-              onChange={(event) => setCategory(event.target.value)}
-            >
-              <option value="">Choose a category</option>
-              {EXPENSE_CATEGORIES.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            {/* A native <option> cannot hold an icon, so the chosen category's icon sits inside the select's left padding (CAR-83). */}
+            <div className="category-select">
+              {SelectedCategoryIcon && <SelectedCategoryIcon size={18} className="category-select__icon" />}
+              <select
+                id="expenseCategory"
+                value={category}
+                aria-invalid={fieldErrors.category ? "true" : undefined}
+                onChange={(event) => setCategory(event.target.value)}
+              >
+                <option value="">Choose a category</option>
+                {EXPENSE_CATEGORIES.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             {fieldError("category")}
           </div>
 
@@ -438,7 +486,7 @@ function ExpensesPage() {
               <ul className="costs-breakdown" aria-label="Other costs by category">
                 {summary.byCategory.map((row) => (
                   <li key={row.key}>
-                    <span>{row.label}</span>
+                    <CategoryName categoryKey={row.key} />
                     <Price amount={row.amount} currency="LBP" />
                   </li>
                 ))}
@@ -497,7 +545,7 @@ function ExpensesPage() {
                 {expenses.map((expense) => (
                   <tr key={expense.id}>
                     <td>{formatFillDate(expense.spent_on)}</td>
-                    <td>{categoryLabel(expense.category)}</td>
+                    <td><CategoryName categoryKey={expense.category} /></td>
                     <td>
                       <Price amount={Number(expense.amount)} currency={expense.currency} />
                     </td>

@@ -182,6 +182,9 @@ describe("the Expenses chart legend", () => {
 
   it("draws its labels in the normal text colour, not the series colour (the accent bar colour fails as text on most themes)", () => {
     expect(source).toMatch(/<Legend formatter=\{legendLabel\} \/>/);
-    expect(source).toMatch(/function legendLabel\(value\) \{\s*return <span style=\{\{ color: "var\(--color-text\)" \}\}>\{value\}<\/span>;/);
+    // CAR-83 added an icon before the name, so the span has a class and children now; what stays pinned is that the one span
+    // holding the series name takes the normal text colour (the icon inside it takes --color-accent-text from `.category-name .icon`, which themeContrast checks above).
+    expect(source).toMatch(/function legendLabel\(value\) \{[\s\S]*?<span className="category-name" style=\{\{ color: "var\(--color-text\)" \}\}>[\s\S]*?\{value\}\s*<\/span>/);
+    expect(/function legendLabel\(value\) \{[\s\S]*?\n\}/.exec(source)[0]).not.toMatch(/--color-accent\b|--color-primary\b/);
   });
 });
