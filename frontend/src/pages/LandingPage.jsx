@@ -49,20 +49,23 @@ function LandingPage() {
 
   return (
     <div className="landing-page">
-      {/* Visually hidden — gives the page an accessible top-level heading
-          without duplicating the large hero headline below. */}
-      <h1 className="sr-only">CarSage</h1>
-
       <section className="landing-hero">
         <div className="landing-hero__glow" aria-hidden="true" />
-        <Logo size={104} className="landing-hero__logo" />
+        {/* The brand name is text beside the icon, not pixels inside the
+            artwork, so it is selectable and reads as one word to a screen
+            reader (CAR-80). */}
+        <p className="landing-hero__brand">
+          <Logo size={44} mark />
+          CarSage
+        </p>
         <div className="landing-eyebrow">
           <Sparkle size={14} />
           <span>The Mindful Driver&apos;s Co-Pilot</span>
         </div>
-        <p className="landing-hero__headline">
-          Everything about your car, in one place
-        </p>
+        {/* The page's only h1 is the headline a visitor actually reads. */}
+        <h1 className="landing-hero__headline">
+          Everything about your car, <em>in one place</em>
+        </h1>
         <p className="landing-hero__subtitle">
           From trip budgets to unexpected engine noises, CarSage simplifies
           car ownership so you can drive with peace of mind.

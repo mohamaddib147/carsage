@@ -89,8 +89,10 @@ describe("tokens and where they are used", () => {
     expect(indexCss).toMatch(/body \{[^}]*font-family: var\(--font-family-base\);/);
   });
 
-  it("every heading level and the Landing hero headline use the heading font", () => {
-    const rule = /(h1,\s*h2,\s*h3,\s*h4,\s*h5,\s*h6,\s*\.landing-hero__headline)\s*\{([^}]*)\}/.exec(indexCss);
+  // CAR-80: the hero headline is now an h1, so it is covered by the heading levels; the hero's
+  // wordmark is the styled non-heading text that still has to be listed by name.
+  it("every heading level and the Landing hero wordmark use the heading font", () => {
+    const rule = /(h1,\s*h2,\s*h3,\s*h4,\s*h5,\s*h6,\s*\.landing-hero__brand)\s*\{([^}]*)\}/.exec(indexCss);
     expect(rule).not.toBeNull();
     expect(rule[2]).toContain("font-family: var(--font-heading);");
   });

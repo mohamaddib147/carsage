@@ -40,16 +40,16 @@ beforeEach(() => {
 });
 
 describe("LandingPage", () => {
-  it("renders an accessible 'CarSage' page heading and the hero headline (normal case)", async () => {
+  // CAR-80: the headline a visitor reads is the page's only h1; before, the h1 was a visually
+  // hidden "CarSage" and the headline was a <p>. The brand name is now text beside the hero mark.
+  it("makes the hero headline the page's h1, with the wordmark as text (normal case)", async () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
     renderPage();
 
-    expect(
-      screen.getByRole("heading", { name: "CarSage" }),
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByText("Everything about your car, in one place"),
-    ).toBeInTheDocument();
+    const headline = screen.getByRole("heading", { level: 1 });
+    expect(headline).toHaveTextContent("Everything about your car, in one place");
+    expect(screen.getByText("CarSage")).toHaveClass("landing-hero__brand");
+    expect(screen.queryByRole("heading", { name: "CarSage" })).not.toBeInTheDocument();
   });
 
   it("shows all three feature cards", async () => {
@@ -134,6 +134,21 @@ describe("LandingPage sections and anchors", () => {
     expect(readFileSync("src/index.css", "utf8")).toMatch(/\.landing-sections-placeholder \{\s*min-height: 100vh;/);
   });
 
+  // CAR-80, criterion 2: the preview is clearly an example with hard-coded figures — never a
+  // signed-in driver's own data, and nothing CarSage cannot actually measure (no telemetry).
+  it("shows a static preview card labelled 'Example' with hard-coded figures", async () => {
+    renderPage();
+
+    const preview = await screen.findByRole("region", { name: "Example of the CarSage dashboard" });
+    expect(preview).toHaveTextContent("Example");
+    for (const text of ["2019 Honda Civic", "Odometer", "84,120 km", "Real economy", "13.1 km/L", "Next service"]) {
+      expect(preview).toHaveTextContent(text);
+    }
+    // A different car from the Car Profile card's own sample, which sits right below it.
+    expect(preview).not.toHaveTextContent("Toyota Corolla");
+    expect(preview).not.toHaveTextContent(/tire pressure|battery health|diagnostic/i);
+  });
+
   it("has a Features section and a How it works section (the nav's anchor targets)", async () => {
     renderPage();
     await screen.findByRole("heading", { name: "How it works" });
@@ -169,7 +184,8 @@ describe("LandingPage sections and anchors", () => {
     Element.prototype.scrollIntoView = scrollIntoView;
     try {
       renderPage("/#no-such-section");
-      await screen.findByText("Everything about your car, in one place");
+      // A regex, because the headline's closing phrase is its own <em> (the CAR-80 highlight).
+      await screen.findByText(/Everything about your car/);
 
       expect(scrollIntoView).not.toHaveBeenCalled();
     } finally {
@@ -185,17 +201,44 @@ describe("LandingPage sections and anchors", () => {
   });
 });
 
-describe("LandingPage — logo (CAR-51)", () => {
-  it("shows the CarSage logo in the hero", async () => {
+describe("LandingPage — logo (CAR-51, CAR-80)", () => {
+  it("shows the brand mark in the hero, decorative, with the wordmark as the text beside it", async () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
     renderPage();
-    await screen.findByText("Everything about your car, in one place");
+    await screen.findByText(/Everything about your car/);
 
-    // The footer (with its own logo) moved to App.jsx (CAR-52), rendered
-    // once for every screen — see LegalPages.test.jsx for its coverage.
-    const logos = screen.getAllByRole("img", { name: "CarSage" });
-    expect(logos).toHaveLength(1);
-    expect(logos[0]).toHaveClass("landing-hero__logo");
+    // CAR-80: the mark is cropped out of the lockup and the name is real text, so the image is
+    // decorative (alt="") — otherwise a screen reader would read "CarSage" twice.
+    // The footer (with its own logo) moved to App.jsx (CAR-52), rendered once for every screen —
+    // see LegalPages.test.jsx for its coverage.
+    expect(screen.queryByRole("img", { name: "CarSage" })).not.toBeInTheDocument();
+    const mark = document.querySelector(".landing-hero__brand .logo--mark");
+    expect(mark).not.toBeNull();
+    expect(mark.getAttribute("alt")).toBe("");
+  });
+
+  // The crop is what hides the lockup's own wordmark and tagline. Without it the hero would show
+  // "CarSage" twice, and jsdom applies no stylesheet, so this is checked on the CSS text.
+  it("crops the lockup to its icon in CSS", () => {
+    expect(readFileSync("src/index.css", "utf8")).toMatch(
+      /\.logo--mark \{\s*aspect-ratio: 373 \/ 344;\s*object-fit: cover;\s*object-position: top;/,
+    );
+  });
+
+  // The ratio above is measured off logo.svg, so it silently stops cropping if that artwork is
+  // re-laid-out — and logo.svg's own header says it is kept in sync by hand with two other files.
+  // Nothing else would fail: the hero would just show the lockup's "CarSage" under the icon again.
+  // So pin the geometry the ratio assumes. If this fails, re-measure the icon's extent in a browser
+  // (the bottom of the paths' bounding boxes) and update .logo--mark's aspect-ratio to 373:<that>.
+  it("logo.svg still has the geometry the crop ratio was measured from", () => {
+    const svg = readFileSync("src/assets/logo.svg", "utf8");
+    expect(svg).toMatch(/viewBox="0 0 373 480"/);
+    // The wordmark sits below the icon: its text box starts at y=345, past the 344-row crop.
+    expect(svg).toMatch(/<text x="186\.5" y="412"[^>]*font-size="62"/);
+    expect(svg).toMatch(/<text x="186\.5" y="448"[^>]*font-size="19"/);
+    // Three icon paths above it, and no fourth drawn element that could reach lower.
+    expect(svg.match(/<path\b/g)).toHaveLength(3);
+    expect(svg.match(/<text\b/g)).toHaveLength(2);
   });
 });
 

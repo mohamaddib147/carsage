@@ -38,6 +38,18 @@ const FEATURES = [
   },
 ];
 
+// The preview card's figures (CAR-80). Hard-coded and clearly labelled "Example": no live data, no
+// account, no telemetry — they mirror the four tiles the real Dashboard shows for a signed-in driver
+// (Odometer, Real economy, Last fill-up, Next service). A different car from the Car Profile card's
+// sample below it, which sits close enough on a wide screen that the same figures twice reads as a slip.
+const EXAMPLE_CAR = "2019 Honda Civic";
+const EXAMPLE_TILES = [
+  ["Odometer", "84,120 km"],
+  ["Real economy", "13.1 km/L"],
+  ["Last fill-up", "38.0 L"],
+  ["Next service", "Oil change in 1,880 km"],
+];
+
 const STEPS = [
   {
     title: "Add your car",
@@ -103,6 +115,22 @@ function LandingSections({ primaryCta }) {
           <p>No technical clutter, just clear answers when you need them.</p>
         </div>
         <div className="landing-feature-grid">
+          <section
+            className="landing-feature-card landing-feature-card--example"
+            aria-label="Example of the CarSage dashboard"
+          >
+            <span className="landing-feature-card__eyebrow">Example</span>
+            <h3>{EXAMPLE_CAR}</h3>
+            {/* Each tile reuses the inset panel the feature cards already use for their samples. */}
+            <dl className="landing-example__tiles">
+              {EXAMPLE_TILES.map(([label, value]) => (
+                <div key={label} className="landing-feature-card__preview">
+                  <dt className="landing-feature-card__preview-meta">{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
           {FEATURES.map((feature) => (
             <div key={feature.title} className="landing-feature-card">
               <div className="landing-feature-card__icon" aria-hidden="true">

@@ -103,15 +103,16 @@ h3 {
   line-height: 1.2;
 }
 
-/* CAR-68: Space Grotesk for every heading, plus the Landing hero headline,
-   which is styled text rather than a heading element. */
+/* CAR-68: Space Grotesk for every heading, plus the Landing hero's wordmark,
+   which is styled text rather than a heading element. (The hero headline was
+   listed here until CAR-80 made it the page's h1.) */
 h1,
 h2,
 h3,
 h4,
 h5,
 h6,
-.landing-hero__headline {
+.landing-hero__brand {
   font-family: var(--font-heading);
 }
 
@@ -2155,12 +2156,17 @@ textarea:focus {
   gap: calc(var(--spacing-unit) * 8);
 }
 
-.landing-hero {
-  position: relative;
+/* The hero and the closing call to action are both a centred column. */
+.landing-hero,
+.landing-closing-cta {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+}
+
+.landing-hero {
+  position: relative;
   padding-top: calc(var(--spacing-unit) * 3);
   overflow: hidden;
 }
@@ -2181,8 +2187,37 @@ textarea:focus {
 }
 
 
-.landing-hero__logo {
-  margin-bottom: calc(var(--spacing-unit) * 3);
+/* Brand lockup: the cropped icon (see Logo.jsx) with the wordmark as text beside it. */
+.landing-hero__brand {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin: 0 0 calc(var(--spacing-unit) * 3);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+/* Crops the vertical lockup to its icon, dropping the wordmark and tagline text it draws below.
+   Measured on the artwork (373x480 viewBox): the icon paths end at y=344.3, and the "CarSage"
+   <text> box begins at y=345 (its baseline is y=412 at font-size 62, so the glyphs themselves ink
+   from about y=367). 344 is therefore the last row that is still icon. A 373:344 box with `cover`
+   scales the image so that row is the bottom of the frame: the icon alone, full width, nothing
+   cropped at the sides. A square box would instead scale to the full 373 width and leave the
+   wordmark's first 28 rows showing under the icon.
+   If logo.svg's geometry changes, re-measure: LandingPage.test.jsx pins the numbers this assumes. */
+.logo--mark {
+  aspect-ratio: 373 / 344;
+  object-fit: cover;
+  object-position: top;
+}
+
+/* The two gold badges: the hero's tagline pill and the label on each feature card. */
+.landing-eyebrow,
+.landing-feature-card__eyebrow {
+  background-color: rgba(201, 162, 75, 0.18);
+  color: var(--color-text);
+  font-weight: 600;
 }
 
 .landing-eyebrow {
@@ -2191,10 +2226,7 @@ textarea:focus {
   gap: calc(var(--spacing-unit) * 1);
   padding: calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 2);
   border-radius: var(--radius-lg);
-  background-color: rgba(201, 162, 75, 0.18);
-  color: var(--color-text);
   font-size: 0.8125rem;
-  font-weight: 600;
   margin-bottom: calc(var(--spacing-unit) * 3);
 }
 
@@ -2206,6 +2238,16 @@ textarea:focus {
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--color-text);
+  /* Evens the lines out, so the last one is never a single orphan word. */
+  text-wrap: balance;
+}
+
+/* The decorative highlight: a gold band behind the closing phrase, like a marker stroke. Plain CSS
+   (D9's hand-drawn underline was dropped), and a fixed tint rather than --color-accent, so the text
+   above it keeps the same contrast on all nine brand themes. */
+.landing-hero__headline em {
+  font-style: normal;
+  box-shadow: inset 0 -0.3em rgba(201, 162, 75, 0.38);
 }
 
 .landing-hero__subtitle {
@@ -2216,11 +2258,16 @@ textarea:focus {
   color: var(--color-text-muted);
 }
 
-.landing-hero__cta-row {
+/* The two centred, wrapping rows under the headline. */
+.landing-hero__cta-row,
+.landing-trust-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
+}
+
+.landing-hero__cta-row {
   gap: calc(var(--spacing-unit) * 2);
 }
 
@@ -2232,10 +2279,6 @@ textarea:focus {
 }
 
 .landing-trust-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
   gap: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 3);
   margin-top: calc(var(--spacing-unit) * 4);
   font-size: 0.8125rem;
@@ -2273,23 +2316,48 @@ textarea:focus {
   gap: calc(var(--spacing-unit) * 3);
 }
 
-.landing-feature-card {
-  display: flex;
-  flex-direction: column;
-  padding: calc(var(--spacing-unit) * 3);
+/* The raised surfaces on this page. */
+.landing-feature-card,
+.landing-pillars__grid {
   background-color: var(--color-surface);
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
 }
 
-.landing-feature-card__icon {
+.landing-feature-card {
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--spacing-unit) * 3);
+}
+
+/* Bento: the example spans the grid's full width above the three feature cards. */
+.landing-feature-card--example {
+  grid-column: 1 / -1;
+}
+
+.landing-example__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: calc(var(--spacing-unit) * 2);
+  margin: 0;
+}
+
+.landing-example__tiles dd {
+  margin: 0;
+}
+
+/* The two icon tiles. Their fill comes from the shared icon-tile rule further down. */
+.landing-feature-card__icon,
+.landing-pillar__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--radius-lg);
+}
+
+.landing-feature-card__icon {
   width: 44px;
   height: 44px;
-  border-radius: var(--radius-lg);
-  background-color: var(--color-input-bg);
   font-size: 1.375rem;
   margin-bottom: calc(var(--spacing-unit) * 2);
 }
@@ -2299,10 +2367,7 @@ textarea:focus {
   align-self: flex-start;
   padding: 2px calc(var(--spacing-unit) * 1.25);
   border-radius: var(--radius-base);
-  background-color: rgba(201, 162, 75, 0.18);
-  color: var(--color-text);
   font-size: 0.75rem;
-  font-weight: 600;
   margin-bottom: calc(var(--spacing-unit) * 1.5);
 }
 
@@ -2336,9 +2401,6 @@ textarea:focus {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: calc(var(--spacing-unit) * 4);
   padding: calc(var(--spacing-unit) * 4);
-  background-color: var(--color-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
 }
 
 .landing-pillar {
@@ -2349,13 +2411,8 @@ textarea:focus {
 
 .landing-pillar__icon {
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: var(--radius-lg);
-  background-color: var(--color-input-bg);
   font-size: 1.125rem;
 }
 
@@ -2372,10 +2429,6 @@ textarea:focus {
 }
 
 .landing-closing-cta {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
   padding: calc(var(--spacing-unit) * 6) calc(var(--spacing-unit) * 4);
   background-color: var(--color-primary);
   border-radius: var(--radius-lg);

@@ -47,8 +47,9 @@ function renderAtPath(path) {
 describe("App routing — public screens", () => {
   it("renders the Landing screen at /", () => {
     renderAtPath("/");
+    // CAR-80: the hero headline is the page's h1 (it was a visually hidden "CarSage" before).
     expect(
-      screen.getByRole("heading", { name: "CarSage" }),
+      screen.getByRole("heading", { name: /Everything about your car/ }),
     ).toBeInTheDocument();
   });
 

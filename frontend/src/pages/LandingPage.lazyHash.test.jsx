@@ -43,7 +43,8 @@ describe("Landing opened on a #hash before its lazy sections have loaded", () =>
     );
 
     // First render: the hero is there, the sections are not, and a placeholder holds their place.
-    expect(screen.getByText("Everything about your car, in one place")).toBeInTheDocument();
+    // A regex, because the headline's closing phrase is its own <em> (the CAR-80 highlight).
+    expect(screen.getByText(/Everything about your car/)).toBeInTheDocument();
     expect(document.getElementById("how-it-works")).toBeNull();
     expect(document.querySelector(".landing-sections-placeholder")).toBeInTheDocument();
     expect(scrollIntoView).not.toHaveBeenCalled();

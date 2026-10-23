@@ -20,10 +20,15 @@ import { gzipSync } from "node:zlib";
 // CSS (added in CAR-75, decided 2026-10-22): 72 kB min and 13 kB gzip for the stylesheet(s) every first visit downloads.
 // It was 64.7 / 10.9 when the budget was set; the design pass adds icons, motion and the Dashboard, so the budget is
 // measured and reported in every ticket and enforced here from now on. Raising it needs the developer's approval.
+//
+// Raised once, after CAR-80 (CSS 72.03 / 12.24): the min budget to 73, approved 2026-10-23. D1 to D5 had used all of
+// the original 72 (71.78 when D6 started), so the Landing refresh had nowhere to land. D6 paid for about 0.65 kB of
+// its own additions by merging rules that were duplicated between the Landing cards, pillars, eyebrows and icon
+// tiles, leaving +0.25 kB net. The gzip budget is unchanged and is the one visitors feel: it is still 0.76 kB clear.
 const BUDGET = {
   entry: { minKB: 470, gzipKB: 134 },
   initial: { minKB: 516, gzipKB: 150 },
-  css: { minKB: 72, gzipKB: 13 },
+  css: { minKB: 73, gzipKB: 13 },
 };
 
 // A class name Recharts writes into the DOM; present in any chunk that bundles it.
