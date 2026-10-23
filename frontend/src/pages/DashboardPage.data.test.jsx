@@ -286,6 +286,51 @@ describe("quick actions and the three lower cards", () => {
     for (const to of ["/trip-planner", "/fuel-log", "/advisor", "/expenses"]) expect(hrefs).toContain(to);
   });
 
+  const actionClasses = () => Object.fromEntries(within(hero()).getAllByRole("link").filter((a) => a.classList.contains("dashboard-action")).map((a) => [a.textContent, a.className]));
+
+  it("makes Log a fill-up the accent button, and the other three outlines, while the car has no odometer reading", async () => {
+    mockTables({ cars: [car(1)], fuelLogs: [fill("car-1", "f1", "2026-09-30", null, 6.33)] });
+    renderAt("/dashboard");
+    await screen.findByLabelText(/Make1 Model1/);
+    await waitFor(() => expect(actionClasses()["Log a fill-up"]).toContain("dashboard-action--cta"));
+
+    expect(actionClasses()).toEqual({
+      "Plan a trip": "dashboard-action dashboard-action--outline",
+      "Log a fill-up": "dashboard-action dashboard-action--cta",
+      "Ask the advisor": "dashboard-action dashboard-action--outline",
+      "Add expense": "dashboard-action dashboard-action--outline",
+    });
+  });
+
+  it("keeps all four quick actions equal once the car has a reading", async () => {
+    mockTables({ cars: [car(1)], fuelLogs: enough(1) });
+    renderAt("/dashboard");
+    await screen.findByLabelText(/Make1 Model1/);
+    await settled();
+
+    expect(Object.values(actionClasses())).toEqual(Array(4).fill("dashboard-action"));
+  });
+
+  it("keeps them equal while the fill-ups load and when they fail (nothing is known about the reading)", async () => {
+    mockTables({ cars: [car(1)], fuelLogs: enough(1), pending: ["fuel_logs"] });
+    renderAt("/dashboard");
+    await screen.findByLabelText(/Make1 Model1/);
+    expect(Object.values(actionClasses())).toEqual(Array(4).fill("dashboard-action"));
+  });
+
+  it("keeps them equal when the fill-ups fail to load", async () => {
+    mockTables({ cars: [car(1)], fuelLogs: enough(1), fail: { fuel_logs: true } });
+    renderAt("/dashboard");
+    await screen.findByLabelText(/Make1 Model1/);
+    await settled();
+    expect(Object.values(actionClasses())).toEqual(Array(4).fill("dashboard-action"));
+  });
+
+  it("styles the accent and outline variants in the stylesheet", () => {
+    expect(indexCss).toMatch(/\.dashboard-action--cta[^{]*\{[^}]*var\(--color-accent\)/);
+    expect(indexCss).toMatch(/\.dashboard-action--outline[^{]*\{[^}]*transparent/);
+  });
+
   it("the three lower cards are present (this month, maintenance, DIY)", async () => {
     mockTables({ cars: [car(1)], fuelLogs: enough(1) });
     renderAt("/dashboard");

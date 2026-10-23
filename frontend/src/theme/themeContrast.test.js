@@ -151,8 +151,8 @@ describe("the stylesheet keeps the accent colour for fills", () => {
     const fills = rules.filter((r) => /var\(--color-accent\)/.test(r.decls["background-color"] ?? r.decls.background ?? "") && r.decls.color);
     // Exactly these rules fill with the accent and set a text colour. A rule that loses the accent fails here by name, and a new accent
     // fill must be added on purpose. (.advisor-badge--diy and .maintenance-badge--due_soon used to be here; CAR-81 moved those two to
-    // the fixed --status-* colours, which no theme changes: see statusColours.test.js.)
-    const ACCENT_FILLS = [".btn-accent", ".cold-start-banner", ".site-nav__auth-link"];
+    // the fixed --status-* colours, which no theme changes: see statusColours.test.js. The Dashboard's accent "Log a fill-up" button was added on purpose.)
+    const ACCENT_FILLS = [".btn-accent", ".cold-start-banner", ".dashboard-action--cta", ".site-nav__auth-link"];
     expect(fills.map((r) => r.selector).sort()).toEqual(ACCENT_FILLS);
     for (const r of fills) expect(r.decls.color, r.selector).toBe("var(--color-on-accent)");
   });

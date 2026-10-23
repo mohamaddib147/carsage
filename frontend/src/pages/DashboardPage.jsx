@@ -14,6 +14,9 @@
 //
 // Numbers are plain text (a fade at most, CAR-75); money goes through <Price>. Each tile and card has a skeleton, empty
 // and error state, and the blocks reserve their height so nothing moves when the data lands (CLS measured on Slow 4G).
+// Quick actions: while the active car has no odometer reading, "Log a fill-up" is the one filled accent button and the
+// other three are outlines, since a reading is the next useful thing to add; with a reading all four are equal.
+//
 // The optional car photo is intentionally NOT shown here — it stays behind the photo-code boundary; the hero uses the
 // brand badge, as the mobile reference does.
 
@@ -180,9 +183,14 @@ function HeroTiles({ fuelState, odometer, economy, lastFillUp, serviceState, nex
 /**
  * The hero card for the active car (CAR-79). The car row is available as soon as the car list loads, so the badge,
  * name, specs line and actions render immediately; the tiles and the Default badge fill in when their data settles.
+ * Once the fill-ups have loaded and the car has no odometer reading, "Log a fill-up" becomes the accent call to action
+ * and the other quick actions outlines; while loading, on an error, or with a reading, all four are equal.
  */
 function CarHero({ car, isDefault, tiles }) {
   const specs = heroSpecParts(car);
+  const needsOdometer = tiles.fuelState === "ok" && !tiles.odometer;
+  const actionClass = (to) =>
+    needsOdometer ? `dashboard-action dashboard-action--${to === "/fuel-log" ? "cta" : "outline"}` : "dashboard-action";
   return (
     <section className="dashboard-hero" aria-label={`${car.year} ${car.make} ${car.model}`}>
       <div className="dashboard-hero__head">
@@ -208,7 +216,7 @@ function CarHero({ car, isDefault, tiles }) {
 
       <div className="dashboard-hero__actions">
         {QUICK_ACTIONS.map(({ to, label, Icon }) => (
-          <Link key={to} className="dashboard-action" to={to}>
+          <Link key={to} className={actionClass(to)} to={to}>
             <Icon size={20} />
             {label}
           </Link>

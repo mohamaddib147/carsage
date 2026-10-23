@@ -1734,6 +1734,23 @@ textarea:focus {
   background-color: var(--color-primary-hover);
 }
 
+/* With no odometer reading yet: "Log a fill-up" is the accent call to action, the other three are outlines. */
+.dashboard-action--cta {
+  background-color: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.dashboard-action--cta:hover {
+  background-color: var(--color-accent);
+}
+
+.dashboard-action--outline,
+.dashboard-action--outline:hover {
+  background-color: transparent;
+  color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
 /* The car switcher: a chip per car (the active one pressed), plus Add another car. Chips scroll sideways on a phone. */
 .dashboard-switcher {
   display: flex;
