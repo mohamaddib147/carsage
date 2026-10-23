@@ -65,10 +65,13 @@ const QUICK_ACTIONS = [
 /**
  * One hero stat tile. Shows a skeleton while loading, a muted empty message (optionally with a link) when there is no
  * data, or the value with a small caption. Every state is the same height, so the tile never changes the hero's size.
+ * With `emptyButton` the empty state's link is a small outline button under the message instead of an inline link (the
+ * Next service tile's "Set up reminders"; kept quieter than the accent quick action).
  * @param {{ Icon: Function, label: string, state: "loading"|"empty"|"ok", value?: import('react').ReactNode,
- *   caption?: import('react').ReactNode, emptyText?: string, emptyTo?: string, emptyLinkText?: string }} props
+ *   caption?: import('react').ReactNode, emptyText?: string, emptyTo?: string, emptyLinkText?: string,
+ *   emptyButton?: boolean }} props
  */
-function HeroTile({ Icon, label, state, value, caption, emptyText, emptyTo, emptyLinkText }) {
+function HeroTile({ Icon, label, state, value, caption, emptyText, emptyTo, emptyLinkText, emptyButton }) {
   return (
     <div className="dashboard-tile">
       <span className="dashboard-tile__icon" aria-hidden="true"><Icon size={20} /></span>
@@ -79,15 +82,20 @@ function HeroTile({ Icon, label, state, value, caption, emptyText, emptyTo, empt
           <span className="skeleton-bar skeleton-bar--tile-caption" />
         </div>
       ) : state === "empty" ? (
-        <p className="dashboard-tile__empty">
-          {emptyText}
-          {emptyTo && (
-            <>
-              {" "}
-              <Link to={emptyTo}>{emptyLinkText}</Link>
-            </>
+        <>
+          <p className="dashboard-tile__empty">
+            {emptyText}
+            {emptyTo && !emptyButton && (
+              <>
+                {" "}
+                <Link to={emptyTo}>{emptyLinkText}</Link>
+              </>
+            )}
+          </p>
+          {emptyTo && emptyButton && (
+            <Link className="btn-secondary btn-secondary--sm dashboard-tile__button" to={emptyTo}>{emptyLinkText}</Link>
           )}
-        </p>
+        </>
       ) : (
         <>
           <p className="dashboard-tile__value">{value}</p>
@@ -174,6 +182,7 @@ function HeroTiles({ fuelState, odometer, economy, lastFillUp, serviceState, nex
           emptyText="Nothing tracked yet."
           emptyTo="/maintenance"
           emptyLinkText="Set up reminders"
+          emptyButton
         />
       )}
     </div>

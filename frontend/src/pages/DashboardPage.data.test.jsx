@@ -326,6 +326,36 @@ describe("quick actions and the three lower cards", () => {
     expect(Object.values(actionClasses())).toEqual(Array(4).fill("dashboard-action"));
   });
 
+  it("shows Set up reminders as a small outline button under the Next service message, not an inline link", async () => {
+    mockTables({ cars: [car(1)], fuelLogs: enough(1) });
+    renderAt("/dashboard");
+    await screen.findByLabelText(/Make1 Model1/);
+    await settled();
+
+    const empty = tile("Next service").querySelector(".dashboard-tile__empty");
+    expect(empty).toHaveTextContent("No service reminders yet.");
+    expect(within(empty).queryByRole("link")).not.toBeInTheDocument(); // not inline in the sentence
+    const button = within(tile("Next service")).getByRole("link", { name: "Set up reminders" });
+    expect(button).toHaveAttribute("href", "/maintenance");
+    expect(button).toHaveClass("btn-secondary", "btn-secondary--sm", "dashboard-tile__button");
+    expect(button).not.toHaveClass("dashboard-action"); // never one of the quick actions
+  });
+
+  it("leaves the other tiles' empty links inline", async () => {
+    mockTables({ cars: [car(1)], fuelLogs: [] });
+    renderAt("/dashboard");
+    await screen.findByLabelText(/Make1 Model1/);
+    await settled();
+
+    for (const label of ["Odometer", "Fuel economy", "Last fill-up"]) {
+      expect(within(tile(label).querySelector(".dashboard-tile__empty")).getByRole("link")).toBeInTheDocument();
+    }
+  });
+
+  it("styles the small outline button in the stylesheet (transparent fill, primary outline)", () => {
+    expect(indexCss).toMatch(/\.dashboard-tile__button \{[^}]*background-color:\s*transparent[^}]*var\(--color-primary\)/);
+  });
+
   it("styles the accent and outline variants in the stylesheet", () => {
     expect(indexCss).toMatch(/\.dashboard-action--cta[^{]*\{[^}]*var\(--color-accent\)/);
     expect(indexCss).toMatch(/\.dashboard-action--outline[^{]*\{[^}]*transparent/);
