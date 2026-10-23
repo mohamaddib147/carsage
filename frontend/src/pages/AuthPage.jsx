@@ -250,8 +250,8 @@ function AuthPage() {
             <h1 className="auth-card__title">{isSignUp ? "Sign Up" : "Log In"}</h1>
             <p className="auth-card__subtitle">
               {isSignUp
-                ? "Create an account to start tracking your cars."
-                : "Log in to access your dashboard."}
+                ? "Create your free account to start tracking your cars."
+                : "Welcome back. Log in to see your cars."}
             </p>
 
             <button
