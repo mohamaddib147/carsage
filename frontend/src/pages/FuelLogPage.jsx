@@ -30,7 +30,8 @@
 //
 // Dashboard fix: the reading stays optional (nullable column, nothing blocked), but saving without one first asks
 // "Skip the odometer? Fuel economy and service reminders need it." with a "Save without odometer" button, the last
-// step of the same confirm chain, and the field's hint says why the reading matters.
+// step of the same confirm chain (scrolled into view when it appears, since the submit button is further down), and
+// the field's hint says why the reading matters.
 
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -183,6 +184,10 @@ function FuelLogPage() {
   const currency = chosenCurrency ?? primaryCurrency;
   const skipKey = [selectedCarId, date, liters, cost, currency, odometer].join("|");
   const skipWarning = skipFor === skipKey;
+  useEffect(() => {
+    // Optional call: jsdom has no scrollIntoView. Instant (no smooth scroll), so there is no motion to reduce.
+    if (skipWarning) skipPromptRef.current?.scrollIntoView?.({ block: "center" });
+  }, [skipWarning]);
   const [fieldErrors, setFieldErrors] = useState({});
   const [saveError, setSaveError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -199,6 +204,9 @@ function FuelLogPage() {
   const [currentFuelPriceLbp, setCurrentFuelPriceLbp] = useState(null);
 
   const litersInputRef = useRef(null);
+  // The "Skip the odometer?" prompt sits under the Odometer field, above the scan card and the submit button, so on a phone
+  // it can be off screen when Add Fill-Up is tapped; it is scrolled into view when it appears.
+  const skipPromptRef = useRef(null);
   const scanPumpInputRef = useRef(null);
   const scanOdometerInputRef = useRef(null);
   // Read inside the scan handlers' async success path instead of the
@@ -727,7 +735,7 @@ function FuelLogPage() {
                 </button>
               </div>
             ) : skipWarning ? (
-              <div role="alert" className="fuel-log-order-warning">
+              <div ref={skipPromptRef} role="alert" className="fuel-log-order-warning">
                 <p>Skip the odometer? Fuel economy and service reminders need it.</p>
                 {/* Every earlier check already passed or was confirmed for these exact values (see skipKey). */}
                 <button

@@ -10,7 +10,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import FuelLogPage from "./FuelLogPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import CurrencyToggle from "../components/CurrencyToggle.jsx";
@@ -1505,6 +1505,57 @@ describe("FuelLogPage — skip-the-odometer prompt (dashboard fix)", () => {
 
     await waitFor(() => expect(calls.inserts).toHaveLength(1));
     expect(screen.queryByText(/far from today's fuel price/)).not.toBeInTheDocument();
+  });
+
+  describe("scrolling the prompt into view", () => {
+    // jsdom has no scrollIntoView: give elements one for these tests, and remove it after.
+    const scroll = vi.fn();
+    beforeEach(() => {
+      scroll.mockClear();
+      Element.prototype.scrollIntoView = scroll;
+    });
+    afterEach(() => {
+      delete Element.prototype.scrollIntoView;
+    });
+
+    it("scrolls the prompt itself into view when it appears (the submit button is below the field)", async () => {
+      const user = userEvent.setup();
+      mockDatabase();
+
+      renderPage();
+      await screen.findByText("No fill-ups logged yet");
+      await fillAndSave(user);
+      await screen.findByText(PROMPT);
+
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll.mock.contexts[0]).toBe(screen.getByText(PROMPT).closest(".fuel-log-order-warning"));
+      expect(scroll).toHaveBeenCalledWith({ block: "center" });
+    });
+
+    it("does not scroll when there is no prompt (a reading was given)", async () => {
+      const user = userEvent.setup();
+      mockDatabase();
+
+      renderPage();
+      await screen.findByText("No fill-ups logged yet");
+      await fillAndSave(user, { odometer: "84610" });
+      await screen.findByRole("status");
+
+      expect(scroll).not.toHaveBeenCalled();
+    });
+
+    it("does not scroll again when the prompt is only confirmed away", async () => {
+      const user = userEvent.setup();
+      mockDatabase();
+
+      renderPage();
+      await screen.findByText("No fill-ups logged yet");
+      await fillAndSave(user);
+      await user.click(await screen.findByRole("button", { name: "Save without odometer" }));
+      await screen.findByRole("status");
+
+      expect(scroll).toHaveBeenCalledTimes(1); // only when it appeared
+    });
   });
 
   it("says in the field's hint that fuel economy and service reminders need the reading", async () => {
