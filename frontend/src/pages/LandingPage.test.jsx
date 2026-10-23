@@ -5,7 +5,7 @@
 // mocked so no real network calls happen.
 
 import { readFileSync } from "node:fs";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import LandingPage from "./LandingPage.jsx";
@@ -47,7 +47,7 @@ describe("LandingPage", () => {
     renderPage();
 
     const headline = screen.getByRole("heading", { level: 1 });
-    expect(headline).toHaveTextContent("Everything about your car, in one place");
+    expect(headline).toHaveTextContent("Know what your car costs, and what it needs next");
     expect(screen.getByText("CarSage")).toHaveClass("landing-hero__brand");
     expect(screen.queryByRole("heading", { name: "CarSage" })).not.toBeInTheDocument();
   });
@@ -65,8 +65,8 @@ describe("LandingPage", () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
     renderPage();
 
-    expect(await screen.findByText("Live Route Costing")).toBeInTheDocument();
-    expect(screen.getByText("Smart Advisor")).toBeInTheDocument();
+    expect(await screen.findByText("Trip costs")).toBeInTheDocument();
+    expect(screen.getByText("Car problems")).toBeInTheDocument();
     expect(screen.queryByText("Predictive Route Engine")).not.toBeInTheDocument();
     expect(screen.queryByText("Triage Intelligence")).not.toBeInTheDocument();
     // The rest of each card is unchanged.
@@ -141,12 +141,36 @@ describe("LandingPage sections and anchors", () => {
 
     const preview = await screen.findByRole("region", { name: "Example of the CarSage dashboard" });
     expect(preview).toHaveTextContent("Example");
-    for (const text of ["2019 Honda Civic", "Odometer", "84,120 km", "Real economy", "13.1 km/L", "Next service"]) {
+    for (const text of ["2019 Honda Civic", "Odometer", "84,120 km", "Fuel economy", "13.1 km/L", "Next service"]) {
       expect(preview).toHaveTextContent(text);
     }
     // A different car from the Car Profile card's own sample, which sits right below it.
     expect(preview).not.toHaveTextContent("Toyota Corolla");
     expect(preview).not.toHaveTextContent(/tire pressure|battery health|diagnostic/i);
+  });
+
+  // Copy pass: the page used to show 3 of the app's 6 tools. The other three sit in a short list under the cards.
+  it("also lists the everyday tools the three feature cards leave out", async () => {
+    renderPage();
+
+    const more = await screen.findByRole("region", { name: "More tools" });
+    for (const [title, text] of [
+      ["Fuel Log", /real km\/L/],
+      ["Service reminders", /oil changes/],
+      ["Expenses", /repairs, parking, insurance/i],
+    ]) {
+      expect(within(more).getByRole("heading", { name: title })).toBeInTheDocument();
+      expect(within(more).getByText(text)).toBeInTheDocument();
+    }
+  });
+
+  it("explains itself in everyday words: no developer terms, and it says who it is for", async () => {
+    renderPage();
+
+    await screen.findByRole("region", { name: "More tools" });
+    const text = document.body.textContent;
+    expect(text).toContain("Free car care app for drivers in Lebanon");
+    expect(text).not.toMatch(/row-level security|telemetry|predictive|triage|OBD/i);
   });
 
   it("has a Features section and a How it works section (the nav's anchor targets)", async () => {
@@ -184,8 +208,7 @@ describe("LandingPage sections and anchors", () => {
     Element.prototype.scrollIntoView = scrollIntoView;
     try {
       renderPage("/#no-such-section");
-      // A regex, because the headline's closing phrase is its own <em> (the CAR-80 highlight).
-      await screen.findByText(/Everything about your car/);
+      await screen.findByText(/Know what your car costs/);
 
       expect(scrollIntoView).not.toHaveBeenCalled();
     } finally {
@@ -205,7 +228,7 @@ describe("LandingPage — logo (CAR-51, CAR-80)", () => {
   it("shows the brand mark in the hero, decorative, with the wordmark as the text beside it", async () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
     renderPage();
-    await screen.findByText(/Everything about your car/);
+    await screen.findByText(/Know what your car costs/);
 
     // CAR-80: the mark is cropped out of the lockup and the name is real text, so the image is
     // decorative (alt="") — otherwise a screen reader would read "CarSage" twice.

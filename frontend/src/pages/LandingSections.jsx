@@ -6,12 +6,12 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ArrowRight } from "../components/icons.jsx";
-import { Car, Lock, MessageCircle, ReceiptText, Route } from "../components/iconsMore.jsx";
+import { Car, Fuel, Lock, MessageCircle, ReceiptText, Route, Tag, Wrench } from "../components/iconsMore.jsx";
 
 const FEATURES = [
   {
     icon: Car,
-    eyebrow: "Digital Garage",
+    eyebrow: "Your car",
     title: "Car Profile",
     description:
       "Add your car once (make, model, fuel type, and specs), and CarSage remembers it for every trip you plan.",
@@ -20,7 +20,7 @@ const FEATURES = [
   },
   {
     icon: Route,
-    eyebrow: "Live Route Costing",
+    eyebrow: "Trip costs",
     title: "Trip Planner",
     description:
       "Enter a destination and get real-world fuel cost and traffic-adjusted travel time, using live Google Maps data and Lebanon's current fuel prices.",
@@ -29,7 +29,7 @@ const FEATURES = [
   },
   {
     icon: MessageCircle,
-    eyebrow: "Smart Advisor",
+    eyebrow: "Car problems",
     title: "AI Advisor",
     description:
       "Describe a car issue in plain language and get clear guidance on whether it's safe to fix yourself or time to see a mechanic.",
@@ -45,9 +45,29 @@ const FEATURES = [
 const EXAMPLE_CAR = "2019 Honda Civic";
 const EXAMPLE_TILES = [
   ["Odometer", "84,120 km"],
-  ["Real economy", "13.1 km/L"],
+  ["Fuel economy", "13.1 km/L"],
   ["Last fill-up", "38.0 L"],
   ["Next service", "Oil change in 1,880 km"],
+];
+
+// The everyday tools the three cards above do not cover (copy pass): the page used to leave them out entirely.
+// They reuse the trust pillars' icon-and-text layout, so this adds no CSS.
+const MORE_TOOLS = [
+  {
+    icon: Fuel,
+    title: "Fuel Log",
+    description: "Log each fill-up to see what you spend and your real km/L.",
+  },
+  {
+    icon: Wrench,
+    title: "Service reminders",
+    description: "Set reminders for oil changes and other service so nothing gets missed.",
+  },
+  {
+    icon: Tag,
+    title: "Expenses",
+    description: "Track repairs, parking, insurance and other costs beyond fuel.",
+  },
 ];
 
 const STEPS = [
@@ -77,15 +97,15 @@ const PILLARS = [
   },
   {
     icon: MessageCircle,
-    title: "Zero Jargon",
+    title: "Plain answers",
     description:
-      "Straightforward, plain-language answers. Understand what your car needs without needing an engineering degree.",
+      "Clear answers in everyday words, so you know what your car needs without an engineering degree.",
   },
   {
     icon: Lock,
     title: "Privacy First",
     description:
-      "Your cars and trips are yours alone. Every record is protected by row-level security scoped to your account.",
+      "Your cars, trips and costs are visible only to you.",
   },
 ];
 
@@ -110,9 +130,9 @@ function LandingSections({ primaryCta }) {
     <>
       <section className="landing-features" id="features">
         <div className="landing-section-header">
-          <p className="landing-section-header__eyebrow">Designed for clarity</p>
-          <h2>Thoughtful tools for smarter ownership</h2>
-          <p>No technical clutter, just clear answers when you need them.</p>
+          <p className="landing-section-header__eyebrow">What you can do</p>
+          <h2>Everything you need for your car</h2>
+          <p>Plan trips, track what you spend, and get plain answers about problems.</p>
         </div>
         <div className="landing-feature-grid">
           <section
@@ -163,6 +183,22 @@ function LandingSections({ primaryCta }) {
         </div>
       </section>
 
+      <section className="landing-pillars" aria-label="More tools">
+        <div className="landing-pillars__grid">
+          {MORE_TOOLS.map((tool) => (
+            <div key={tool.title} className="landing-pillar">
+              <span className="landing-pillar__icon" aria-hidden="true">
+                <tool.icon size={20} />
+              </span>
+              <div>
+                <h4>{tool.title}</h4>
+                <p>{tool.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="landing-steps" id="how-it-works">
         <div className="landing-section-header">
           <p className="landing-section-header__eyebrow">Three simple steps</p>
@@ -198,11 +234,10 @@ function LandingSections({ primaryCta }) {
       </section>
 
       <section className="landing-closing-cta">
-        <span className="landing-closing-cta__badge">Start your journey today</span>
-        <h2>Ready for a calmer driving experience?</h2>
+        <span className="landing-closing-cta__badge">Free, no credit card</span>
+        <h2>Ready to know your car better?</h2>
         <p>
-          Join drivers who plan trips and manage car issues with total ease,
-          completely free.
+          Add your car and plan your first trip today. It&apos;s completely free.
         </p>
         {primaryCta && (
           <Link className="btn-accent" to={primaryCta.to}>

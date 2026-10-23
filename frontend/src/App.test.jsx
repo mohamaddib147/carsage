@@ -49,7 +49,7 @@ describe("App routing — public screens", () => {
     renderAtPath("/");
     // CAR-80: the hero headline is the page's h1 (it was a visually hidden "CarSage" before).
     expect(
-      screen.getByRole("heading", { name: /Everything about your car/ }),
+      screen.getByRole("heading", { name: /Know what your car costs/ }),
     ).toBeInTheDocument();
   });
 

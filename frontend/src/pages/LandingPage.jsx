@@ -60,15 +60,16 @@ function LandingPage() {
         </p>
         <div className="landing-eyebrow">
           <Sparkle size={14} />
-          <span>The Mindful Driver&apos;s Co-Pilot</span>
+          <span>Free car care app for drivers in Lebanon</span>
         </div>
         {/* The page's only h1 is the headline a visitor actually reads. */}
         <h1 className="landing-hero__headline">
-          Everything about your car, <em>in one place</em>
+          Know what your car costs, and what it needs next
         </h1>
         <p className="landing-hero__subtitle">
-          From trip budgets to unexpected engine noises, CarSage simplifies
-          car ownership so you can drive with peace of mind.
+          Plan trips with real fuel costs, log your fill-ups, get service
+          reminders, and ask what that strange noise means. Free, and built
+          around Lebanon&apos;s fuel prices.
         </p>
         <div className="landing-hero__cta-row">
           {primaryCta && (
@@ -82,13 +83,13 @@ function LandingPage() {
         </div>
         <div className="landing-trust-row">
           <span>
-            <Check size={14} /> Completely free
+            <Check size={14} /> Free to use
           </span>
           <span>
-            <Check size={14} /> No credit card required
+            <Check size={14} /> No credit card
           </span>
           <span>
-            <Check size={14} /> Your data is never sold
+            <Check size={14} /> We never sell your data
           </span>
         </div>
       </section>

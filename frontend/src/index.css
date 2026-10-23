@@ -2278,14 +2278,6 @@ textarea:focus {
   text-wrap: balance;
 }
 
-/* The decorative highlight: a gold band behind the closing phrase, like a marker stroke. Plain CSS
-   (D9's hand-drawn underline was dropped), and a fixed tint rather than --color-accent, so the text
-   above it keeps the same contrast on all nine brand themes. */
-.landing-hero__headline em {
-  font-style: normal;
-  box-shadow: inset 0 -0.3em rgba(201, 162, 75, 0.38);
-}
-
 .landing-hero__subtitle {
   max-width: 560px;
   margin: calc(var(--spacing-unit) * 2) 0 calc(var(--spacing-unit) * 3);
