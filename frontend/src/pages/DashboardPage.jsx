@@ -14,6 +14,8 @@
 //
 // Numbers are plain text (a fade at most, CAR-75); money goes through <Price>. Each tile and card has a skeleton, empty
 // and error state, and the blocks reserve their height so nothing moves when the data lands (CLS measured on Slow 4G).
+// DIY success also shows its sample size, "(3 of 5)", from the same rows and rule as the percentage (lib/diySuccess.js).
+//
 // Quick actions: while the active car has no odometer reading, "Log a fill-up" is the one filled accent button and the
 // other three are outlines, since a reading is the next useful thing to add; with a reading all four are equal.
 //
@@ -30,7 +32,7 @@ import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 import { carSnapshot } from "../lib/carSnapshot.js";
 import { heroSpecParts } from "../lib/carFormat.js";
 import { formatMonth, monthlySummary, monthOf } from "../lib/costs.js";
-import { diyFixRate, latestFixedMessage, timeAgo } from "../lib/diySuccess.js";
+import { diyFixCounts, diyFixRate, latestFixedMessage, timeAgo } from "../lib/diySuccess.js";
 import { formatFillDate, formatLiters } from "../lib/fuelLog.js";
 import {
   dashboardMaintenance,
@@ -287,7 +289,7 @@ function DashboardPage() {
   // loaded (a failure just hides the badge — it is not worth an error state of its own).
   const [defaultCar, setDefaultCar] = useState(null);
 
-  const [diyStats, setDiyStats] = useState({ loading: true, fixRate: null, latestFix: null });
+  const [diyStats, setDiyStats] = useState({ loading: true, fixRate: null, counts: null, latestFix: null });
   // CAR-78: the one fuel_logs read. { status: "loading"|"ok"|"failed", rows }. Retried on its own.
   const [fuel, setFuel] = useState({ status: "loading", rows: null });
   const [fuelAttempt, setFuelAttempt] = useState(0);
@@ -397,13 +399,14 @@ function DashboardPage() {
         .eq("recommendation", "diy");
       if (cancelled) return;
       if (error || !data) {
-        setDiyStats({ loading: false, fixRate: null, latestFix: null });
+        setDiyStats({ loading: false, fixRate: null, counts: null, latestFix: null });
         return;
       }
       const fixRate = diyFixRate(data);
+      const counts = diyFixCounts(data); // the same rows and rule as the rate, shown as "(3 of 5)"
       const latest = latestFixedMessage(data);
       if (!latest) {
-        setDiyStats({ loading: false, fixRate, latestFix: null });
+        setDiyStats({ loading: false, fixRate, counts, latestFix: null });
         return;
       }
       const { data: issueRow } = await supabase
@@ -419,6 +422,7 @@ function DashboardPage() {
       setDiyStats({
         loading: false,
         fixRate,
+        counts,
         latestFix: { issue: issueRow?.message_text || "A DIY suggestion", timeAgo: timeAgo(latest.created_at) },
       });
     }
@@ -645,7 +649,7 @@ function DashboardPage() {
             <div className="dashboard-diy-stats">
               <div className="dashboard-stat-tile">
                 <p className="dashboard-stat-tile__value">{diyStats.fixRate}%</p>
-                <p className="dashboard-stat-tile__label">of your DIY suggestions with feedback fixed the issue</p>
+                <p className="dashboard-stat-tile__label">({diyStats.counts.fixed} of {diyStats.counts.answered}) of your DIY suggestions with feedback fixed the issue</p>
               </div>
               {diyStats.latestFix && (
                 <div className="dashboard-latest-fix">

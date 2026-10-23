@@ -167,6 +167,22 @@ describe("DashboardPage — DIY fix-rate stat (mentor feedback, no Jira task)", 
     expect(screen.getByText(/of your DIY suggestions with feedback fixed the issue/)).toBeInTheDocument();
   });
 
+  it("shows the sample size next to the percentage: 60% (3 of 5), counting only suggestions with feedback", async () => {
+    const row = (n, fixed) => ({ conversation_id: `c${n}`, marked_fixed: fixed, created_at: `2026-09-1${n}T10:00:00Z` });
+    mockCarsList(
+      { data: [], error: null },
+      {
+        diyMessages: { data: [row(1, true), row(2, true), row(3, true), row(4, false), row(5, false), row(6, null)], error: null },
+        issueRow: { data: { message_text: "Squeaking brakes" }, error: null },
+      },
+    );
+
+    renderDashboard();
+
+    expect(await screen.findByText("60%")).toBeInTheDocument();
+    expect(screen.getByText("(3 of 5) of your DIY suggestions with feedback fixed the issue")).toBeInTheDocument();
+  });
+
   it("highlights the most recently confirmed fix with its issue description and how long ago", async () => {
     const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 - 60_000).toISOString();
     mockCarsList(
