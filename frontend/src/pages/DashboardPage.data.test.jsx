@@ -353,7 +353,26 @@ describe("quick actions and the three lower cards", () => {
   });
 
   it("styles the small outline button in the stylesheet (transparent fill, primary outline)", () => {
-    expect(indexCss).toMatch(/\.dashboard-tile__button \{[^}]*background-color:\s*transparent[^}]*var\(--color-primary\)/);
+    expect(indexCss).toMatch(/\.dashboard-tile__button[^{]*\{[^}]*background-color:\s*transparent[^}]*var\(--color-primary\)/);
+  });
+
+  it("gives each switcher chip a dot in its make's brand accent colour (the default gold for a make with no theme)", async () => {
+    mockTables({ cars: [car(1, { make: "Ferrari", model: "488" }), car(2, { make: "Honda", model: "CR-V" }), car(3, { make: "Mazda", model: "MX-5" })] });
+    renderAt("/dashboard");
+    await screen.findByLabelText(/Ferrari 488/);
+
+    const dots = Object.fromEntries(
+      within(screen.getByRole("navigation", { name: "Your cars" })).getAllByRole("button").map((chip) => {
+        const dot = chip.querySelector(".dashboard-chip__dot");
+        expect(dot).toHaveAttribute("aria-hidden", "true"); // decoration: the name already says which car it is
+        return [chip.textContent, dot.style.getPropertyValue("--chip-dot")];
+      }),
+    );
+    expect(dots).toEqual({ "Ferrari 488": "#ffd900", "Honda CR-V": "#e4002b", "Mazda MX-5": "#c9a24b" });
+  });
+
+  it("paints the dot from that colour in the stylesheet", () => {
+    expect(indexCss).toMatch(/\.dashboard-chip__dot \{[^}]*border-radius:\s*50%[^}]*var\(--chip-dot\)/);
   });
 
   it("styles the accent and outline variants in the stylesheet", () => {

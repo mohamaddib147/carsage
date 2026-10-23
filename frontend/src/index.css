@@ -1644,12 +1644,10 @@ textarea:focus {
   color: var(--color-primary);
 }
 
-/* The Next service tile's "Set up reminders": a small outline button (btn-secondary--sm), quieter than the accent action. */
+/* The Next service tile's "Set up reminders": a small outline button (btn-secondary--sm, outline look shared with the
+   outline quick actions above), quieter than the accent action. */
 .dashboard-tile__button {
   margin-top: calc(var(--spacing-unit) * 1);
-  background-color: transparent;
-  box-shadow: inset 0 0 0 1px var(--color-primary);
-  color: var(--color-primary);
   font-weight: 600;
 }
 
@@ -1754,7 +1752,8 @@ textarea:focus {
 }
 
 .dashboard-action--outline,
-.dashboard-action--outline:hover {
+.dashboard-action--outline:hover,
+.dashboard-tile__button {
   background-color: transparent;
   color: var(--color-primary);
   box-shadow: inset 0 0 0 1px var(--color-primary);
@@ -1802,6 +1801,13 @@ textarea:focus {
   border-color: var(--color-primary);
   background-color: var(--color-primary);
   color: #ffffff;
+}
+
+.dashboard-chip__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background-color: var(--chip-dot);
 }
 
 .dashboard-chip__name {

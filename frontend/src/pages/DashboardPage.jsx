@@ -14,6 +14,9 @@
 //
 // Numbers are plain text (a fade at most, CAR-75); money goes through <Price>. Each tile and card has a skeleton, empty
 // and error state, and the blocks reserve their height so nothing moves when the data lands (CLS measured on Slow 4G).
+// Switcher chips carry a small dot in the make's brand accent colour, so cars of different makes are told apart at a
+// glance (the logo alone is a bare badge, or missing for a make with none); a make with no theme gets the default gold.
+//
 // DIY success also shows its sample size, "(3 of 5)", from the same rows and rule as the percentage (lib/diySuccess.js).
 //
 // Quick actions: while the active car has no odometer reading, "Log a fill-up" is the one filled accent button and the
@@ -44,6 +47,7 @@ import {
 import { formatKm, formatKmPerLiter, realEfficiency } from "../lib/odometer.js";
 import { supabase } from "../lib/supabaseClient.js";
 import BrandBadge from "../theme/BrandBadge.jsx";
+import { getBrandTheme } from "../theme/carBrandThemes.js";
 import { ArrowRight } from "../components/icons.jsx";
 import { CalendarDays, Car, CircleCheck, Fuel, Gauge, MessageCircle, ReceiptText, Route, Wrench } from "../components/iconsMore.jsx";
 
@@ -238,8 +242,8 @@ function CarHero({ car, isDefault, tiles }) {
 }
 
 /**
- * The car switcher (shown with 2 or more cars): a chip per car, the active one pressed. Choosing one makes it the
- * active car (and the brand theme follows). Buttons with aria-pressed, operable by keyboard; they scroll sideways at
+ * The car switcher (shown with 2 or more cars): a chip per car, the active one pressed, each with a dot in its make's
+ * brand accent colour. Choosing one makes it the active car (and the brand theme follows). Buttons with aria-pressed, operable by keyboard; they scroll sideways at
  * phone width (see CSS).
  */
 function CarSwitcher({ cars, activeCarId, onSelect }) {
@@ -258,6 +262,7 @@ function CarSwitcher({ cars, activeCarId, onSelect }) {
                 onClick={() => onSelect(car)}
               >
                 <BrandBadge make={car.make} size={18} />
+                <span className="dashboard-chip__dot" aria-hidden="true" style={{ "--chip-dot": getBrandTheme(car.make)["--color-accent"] }} />
                 <span className="dashboard-chip__name">{car.make} {car.model}</span>
               </button>
             </li>
