@@ -1,4 +1,4 @@
-// Expenses screen (CAR-64, `/expenses`, in the header's "My Car" menu): a car's
+// Expenses screen (CAR-64, `/expenses`, in the header's "Manage car" menu): a car's
 // non-fuel costs (repair, maintenance, insurance, registration / inspection, parking,
 // car wash, tolls, fines, other) and its monthly cost of ownership, fuel included.
 //

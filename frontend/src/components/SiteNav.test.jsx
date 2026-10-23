@@ -130,8 +130,8 @@ describe("SiteNav auth control", () => {
 });
 
 describe("SiteNav center links", () => {
-  // CAR-62: the top level is Dashboard, the "My Car" menu, Trip Planner, AI Advisor;
-  // Car Profile, Fuel Log, Maintenance and "Add a car" sit inside "My Car".
+  // CAR-62: the top level is Dashboard, the "Manage car" menu, Trip Planner, AI Advisor;
+  // Car Profile, Fuel Log, Maintenance and "Add a car" sit inside "Manage car".
   const APP_LINKS = ["Dashboard", "Trip Planner", "AI Advisor"];
   const MY_CAR_LINKS = ["Car Profile", "Fuel Log", "Maintenance", "Expenses", "Add a car"];
 
@@ -148,7 +148,7 @@ describe("SiteNav center links", () => {
     for (const label of [...APP_LINKS, ...MY_CAR_LINKS]) {
       expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
     }
-    expect(screen.queryByRole("button", { name: "My Car" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Manage car" })).not.toBeInTheDocument();
   });
 
   it("logged in: shows the full app menu and no marketing anchors", async () => {
@@ -161,7 +161,7 @@ describe("SiteNav center links", () => {
     for (const label of APP_LINKS) {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
     }
-    await userEvent.setup().click(screen.getByRole("button", { name: "My Car" }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Manage car" }));
     for (const label of MY_CAR_LINKS) {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
     }
@@ -275,7 +275,7 @@ describe("SiteNav currency toggle (CAR-54)", () => {
     await screen.findByRole("button", { name: "Log Out" });
     expect(toggle()).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "My Car" })); // CAR-62: Fuel Log is in this menu
+    await user.click(screen.getByRole("button", { name: "Manage car" })); // CAR-62: Fuel Log is in this menu
     await user.click(screen.getByRole("link", { name: "Fuel Log" }));
     expect(await screen.findByRole("group", { name: "Show prices in" })).toBeInTheDocument();
 
@@ -316,7 +316,7 @@ describe("SiteNav brand logo (CAR-51)", () => {
   });
 });
 
-describe("SiteNav 'My Car' menu (CAR-62)", () => {
+describe("SiteNav 'Manage car' menu (CAR-62)", () => {
   function renderAt(path) {
     render(
       <MemoryRouter initialEntries={[path]}>
@@ -334,7 +334,7 @@ describe("SiteNav 'My Car' menu (CAR-62)", () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: { user: LOGGED_IN_USER } } });
   });
 
-  const menuButton = () => screen.getByRole("button", { name: "My Car" });
+  const menuButton = () => screen.getByRole("button", { name: "Manage car" });
 
   it("is closed until clicked, then lists Car Profile, Fuel Log, Maintenance, Expenses and Add a car", async () => {
     const user = userEvent.setup();
@@ -469,7 +469,7 @@ describe("SiteNav narrow-screen menu (CAR-74)", () => {
     expect(document.querySelector(".site-nav__toggle--pending")).not.toBeInTheDocument();
   });
 
-  it("signed in: the panel holds every app link, the My Car menu, the currency switch on price pages, and Log Out", async () => {
+  it("signed in: the panel holds every app link, the Manage car menu, the currency switch on price pages, and Log Out", async () => {
     const user = userEvent.setup();
     renderAt("/fuel-log");
     await screen.findByRole("button", { name: "Log Out" });
@@ -482,7 +482,7 @@ describe("SiteNav narrow-screen menu (CAR-74)", () => {
     expect(inPanel.getByRole("button", { name: "LBP" })).toBeInTheDocument();
     expect(inPanel.getByRole("button", { name: "Log Out" })).toBeInTheDocument();
 
-    await user.click(inPanel.getByRole("button", { name: "My Car" }));
+    await user.click(inPanel.getByRole("button", { name: "Manage car" }));
     expect(inPanel.getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
       ["Dashboard", "/dashboard"],
       ["Car Profile", "/cars/mine"],
@@ -532,7 +532,7 @@ describe("SiteNav narrow-screen menu (CAR-74)", () => {
     expect(menu()).toHaveFocus();
   });
 
-  it("keyboard: the My Car menu keeps its arrow keys inside the panel, and its Escape closes only My Car", async () => {
+  it("keyboard: the Manage car menu keeps its arrow keys inside the panel, and its Escape closes only Manage car", async () => {
     const user = userEvent.setup();
     renderAt("/dashboard");
     await screen.findByRole("button", { name: "Log Out" });
@@ -540,7 +540,7 @@ describe("SiteNav narrow-screen menu (CAR-74)", () => {
     // Opening moves focus into the panel on the next frame; let that happen first.
     await waitFor(() => expect(within(panel()).getByRole("link", { name: "Dashboard" })).toHaveFocus());
 
-    const myCar = within(panel()).getByRole("button", { name: "My Car" });
+    const myCar = within(panel()).getByRole("button", { name: "Manage car" });
     myCar.focus();
     await user.keyboard("{ArrowDown}");
     await waitFor(() => expect(screen.getByRole("link", { name: "Car Profile" })).toHaveFocus());
@@ -552,20 +552,20 @@ describe("SiteNav narrow-screen menu (CAR-74)", () => {
     expect(myCar).toHaveFocus();
     expect(menu()).toHaveAttribute("aria-expanded", "true");
 
-    // A second Escape (My Car already closed) closes the panel.
+    // A second Escape (Manage car already closed) closes the panel.
     await user.keyboard("{Escape}");
     expect(menu()).toHaveAttribute("aria-expanded", "false");
     expect(menu()).toHaveFocus();
   });
 
-  it("Escape on the My Car button with its list open closes only My Car", async () => {
+  it("Escape on the Manage car button with its list open closes only Manage car", async () => {
     const user = userEvent.setup();
     renderAt("/dashboard");
     await screen.findByRole("button", { name: "Log Out" });
     await user.click(menu());
     await waitFor(() => expect(within(panel()).getByRole("link", { name: "Dashboard" })).toHaveFocus());
 
-    const myCar = within(panel()).getByRole("button", { name: "My Car" });
+    const myCar = within(panel()).getByRole("button", { name: "Manage car" });
     await user.click(myCar);
     expect(myCar).toHaveAttribute("aria-expanded", "true");
     expect(myCar).toHaveFocus();
@@ -733,9 +733,9 @@ describe("SiteNav sticky header, active state and keyboard (CAR-77)", () => {
     expect(screen.getByRole("link", { name: "Trip Planner" })).toHaveClass("active");
   });
 
-  it("marks the My Car button on each of its screens, and not elsewhere", async () => {
+  it("marks the Manage car button on each of its screens, and not elsewhere", async () => {
     await renderSignedIn("/fuel-log");
-    expect(screen.getByRole("button", { name: "My Car" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "Manage car" })).toHaveClass("active");
   });
 
   it("is fully keyboard operable: Tab reaches the links, the menu and Log Out in order", async () => {
@@ -751,12 +751,12 @@ describe("SiteNav sticky header, active state and keyboard (CAR-77)", () => {
     await user.tab();
     expect(screen.getByRole("link", { name: "Dashboard" })).toHaveFocus();
     await user.tab();
-    expect(screen.getByRole("button", { name: "My Car" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Manage car" })).toHaveFocus();
     // ArrowDown opens the menu and moves into it (CAR-62), Escape returns focus to the button.
     await user.keyboard("{ArrowDown}");
     await waitFor(() => expect(screen.getByRole("link", { name: "Car Profile" })).toHaveFocus());
     await user.keyboard("{Escape}");
-    await waitFor(() => expect(screen.getByRole("button", { name: "My Car" })).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Manage car" })).toHaveFocus());
     // Past the menu: the remaining top-level links, then Log Out.
     await user.tab();
     expect(screen.getByRole("link", { name: "Trip Planner" })).toHaveFocus();

@@ -108,7 +108,7 @@ describe("App routing — public screens", () => {
     ]);
   });
 
-  it("logged in: the nav shows the full app menu (brand, 3 top-level screens, the My Car menu) and a Log Out button", async () => {
+  it("logged in: the nav shows the full app menu (brand, 3 top-level screens, the Manage car menu) and a Log Out button", async () => {
     supabase.auth.getSession.mockResolvedValue({
       data: { session: { user: { id: "user-123", email: "driver@example.com" } } },
     });
@@ -116,14 +116,14 @@ describe("App routing — public screens", () => {
     await screen.findByRole("button", { name: "Log Out" });
     const nav = screen.getByRole("navigation");
 
-    // CAR-62: Car Profile, Fuel Log, Maintenance and Add a car sit in the "My Car" menu.
+    // CAR-62: Car Profile, Fuel Log, Maintenance and Add a car sit in the "Manage car" menu.
     expect([...nav.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
       "/",
       "/dashboard",
       "/trip-planner",
       "/advisor",
     ]);
-    await userEvent.setup().click(screen.getByRole("button", { name: "My Car" }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Manage car" }));
     expect([...nav.querySelectorAll(".site-nav__menu-list a")].map((a) => a.getAttribute("href"))).toEqual([
       "/cars/mine",
       "/fuel-log",

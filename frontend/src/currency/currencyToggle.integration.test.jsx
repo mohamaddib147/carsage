@@ -110,7 +110,7 @@ describe("the currency toggle across screens", () => {
     expect(prices()[0]).toBe("897,000 LBP ($10.00)");
 
     // ... and the Fuel Log, opened afterwards, is already pounds-first
-    await user.click(screen.getByRole("button", { name: "My Car" })); // CAR-62: Fuel Log is in this menu
+    await user.click(screen.getByRole("button", { name: "Manage car" })); // CAR-62: Fuel Log is in this menu
     await user.click(screen.getByRole("link", { name: "Fuel Log" }));
     const table = await screen.findByRole("table");
     expect(primaries()).toEqual(["LBP"]);

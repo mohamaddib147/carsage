@@ -3,7 +3,7 @@
 // auth control on the right. The centered links depend on who is looking:
 // signed-out visitors get a simple marketing nav (Features / How it works,
 // anchors on the Landing page — no internal app routes), signed-in users
-// get the full app menu (CAR-62: Dashboard, a "My Car" menu holding Car Profile,
+// get the full app menu (CAR-62: Dashboard, a "Manage car" menu holding the active car's page,
 // Fuel Log, Maintenance, Expenses (CAR-64) and Add a car, Trip Planner, AI Advisor). The auth control — "Sign Up / Log In" when
 // signed out, "Log Out" when signed in, never both (and neither while the
 // session is still being restored, so nothing flashes the wrong state).
@@ -23,37 +23,48 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStatus } from "../auth/AuthContext.jsx";
+import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 import Logo from "./Logo.jsx";
 import CurrencyToggle from "./CurrencyToggle.jsx";
 import { PRICE_PAGES } from "../lib/currency.js";
 import { ChevronDown } from "./icons.jsx";
 
-// CAR-62: the per-car screens sit under one "My Car" menu so the bar stays at four
-// items (and doesn't wrap on phones) as Maintenance and, later, Expenses are added.
-// Adding a car is occasional, so it lives here too; the Dashboard keeps its own
-// "Add Another Car" button.
-const MY_CAR_LINKS = [
-  { to: "/cars/mine", label: "Car Profile" },
-  { to: "/fuel-log", label: "Fuel Log" },
-  { to: "/maintenance", label: "Maintenance" },
-  { to: "/expenses", label: "Expenses" },
-  { to: "/cars/new", label: "Add a car" },
-];
+// CAR-62: the per-car screens sit under one menu so the bar stays at four items (and
+// doesn't wrap on phones) as Maintenance and, later, Expenses are added. Adding a car is
+// occasional, so it lives here too; the Dashboard keeps its own "Add Another Car" button.
+// Dashboard fix: the menu is "Manage car" (it is not a car switcher; the Dashboard pills are),
+// and its first entry opens the ACTIVE car's page.
+
+/**
+ * The "Manage car" menu's links.
+ * @param {string | null} activeCarId - the active car's id, or null when there is none yet (no car, or the list is
+ *   still loading); the first entry then falls back to /cars/mine, which opens the default car.
+ * @returns {{ to: string, label: string }[]}
+ */
+function manageCarLinks(activeCarId) {
+  return [
+    { to: activeCarId ? `/cars/${encodeURIComponent(activeCarId)}` : "/cars/mine", label: "Car Profile" },
+    { to: "/fuel-log", label: "Fuel Log" },
+    { to: "/maintenance", label: "Maintenance" },
+    { to: "/expenses", label: "Expenses" },
+    { to: "/cars/new", label: "Add a car" },
+  ];
+}
 
 const CENTER_LINKS = [
   { to: "/dashboard", label: "Dashboard" },
-  { menu: "My Car", links: MY_CAR_LINKS },
+  { menu: "Manage car" },
   { to: "/trip-planner", label: "Trip Planner" },
   { to: "/advisor", label: "AI Advisor" },
 ];
 
-/** True when the current path is one of the My Car screens (any car's profile included). */
+/** True when the current path is one of the Manage car screens (any car's profile included). */
 function isMyCarPath(pathname) {
   return ["/cars/", "/fuel-log", "/maintenance", "/expenses"].some((prefix) => pathname.startsWith(prefix));
 }
 
 /**
- * The "My Car" disclosure menu: a button that shows/hides a list of links. Keyboard:
+ * The "Manage car" disclosure menu: a button that shows/hides a list of links. Keyboard:
  * Enter/Space or ArrowDown opens it (ArrowDown also focuses the first link), ArrowUp/
  * ArrowDown/Home/End move between links, Escape closes it and returns focus to the
  * button. It also closes on a click outside, when focus leaves it, and on navigation.
@@ -182,6 +193,7 @@ const SHADOW_AFTER_PX = 8;
  */
 function SiteNav() {
   const { status, signOut } = useAuthStatus();
+  const { activeCarId } = useActiveCar();
   const navigate = useNavigate();
   const { pathname, key: locationKey } = useLocation();
   // The USD | LBP switch only appears on screens that show prices (Trip Planner, Fuel Log).
@@ -287,7 +299,7 @@ function SiteNav() {
             CENTER_LINKS.map((link) =>
               link.menu ? (
                 <li key={link.menu}>
-                  <NavMenu label={link.menu} links={link.links} />
+                  <NavMenu label={link.menu} links={manageCarLinks(activeCarId)} />
                 </li>
               ) : (
                 <li key={link.to}>
