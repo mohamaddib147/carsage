@@ -87,9 +87,9 @@ export function TermsPage() {
         <h2>Contact</h2>
         <p>
           Questions about these terms can be sent to the project&apos;s maintainer via
-          the contact details on the{" "}
-          <a href="https://github.com/mohamaddib147/carsage" target="_blank" rel="noopener noreferrer">
-            project&apos;s GitHub page
+          the contact details on their{" "}
+          <a href="https://github.com/mohamaddib147" target="_blank" rel="noopener noreferrer">
+            GitHub profile
           </a>
           .
         </p>
@@ -268,9 +268,9 @@ export function PrivacyPage() {
           You can&apos;t delete these in the app: individual fuel log entries, saved
           trips, AI Advisor conversations, or your account. To have any of them
           deleted, or to delete your account and all associated data, contact the
-          project maintainer using the details on the{" "}
-          <a href="https://github.com/mohamaddib147/carsage" target="_blank" rel="noopener noreferrer">
-            project&apos;s GitHub page
+          project maintainer using the details on their{" "}
+          <a href="https://github.com/mohamaddib147" target="_blank" rel="noopener noreferrer">
+            GitHub profile
           </a>
           .
         </p>

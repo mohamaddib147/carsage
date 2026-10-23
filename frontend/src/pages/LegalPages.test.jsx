@@ -120,6 +120,16 @@ describe("legal pages", () => {
     expect(screen.getAllByRole("link", { name: "Back to Landing" }).length).toBeGreaterThan(0);
   });
 
+  // The contact link goes to the maintainer's profile, not the repository, so it keeps working if the repository is made private.
+  it.each(["/terms", "/privacy"])("%s sends contact questions to the maintainer's GitHub profile, not the repository", async (path) => {
+    renderAt(path);
+
+    const link = await screen.findByRole("link", { name: "GitHub profile" });
+    expect(link).toHaveAttribute("href", "https://github.com/mohamaddib147");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(document.body.innerHTML).not.toContain("mohamaddib147/carsage");
+  });
+
   it("Terms of Service warns that the AI Advisor isn't professional advice", async () => {
     renderAt("/terms");
 
