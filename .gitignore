@@ -41,3 +41,5 @@ npm-debug.log*
 CLAUDE.md
 CLAUDE.local.md
 .mcp.json
+# Graphify output (generated)
+graphify-out/
