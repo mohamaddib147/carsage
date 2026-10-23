@@ -253,7 +253,7 @@ describe("DashboardPage — Maintenance card (CAR-62)", () => {
   it("asks only for the caller's own items and readings", async () => {
     const { maintenanceFilters } = mockCarsList({ data: [CAR_A], error: null });
     renderDashboard();
-    await within(await screen.findByRole("region", { name: "Maintenance due" })).findByText(/Nothing tracked yet/);
+    await within(await screen.findByRole("region", { name: "Maintenance due" })).findByText(/No service reminders yet/);
 
     expect(maintenanceFilters).toEqual(
       expect.arrayContaining([["maintenance_items", "user_id", "user-123"], ["fuel_logs", "user_id", "user-123"]]),
@@ -264,7 +264,7 @@ describe("DashboardPage — Maintenance card (CAR-62)", () => {
     mockCarsList({ data: [CAR_A], error: null });
     renderDashboard();
 
-    const empty = await within(await screen.findByRole("region", { name: "Maintenance due" })).findByText(/Nothing tracked yet/);
+    const empty = await within(await screen.findByRole("region", { name: "Maintenance due" })).findByText(/No service reminders yet/);
     expect(within(empty).getByRole("link", { name: "Maintenance" })).toHaveAttribute("href", "/maintenance");
   });
 

@@ -137,17 +137,17 @@ function HeroTiles({ fuelState, odometer, economy, lastFillUp, serviceState, nex
             state={fuelLoading ? "loading" : fuelOk && odometer ? "ok" : "empty"}
             value={odometer && formatKm(odometer.km)}
             caption={odometer && `as of ${formatFillDate(odometer.filledAt)}`}
-            emptyText="No reading yet. Add the odometer to a fill-up."
+            emptyText="No odometer reading yet. Add it when you log a fill-up."
             emptyTo="/fuel-log"
             emptyLinkText="Fuel Log"
           />
           <HeroTile
             Icon={Fuel}
-            label="Real economy"
+            label="Fuel economy"
             state={fuelLoading ? "loading" : fuelOk && economy ? "ok" : "empty"}
             value={economy && `${formatKmPerLiter(economy.kmPerLiter)} km/L`}
             caption={economy && `${economy.intervalCount} ${economy.intervalCount === 1 ? "fill-up" : "fill-ups"}`}
-            emptyText="Needs two fill-ups with odometer readings."
+            emptyText="Log two fill-ups with odometer readings to see this."
             emptyTo="/fuel-log"
             emptyLinkText="Fuel Log"
           />
@@ -167,7 +167,7 @@ function HeroTiles({ fuelState, odometer, economy, lastFillUp, serviceState, nex
                 </>
               )
             }
-            emptyText="No fill-ups yet."
+            emptyText="No fill-ups logged yet."
             emptyTo="/fuel-log"
             emptyLinkText="Log a fill-up"
           />
@@ -185,7 +185,7 @@ function HeroTiles({ fuelState, odometer, economy, lastFillUp, serviceState, nex
           state={serviceState === "loading" ? "loading" : nextService ? "ok" : "empty"}
           value={nextService && nextService.item.name}
           caption={nextService && (describeRemaining(nextService.status) || STATUS_LABELS[nextService.status.status])}
-          emptyText="Nothing tracked yet."
+          emptyText="No service reminders yet."
           emptyTo="/maintenance"
           emptyLinkText="Set up reminders"
           emptyButton
@@ -486,7 +486,7 @@ function DashboardPage() {
   }
 
   return (
-    <PageShell title="Welcome back" description="Your active car at a glance, and quick access to every screen.">
+    <PageShell title="Welcome back" description="Your car at a glance: odometer, fuel economy and next service.">
       <section className="dashboard-hero-section" aria-label="Your active car">
         {loading ? (
           <>
@@ -596,7 +596,7 @@ function DashboardPage() {
             <p className="dashboard-diy-empty">Couldn&apos;t load your maintenance right now. See <Link to="/maintenance">Maintenance</Link>.</p>
           ) : maintenance.total === 0 ? (
             <p className="dashboard-diy-empty">
-              Nothing tracked yet. Set up reminders for oil changes, the yearly vehicle inspection and more in{" "}
+              No service reminders yet. Set up reminders for oil changes, the yearly vehicle inspection and more in{" "}
               <Link to="/maintenance">Maintenance</Link>.
             </p>
           ) : (

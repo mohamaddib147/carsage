@@ -173,8 +173,8 @@ describe("the hero tiles for the active car", () => {
 
     expect(tile("Odometer")).toHaveTextContent("101,200 km");
     expect(tile("Odometer")).toHaveTextContent("as of 4 Sep 2026");
-    expect(tile("Real economy")).toHaveTextContent("10.0 km/L");
-    expect(tile("Real economy")).toHaveTextContent("3 fill-ups");
+    expect(tile("Fuel economy")).toHaveTextContent("10.0 km/L");
+    expect(tile("Fuel economy")).toHaveTextContent("3 fill-ups");
     expect(tile("Last fill-up")).toHaveTextContent("4 Sep 2026");
     expect(tile("Next service")).toHaveTextContent("Oil change");
   });
@@ -185,10 +185,10 @@ describe("the hero tiles for the active car", () => {
     await screen.findByLabelText(/Make1 Model1/);
     await settled();
 
-    expect(tile("Odometer")).toHaveTextContent("No reading yet");
-    expect(tile("Real economy")).toHaveTextContent("Needs two fill-ups with odometer readings.");
-    expect(tile("Last fill-up")).toHaveTextContent("No fill-ups yet.");
-    expect(tile("Next service")).toHaveTextContent("Nothing tracked yet.");
+    expect(tile("Odometer")).toHaveTextContent("No odometer reading yet");
+    expect(tile("Fuel economy")).toHaveTextContent("Log two fill-ups with odometer readings to see this.");
+    expect(tile("Last fill-up")).toHaveTextContent("No fill-ups logged yet.");
+    expect(tile("Next service")).toHaveTextContent("No service reminders yet.");
     expect(hero()).not.toHaveTextContent(/NaN|\b0 km\/L/);
   });
 
@@ -198,7 +198,7 @@ describe("the hero tiles for the active car", () => {
     await screen.findByLabelText(/Make1 Model1/);
     await settled();
     expect(tile("Odometer")).toHaveTextContent("1,000 km");
-    expect(tile("Real economy")).toHaveTextContent("Needs two fill-ups with odometer readings.");
+    expect(tile("Fuel economy")).toHaveTextContent("Log two fill-ups with odometer readings to see this.");
   });
 
   it("the hero shows the active (first) car only; the others are chips, not tiles", async () => {
@@ -208,7 +208,7 @@ describe("the hero tiles for the active car", () => {
     await settled();
     // One hero, one set of tiles, for car 1 (8 km/L); car 2's 16 km/L never appears as a tile.
     expect(screen.getAllByText("Odometer", { selector: ".dashboard-tile__label" })).toHaveLength(1);
-    expect(tile("Real economy")).toHaveTextContent("8.0 km/L");
+    expect(tile("Fuel economy")).toHaveTextContent("8.0 km/L");
     expect(hero()).not.toHaveTextContent("16.0 km/L");
     expect(screen.getByRole("button", { name: /Make2 Model2/ })).toBeInTheDocument();
   });
@@ -237,7 +237,7 @@ describe("the Default car badge (CAR-79, profiles.default_car_id)", () => {
     await screen.findByLabelText(/Make1 Model1/);
     await settled();
     expect(within(hero()).queryByText("Default car")).not.toBeInTheDocument();
-    expect(tile("Real economy")).toHaveTextContent("10.0 km/L"); // the rest of the hero still works
+    expect(tile("Fuel economy")).toHaveTextContent("10.0 km/L"); // the rest of the hero still works
   });
 });
 
@@ -265,14 +265,14 @@ describe("the car switcher", () => {
     renderAt("/dashboard", { activeCar: true });
     await screen.findByLabelText(/Make1 Model1/);
     await settled();
-    expect(tile("Real economy")).toHaveTextContent("8.0 km/L");
+    expect(tile("Fuel economy")).toHaveTextContent("8.0 km/L");
 
     const secondChip = screen.getByRole("button", { name: /Make2 Model2/ });
     secondChip.focus();
     await user.keyboard("{Enter}");
 
     await waitFor(() => expect(screen.getByLabelText(/2020 Make2 Model2/)).toBeInTheDocument());
-    expect(tile("Real economy")).toHaveTextContent("16.0 km/L");
+    expect(tile("Fuel economy")).toHaveTextContent("16.0 km/L");
     expect(secondChip).toHaveAttribute("aria-pressed", "true");
   });
 });
@@ -440,7 +440,7 @@ describe("a failure of each read is handled on its own", () => {
     await screen.findByLabelText(/Make1 Model1/);
     await settled();
     expect(screen.getByText(/Couldn't load this month's costs/)).toBeInTheDocument();
-    expect(tile("Real economy")).toHaveTextContent("10.0 km/L");
+    expect(tile("Fuel economy")).toHaveTextContent("10.0 km/L");
   });
 
   it("maintenance_items fails: the next-service tile and the lower maintenance card both say so, nothing else", async () => {
@@ -459,7 +459,7 @@ describe("a failure of each read is handled on its own", () => {
     await screen.findByLabelText(/Make1 Model1/);
     await settled();
     expect(screen.getByText(/No feedback yet/)).toBeInTheDocument();
-    expect(tile("Real economy")).toHaveTextContent("10.0 km/L");
+    expect(tile("Fuel economy")).toHaveTextContent("10.0 km/L");
   });
 });
 
@@ -478,7 +478,7 @@ describe("the real economy tile equals the Fuel Log's real average (shared backe
     renderAt("/dashboard");
     await screen.findByLabelText(/Make1 Model1/);
     await settled();
-    expect(tile("Real economy")).toHaveTextContent(figure);
+    expect(tile("Fuel economy")).toHaveTextContent(figure);
   });
 
   it.each(withInterval)("Fuel Log shows the same figure: $name", async ({ rows, expected }) => {
