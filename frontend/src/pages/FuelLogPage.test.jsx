@@ -167,6 +167,16 @@ async function fillForm(user, { liters, cost }) {
   if (cost !== undefined) await user.type(screen.getByLabelText("Cost *"), cost);
 }
 
+/**
+ * Clicks "Add Fill-Up" and, if the "Skip the odometer?" prompt appears (these tests are about something else and
+ * give no reading), confirms it. The prompt itself is tested in its own describe block.
+ */
+async function addFillUp(user) {
+  await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+  const skip = screen.queryByRole("button", { name: "Save without odometer" });
+  if (skip) await user.click(skip);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER } } });
@@ -281,7 +291,7 @@ describe("FuelLogPage — adding a fill-up", () => {
     renderPage();
     await screen.findByRole("table");
     await fillForm(user, { liters: "19.6", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(calls.inserts).toEqual([
       {
@@ -310,7 +320,7 @@ describe("FuelLogPage — adding a fill-up", () => {
     renderPage();
     await screen.findByText("No fill-ups logged yet");
     await fillForm(user, { liters: "20", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByRole("table")).toBeInTheDocument();
     expect(screen.queryByText("No fill-ups logged yet")).not.toBeInTheDocument();
@@ -324,7 +334,7 @@ describe("FuelLogPage — adding a fill-up", () => {
     await screen.findByText("No fill-ups logged yet");
     await user.selectOptions(screen.getByLabelText("Currency of the cost"), "LBP");
     await fillForm(user, { liters: "25", cost: "2700000" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(calls.inserts[0]).toMatchObject({ cost_amount: 2700000, cost_currency: "LBP", liters: 25 });
     expect(await screen.findByRole("table")).toBeInTheDocument();
@@ -339,7 +349,7 @@ describe("FuelLogPage — adding a fill-up", () => {
     await screen.findByRole("table");
     fireEvent.change(screen.getByLabelText("Date *"), { target: { value: "2026-09-10" } });
     await fillForm(user, { liters: "10", cost: "15" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     await screen.findByRole("status");
     expect(tableRows().map((row) => row[0])).toEqual(["21 Sep 2026", "10 Sep 2026", "1 Sep 2026"]);
@@ -358,7 +368,7 @@ describe("FuelLogPage — adding a fill-up", () => {
     renderPage();
     await screen.findByRole("table");
     await fillForm(user, { liters: "19.6", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("You don't have permission to do that.");
@@ -376,7 +386,7 @@ describe("FuelLogPage — adding a fill-up", () => {
     renderPage();
     await screen.findByText("No fill-ups logged yet");
     await fillForm(user, { liters: "19.6", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/outside the allowed range/i);
@@ -391,7 +401,7 @@ describe("FuelLogPage — adding a fill-up", () => {
     renderPage();
     await screen.findByText("No fill-ups logged yet");
     await fillForm(user, { liters: "19.6", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByRole("button", { name: "Saving..." })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Saving..." }));
@@ -419,7 +429,7 @@ describe("FuelLogPage — invalid input is refused before anything is saved", ()
     renderPage();
     await screen.findByText("No fill-ups logged yet");
     await fillForm(user, values);
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByText(message)).toBeInTheDocument();
     expect(calls.inserts).toEqual([]);
@@ -434,7 +444,7 @@ describe("FuelLogPage — invalid input is refused before anything is saved", ()
     await screen.findByText("No fill-ups logged yet");
     fireEvent.change(screen.getByLabelText("Date *"), { target: { value: "" } });
     await fillForm(user, { liters: "20", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByText("Choose the date of the fill-up.")).toBeInTheDocument();
     expect(calls.inserts).toEqual([]);
@@ -448,7 +458,7 @@ describe("FuelLogPage — invalid input is refused before anything is saved", ()
     await screen.findByText("No fill-ups logged yet");
     fireEvent.change(screen.getByLabelText("Date *"), { target: { value: "2999-01-01" } });
     await fillForm(user, { liters: "20", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByText("The date can't be in the future.")).toBeInTheDocument();
     expect(calls.inserts).toEqual([]);
@@ -460,7 +470,7 @@ describe("FuelLogPage — invalid input is refused before anything is saved", ()
 
     renderPage();
     await screen.findByText("No fill-ups logged yet");
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByText("Liters are required.")).toBeInTheDocument();
     expect(screen.getByText("Cost is required.")).toBeInTheDocument();
@@ -473,10 +483,10 @@ describe("FuelLogPage — invalid input is refused before anything is saved", ()
 
     renderPage();
     await screen.findByText("No fill-ups logged yet");
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
     await screen.findByText("Liters are required.");
     await fillForm(user, { liters: "20", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     await screen.findByRole("status");
     expect(screen.queryByText("Liters are required.")).not.toBeInTheDocument();
@@ -546,7 +556,7 @@ describe("FuelLogPage — several cars", () => {
     await user.selectOptions(screen.getByLabelText("Car"), "car-2");
     await waitFor(() => expect(tableRows()).toHaveLength(1));
     await fillForm(user, { liters: "15", cost: "22" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     await screen.findByRole("status");
     expect(calls.inserts[0]).toMatchObject({ car_id: "car-2", user_id: "user-123" });
@@ -608,7 +618,7 @@ describe("FuelLogPage — several cars", () => {
     renderPage();
     await screen.findByRole("table");
     await fillForm(user, { liters: "12", cost: "18" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" })); // saving for car 1 ...
+    await addFillUp(user); // saving for car 1 ...
     await user.selectOptions(screen.getByLabelText("Car"), "car-2"); // ... then switch to car 2
     await waitFor(() => expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)", "$30.00/20 L (2,691,000 LBP/20 L)"]]));
 
@@ -709,7 +719,7 @@ describe("FuelLogPage — currency toggle (CAR-54)", () => {
 
     await user.type(screen.getByLabelText("Liters *"), "20");
     await user.type(screen.getByLabelText("Cost *"), "1800000");
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     await screen.findByRole("status");
     expect(calls.inserts[0]).toMatchObject({ cost_amount: 1800000, cost_currency: "LBP" });
@@ -790,7 +800,7 @@ describe("FuelLogPage — price per 20 liters (CAR-53 addition)", () => {
 
     await user.type(screen.getByLabelText("Liters *"), "19.6");
     await user.type(screen.getByLabelText("Cost *"), "30");
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     await screen.findByRole("status");
     expect(tableRows()[0].slice(3)).toEqual(["$1.53/L (137,296 LBP/L)", "$30.61/20 L (2,745,918 LBP/20 L)"]);
@@ -1006,7 +1016,7 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     await fillForm(user, { liters: "40", cost: "57" });
     await typeOdometer(user, "84610");
     expect(screen.getByLabelText("Odometer (km)")).toHaveValue("84,610"); // thousand separators
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(calls.inserts).toHaveLength(1);
     expect(calls.inserts[0]).toMatchObject({ car_id: "car-1", liters: 40, odometer_km: 84610 });
@@ -1021,7 +1031,7 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     renderPage();
     await screen.findByText("No fill-ups logged yet");
     await fillForm(user, { liters: "20", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     await screen.findByRole("status");
     expect(calls.inserts[0]).not.toHaveProperty("odometer_km");
@@ -1038,7 +1048,7 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     await screen.findByRole("table");
     await fillForm(user, { liters: "40", cost: "57" });
     await typeOdometer(user, reading);
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
     expect(screen.getByLabelText("Odometer (km)")).toHaveAttribute("aria-invalid", "true");
@@ -1057,7 +1067,7 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     await screen.findByRole("table");
     await fillForm(user, { liters: "40", cost: "57" });
     await typeOdometer(user, reading);
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
     expect(screen.getByLabelText("Odometer (km)")).not.toHaveAttribute("aria-invalid");
@@ -1078,7 +1088,7 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     await screen.findByRole("table");
     await fillForm(user, { liters: "40", cost: "57" });
     await typeOdometer(user, "8400"); // missing a digit
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
     await screen.findByRole("button", { name: "Save anyway" });
 
     await typeOdometer(user, "0"); // now 84,000... still lower, but a NEW reading: confirm again
@@ -1095,7 +1105,7 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     setDate("2026-10-05"); // between the two existing readings
     await fillForm(user, { liters: "20", cost: "30" });
     await typeOdometer(user, "84700");
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "This isn't lower than your later reading of 84,610 km (9 Oct 2026). Check the reading and the date.",
@@ -1117,7 +1127,7 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     await screen.findByRole("table");
     await fillForm(user, { liters: "40", cost: "57" });
     await typeOdometer(user, "84610");
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/previous reading of 842,500 km/);
     await user.click(screen.getByRole("button", { name: "Save anyway" }));
@@ -1136,7 +1146,7 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     await typeOdometer(user, "84900"); // the real mileage, far below the typo
 
     expect(screen.getByText("+290 km since your last reading (84,610 km).")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
     await waitFor(() => expect(calls.inserts).toHaveLength(1));
     expect(calls.inserts[0]).toMatchObject({ odometer_km: 84900 });
   });
@@ -1164,7 +1174,7 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
 
     expect(screen.getByText(/doesn't look like a realistic distance/)).toBeInTheDocument();
     // A real but unlogged trip in between can look like this too, so it can still be saved.
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
     await waitFor(() => expect(calls.inserts).toHaveLength(1));
   });
 
@@ -1176,7 +1186,7 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     await screen.findByText("Loading fill-ups...");
     await fillForm(user, { liters: "40", cost: "57" });
     await typeOdometer(user, "84610");
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Still loading this car's fill-ups.");
     expect(calls.inserts).toEqual([]);
@@ -1207,7 +1217,7 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     await fillForm(user, { liters: "30", cost: "40" });
     await typeOdometer(user, "10900");
     expect(screen.getByText("+450 km since your last reading (10,450 km).")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
     await waitFor(() => expect(calls.inserts).toHaveLength(1));
     expect(calls.inserts[0]).toMatchObject({ car_id: "car-2", odometer_km: 10900 });
   });
@@ -1361,12 +1371,13 @@ describe("FuelLogPage — price-per-liter and tank-capacity warnings (Step 2)", 
     await screen.findByLabelText("Liters *");
     // 20 L for $300 is far above today's mocked 150,000 LBP/L price.
     await fillForm(user, { liters: "20", cost: "300" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByText(/far from today's fuel price/)).toBeInTheDocument();
     expect(calls.inserts).toHaveLength(0);
 
     await user.click(screen.getByRole("button", { name: "Save anyway" }));
+    await user.click(await screen.findByRole("button", { name: "Save without odometer" }));
     await waitFor(() => expect(calls.inserts).toHaveLength(1));
     expect(calls.inserts[0]).toMatchObject({ liters: 20, cost_amount: 300 });
   });
@@ -1383,12 +1394,13 @@ describe("FuelLogPage — price-per-liter and tank-capacity warnings (Step 2)", 
     // 65 L at a normal price (so the price warning doesn't also fire).
     await fillForm(user, { liters: "65", cost: "9750000" });
     await user.selectOptions(screen.getByLabelText("Currency of the cost"), "LBP");
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByText(/more than your car's tank capacity \(60 L\)/)).toBeInTheDocument();
     expect(calls.inserts).toHaveLength(0);
 
     await user.click(screen.getByRole("button", { name: "Save anyway" }));
+    await user.click(await screen.findByRole("button", { name: "Save without odometer" }));
     await waitFor(() => expect(calls.inserts).toHaveLength(1));
   });
 
@@ -1404,10 +1416,102 @@ describe("FuelLogPage — price-per-liter and tank-capacity warnings (Step 2)", 
     // 45 L at 150,000 LBP/L = 6,750,000 LBP, exactly today's mocked price.
     await fillForm(user, { liters: "45", cost: "6750000" });
     await user.selectOptions(screen.getByLabelText("Currency of the cost"), "LBP");
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     await waitFor(() => expect(calls.inserts).toHaveLength(1));
     expect(screen.queryByText(/far from today's fuel price/)).not.toBeInTheDocument();
     expect(screen.queryByText(/tank capacity/)).not.toBeInTheDocument();
+  });
+});
+
+describe("FuelLogPage — skip-the-odometer prompt (dashboard fix)", () => {
+  const PROMPT = "Skip the odometer? Fuel economy and service reminders need it.";
+
+  async function fillAndSave(user, { odometer } = {}) {
+    await fillForm(user, { liters: "20", cost: "30" });
+    if (odometer) await user.type(screen.getByLabelText("Odometer (km)"), odometer);
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+  }
+
+  it("saves straight away, with no prompt, when a reading is given", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase();
+
+    renderPage();
+    await screen.findByText("No fill-ups logged yet");
+    await fillAndSave(user, { odometer: "84610" });
+
+    await screen.findByRole("status");
+    expect(calls.inserts).toHaveLength(1);
+    expect(calls.inserts[0]).toMatchObject({ odometer_km: 84610 });
+    expect(screen.queryByText(PROMPT)).not.toBeInTheDocument();
+  });
+
+  it("asks before saving a fill-up that has no reading, and saves nothing yet", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase();
+
+    renderPage();
+    await screen.findByText("No fill-ups logged yet");
+    await fillAndSave(user);
+
+    expect(await screen.findByText(PROMPT)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save without odometer" })).toBeInTheDocument();
+    expect(calls.inserts).toHaveLength(0);
+  });
+
+  it("saves without odometer_km once the skip is confirmed (the reading stays optional)", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase();
+
+    renderPage();
+    await screen.findByText("No fill-ups logged yet");
+    await fillAndSave(user);
+    await user.click(await screen.findByRole("button", { name: "Save without odometer" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Fill-up added.");
+    expect(calls.inserts).toHaveLength(1);
+    expect(calls.inserts[0]).not.toHaveProperty("odometer_km");
+    expect(screen.queryByText(PROMPT)).not.toBeInTheDocument();
+  });
+
+  it("drops the prompt as soon as any field changes, and typing a reading then saves it", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase();
+
+    renderPage();
+    await screen.findByText("No fill-ups logged yet");
+    await fillAndSave(user);
+    await screen.findByText(PROMPT);
+
+    await user.type(screen.getByLabelText("Odometer (km)"), "84610");
+    expect(screen.queryByText(PROMPT)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    await screen.findByRole("status");
+    expect(calls.inserts[0]).toMatchObject({ odometer_km: 84610 });
+  });
+
+  it("does not ask for an earlier warning again after the skip is confirmed (one save, no loop)", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    await fillForm(user, { liters: "20", cost: "300" }); // far above today's mocked price
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await user.click(await screen.findByRole("button", { name: "Save anyway" }));
+    await user.click(await screen.findByRole("button", { name: "Save without odometer" }));
+
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(screen.queryByText(/far from today's fuel price/)).not.toBeInTheDocument();
+  });
+
+  it("says in the field's hint that fuel economy and service reminders need the reading", async () => {
+    mockDatabase();
+
+    renderPage();
+
+    expect(await screen.findByText(/fuel economy and service reminders need it/)).toBeInTheDocument();
   });
 });

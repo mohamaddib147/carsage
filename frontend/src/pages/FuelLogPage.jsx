@@ -27,6 +27,10 @@
 // gains Odometer and km/L columns (the per-row km/L is a rough guide), and the chart
 // section a "real average" line (lib/odometer.js) which is total km / total liters and
 // needs no full tank -- see that module's header.
+//
+// Dashboard fix: the reading stays optional (nullable column, nothing blocked), but saving without one first asks
+// "Skip the odometer? Fuel economy and service reminders need it." with a "Save without odometer" button, the last
+// step of the same confirm chain, and the field's hint says why the reading matters.
 
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -169,10 +173,16 @@ function FuelLogPage() {
   // exact values it was shown for.
   const [priceWarning, setPriceWarning] = useState("");
   const [tankWarning, setTankWarning] = useState("");
+  // Dashboard fix: saving without an odometer asks "Skip the odometer?" first. The prompt is remembered as a snapshot
+  // of the form it was shown for and counts only while the form still matches it, so editing any field (or switching
+  // car) drops it with no clearing code at each input.
+  const [skipFor, setSkipFor] = useState(null);
   const { currency: primaryCurrency } = useCurrency();
   // null = the user hasn't chosen here, so the form follows the header toggle.
   const [chosenCurrency, setChosenCurrency] = useState(null);
   const currency = chosenCurrency ?? primaryCurrency;
+  const skipKey = [selectedCarId, date, liters, cost, currency, odometer].join("|");
+  const skipWarning = skipFor === skipKey;
   const [fieldErrors, setFieldErrors] = useState({});
   const [saveError, setSaveError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -311,10 +321,11 @@ function FuelLogPage() {
    * from today's fuel price, liters over the car's tank capacity, or a reading out
    * of order) first shows a warning with its own "Save anyway" button, which calls
    * this again with that one `confirmed*: true` -- checked in this fixed order, so
-   * confirming one still re-checks (and can still stop on) the next.
-   * @param {{ confirmedPrice?: boolean, confirmedTank?: boolean, confirmedOrder?: boolean }} options
+   * confirming one still re-checks (and can still stop on) the next. Last in that order, a fill-up with no odometer
+   * reading asks "Skip the odometer?" (`confirmedSkip`); the reading stays optional and nothing is blocked.
+   * @param {{ confirmedPrice?: boolean, confirmedTank?: boolean, confirmedOrder?: boolean, confirmedSkip?: boolean }} options
    */
-  async function save({ confirmedPrice = false, confirmedTank = false, confirmedOrder = false } = {}) {
+  async function save({ confirmedPrice = false, confirmedTank = false, confirmedOrder = false, confirmedSkip = false } = {}) {
     setSaveError("");
     setSaved(false);
 
@@ -362,6 +373,12 @@ function FuelLogPage() {
       }
     }
     setOrderWarning("");
+
+    if (odometer === "" && !confirmedSkip) {
+      setSkipFor(skipKey);
+      return;
+    }
+    setSkipFor(null);
 
     const carId = selectedCarId;
     const row = {
@@ -709,6 +726,19 @@ function FuelLogPage() {
                   Save anyway
                 </button>
               </div>
+            ) : skipWarning ? (
+              <div role="alert" className="fuel-log-order-warning">
+                <p>Skip the odometer? Fuel economy and service reminders need it.</p>
+                {/* Every earlier check already passed or was confirmed for these exact values (see skipKey). */}
+                <button
+                  type="button"
+                  className="fuel-log-order-warning__btn"
+                  disabled={saving}
+                  onClick={() => save({ confirmedPrice: true, confirmedTank: true, confirmedSkip: true })}
+                >
+                  Save without odometer
+                </button>
+              </div>
             ) : sinceLast ? (
               <p
                 id="fillOdometerHint"
@@ -720,7 +750,7 @@ function FuelLogPage() {
               </p>
             ) : (
               <p id="fillOdometerHint" className="form-hint">
-                Optional. The total km on your dashboard, used to work out your real km/L.
+                Optional, but fuel economy and service reminders need it. The total km on your dashboard.
               </p>
             )}
           </div>
