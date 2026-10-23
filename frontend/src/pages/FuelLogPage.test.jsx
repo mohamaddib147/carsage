@@ -10,15 +10,37 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import FuelLogPage from "./FuelLogPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import CurrencyToggle from "../components/CurrencyToggle.jsx";
 import { CurrencyProvider } from "../currency/CurrencyContext.jsx";
+import { apiFetch } from "../lib/apiClient.js";
 import { CURRENCY_STORAGE_KEY } from "../lib/currency.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { todayLocal } from "../lib/fuelLog.js";
 import { unconvertedMoney } from "../test/priceText.js";
+
+// Step 2's camera scans and the price-per-liter warning both call the
+// backend (GET /trip-planner/fuel-prices, POST /fuel-log/scan-pump,
+// POST /fuel-log/scan-odometer) through apiFetch — mocked so no real
+// network call ever happens in a test. The fuel-prices lookup fires on
+// every render once logged in, so it always needs a default reply.
+vi.mock("../lib/apiClient.js", () => ({
+  apiFetch: vi.fn(),
+}));
+
+// jsdom has no createImageBitmap/canvas, so the browser re-encoder is replaced by one
+// that returns a small JPEG; lib/photoReencode.test.js tests the real one.
+vi.mock("../lib/photoReencode.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  reencodeToJpeg: vi.fn(async () => new Blob([new Uint8Array(100)], { type: "image/jpeg" })),
+}));
+
+const FUEL_PRICES_REPLY = {
+  prices: { "95_octane": { lbp_per_liter: 150_000, usd_per_liter: 1.67 }, "98_octane": { lbp_per_liter: 155_000, usd_per_liter: 1.73 }, diesel: { lbp_per_liter: 140_000, usd_per_liter: 1.56 } },
+  lbp_per_usd: 89_700,
+};
 
 const USER = { id: "user-123", email: "driver@example.com" };
 const CAR_1 = { id: "car-1", make: "Mercedes-Benz", model: "C230 Kompressor", year: 2005 };
@@ -117,12 +139,27 @@ function holdInserts(calls) {
   return { finish: () => finishSave() };
 }
 
-/** The body rows of the fill-ups table, each as its cell texts. */
-function tableRows() {
+/** Every body row of the fill-ups table, each as ALL its cell texts. */
+function allCells() {
   return within(screen.getByRole("table"))
     .getAllByRole("row")
     .slice(1)
     .map((row) => within(row).getAllByRole("cell").map((cell) => cell.textContent));
+}
+
+/**
+ * The body rows' date, liters and price cells (the first five columns, the
+ * CAR-53/54 part of the table these older tests are about). CAR-61's Odometer
+ * and km/L columns come after them and are checked by `odometerCells()`; the
+ * full column order is pinned by the CAR-61 header test.
+ */
+function tableRows() {
+  return allCells().map((cells) => cells.slice(0, 5));
+}
+
+/** The body rows' CAR-61 cells: [Odometer, km/L]. */
+function odometerCells() {
+  return allCells().map((cells) => cells.slice(5));
 }
 
 async function fillForm(user, { liters, cost }) {
@@ -130,9 +167,20 @@ async function fillForm(user, { liters, cost }) {
   if (cost !== undefined) await user.type(screen.getByLabelText("Cost *"), cost);
 }
 
+/**
+ * Clicks "Add Fill-Up" and, if the "Skip the odometer?" prompt appears (these tests are about something else and
+ * give no reading), confirms it. The prompt itself is tested in its own describe block.
+ */
+async function addFillUp(user) {
+  await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+  const skip = screen.queryByRole("button", { name: "Save without odometer" });
+  if (skip) await user.click(skip);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER } } });
+  apiFetch.mockResolvedValue(FUEL_PRICES_REPLY);
 });
 
 describe("FuelLogPage — viewing", () => {
@@ -152,6 +200,24 @@ describe("FuelLogPage — viewing", () => {
       ["15 Sep 2026", "25 L", "$27.87 (2,500,000 LBP)", "$1.11/L (100,000 LBP/L)", "$22.30/20 L (2,000,000 LBP/20 L)"],
       ["1 Sep 2026", "30 L", "$45.00 (4,036,500 LBP)", "$1.50/L (134,550 LBP/L)", "$30.00/20 L (2,691,000 LBP/20 L)"],
     ]);
+  });
+
+  it("puts the table in a keyboard-focusable, labelled scroll region with a name of its own (CAR-72)", async () => {
+    mockDatabase({ logsByCar: { "car-1": { data: [ROW_A, ROW_B], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    const region = screen.getByRole("region", { name: "Fill-up history table" });
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(region).toContainElement(screen.getByRole("table"));
+    region.focus();
+    expect(region).toHaveFocus();
+    // The section around it is already a landmark named "Fill-up history"; two with one name would confuse a landmark list.
+    expect(screen.getAllByRole("region", { name: /^Fill-up history/ }).map((el) => el.getAttribute("aria-label"))).toEqual(
+      expect.arrayContaining(["Fill-up history", "Fill-up history table"]),
+    );
+    expect(screen.getAllByRole("region", { name: "Fill-up history table" })).toHaveLength(1);
   });
 
   it("asks only for the signed-in user's cars, and each car's log by that car's id", async () => {
@@ -225,7 +291,7 @@ describe("FuelLogPage — adding a fill-up", () => {
     renderPage();
     await screen.findByRole("table");
     await fillForm(user, { liters: "19.6", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(calls.inserts).toEqual([
       {
@@ -254,7 +320,7 @@ describe("FuelLogPage — adding a fill-up", () => {
     renderPage();
     await screen.findByText("No fill-ups logged yet");
     await fillForm(user, { liters: "20", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByRole("table")).toBeInTheDocument();
     expect(screen.queryByText("No fill-ups logged yet")).not.toBeInTheDocument();
@@ -268,7 +334,7 @@ describe("FuelLogPage — adding a fill-up", () => {
     await screen.findByText("No fill-ups logged yet");
     await user.selectOptions(screen.getByLabelText("Currency of the cost"), "LBP");
     await fillForm(user, { liters: "25", cost: "2700000" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(calls.inserts[0]).toMatchObject({ cost_amount: 2700000, cost_currency: "LBP", liters: 25 });
     expect(await screen.findByRole("table")).toBeInTheDocument();
@@ -283,7 +349,7 @@ describe("FuelLogPage — adding a fill-up", () => {
     await screen.findByRole("table");
     fireEvent.change(screen.getByLabelText("Date *"), { target: { value: "2026-09-10" } });
     await fillForm(user, { liters: "10", cost: "15" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     await screen.findByRole("status");
     expect(tableRows().map((row) => row[0])).toEqual(["21 Sep 2026", "10 Sep 2026", "1 Sep 2026"]);
@@ -302,7 +368,7 @@ describe("FuelLogPage — adding a fill-up", () => {
     renderPage();
     await screen.findByRole("table");
     await fillForm(user, { liters: "19.6", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("You don't have permission to do that.");
@@ -320,7 +386,7 @@ describe("FuelLogPage — adding a fill-up", () => {
     renderPage();
     await screen.findByText("No fill-ups logged yet");
     await fillForm(user, { liters: "19.6", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/outside the allowed range/i);
@@ -335,7 +401,7 @@ describe("FuelLogPage — adding a fill-up", () => {
     renderPage();
     await screen.findByText("No fill-ups logged yet");
     await fillForm(user, { liters: "19.6", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByRole("button", { name: "Saving..." })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Saving..." }));
@@ -363,7 +429,7 @@ describe("FuelLogPage — invalid input is refused before anything is saved", ()
     renderPage();
     await screen.findByText("No fill-ups logged yet");
     await fillForm(user, values);
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByText(message)).toBeInTheDocument();
     expect(calls.inserts).toEqual([]);
@@ -378,7 +444,7 @@ describe("FuelLogPage — invalid input is refused before anything is saved", ()
     await screen.findByText("No fill-ups logged yet");
     fireEvent.change(screen.getByLabelText("Date *"), { target: { value: "" } });
     await fillForm(user, { liters: "20", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByText("Choose the date of the fill-up.")).toBeInTheDocument();
     expect(calls.inserts).toEqual([]);
@@ -392,7 +458,7 @@ describe("FuelLogPage — invalid input is refused before anything is saved", ()
     await screen.findByText("No fill-ups logged yet");
     fireEvent.change(screen.getByLabelText("Date *"), { target: { value: "2999-01-01" } });
     await fillForm(user, { liters: "20", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByText("The date can't be in the future.")).toBeInTheDocument();
     expect(calls.inserts).toEqual([]);
@@ -404,7 +470,7 @@ describe("FuelLogPage — invalid input is refused before anything is saved", ()
 
     renderPage();
     await screen.findByText("No fill-ups logged yet");
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     expect(await screen.findByText("Liters are required.")).toBeInTheDocument();
     expect(screen.getByText("Cost is required.")).toBeInTheDocument();
@@ -417,10 +483,10 @@ describe("FuelLogPage — invalid input is refused before anything is saved", ()
 
     renderPage();
     await screen.findByText("No fill-ups logged yet");
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
     await screen.findByText("Liters are required.");
     await fillForm(user, { liters: "20", cost: "30" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     await screen.findByRole("status");
     expect(screen.queryByText("Liters are required.")).not.toBeInTheDocument();
@@ -490,7 +556,7 @@ describe("FuelLogPage — several cars", () => {
     await user.selectOptions(screen.getByLabelText("Car"), "car-2");
     await waitFor(() => expect(tableRows()).toHaveLength(1));
     await fillForm(user, { liters: "15", cost: "22" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     await screen.findByRole("status");
     expect(calls.inserts[0]).toMatchObject({ car_id: "car-2", user_id: "user-123" });
@@ -552,7 +618,7 @@ describe("FuelLogPage — several cars", () => {
     renderPage();
     await screen.findByRole("table");
     await fillForm(user, { liters: "12", cost: "18" });
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" })); // saving for car 1 ...
+    await addFillUp(user); // saving for car 1 ...
     await user.selectOptions(screen.getByLabelText("Car"), "car-2"); // ... then switch to car 2
     await waitFor(() => expect(tableRows()).toEqual([["8 Aug 2026", "40 L", "$60.00 (5,382,000 LBP)", "$1.50/L (134,550 LBP/L)", "$30.00/20 L (2,691,000 LBP/20 L)"]]));
 
@@ -653,7 +719,7 @@ describe("FuelLogPage — currency toggle (CAR-54)", () => {
 
     await user.type(screen.getByLabelText("Liters *"), "20");
     await user.type(screen.getByLabelText("Cost *"), "1800000");
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     await screen.findByRole("status");
     expect(calls.inserts[0]).toMatchObject({ cost_amount: 1800000, cost_currency: "LBP" });
@@ -686,7 +752,8 @@ describe("FuelLogPage — price per 20 liters (CAR-53 addition)", () => {
     await screen.findByRole("table");
 
     const headers = screen.getAllByRole("columnheader").map((header) => header.textContent);
-    expect(headers).toEqual(["Date", "Liters", "Cost", "Price per liter", "Price per 20 L"]);
+    // CAR-61 appended Odometer and km/L after these; this test is about the first five.
+    expect(headers.slice(0, 5)).toEqual(["Date", "Liters", "Cost", "Price per liter", "Price per 20 L"]);
   });
 
   it("shows each entry's price per 20 liters next to its price per liter, in its own currency and converted", async () => {
@@ -733,7 +800,7 @@ describe("FuelLogPage — price per 20 liters (CAR-53 addition)", () => {
 
     await user.type(screen.getByLabelText("Liters *"), "19.6");
     await user.type(screen.getByLabelText("Cost *"), "30");
-    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await addFillUp(user);
 
     await screen.findByRole("status");
     expect(tableRows()[0].slice(3)).toEqual(["$1.53/L (137,296 LBP/L)", "$30.61/20 L (2,745,918 LBP/20 L)"]);
@@ -844,5 +911,658 @@ describe("FuelLogPage — fill-up history bar chart (mentor feedback: replaces t
     expect(
       screen.getByText("Liters filled at each fill-up. Hover or tap a bar for the date, liters and cost, in USD."),
     ).toBeInTheDocument();
+  });
+});
+
+describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
+  const RATED_CAR = { ...CAR_1, fuel_efficiency: 12 };
+  // The ticket's example: 84,250 -> 84,610 km = 360 km on 40 L = 9.0 km/L.
+  const ODO_1 = { id: "odo-1", filled_at: "2026-10-01", liters: "35", cost_amount: "50", cost_currency: "USD", created_at: "2026-10-01T09:00:00Z", odometer_km: 84250 };
+  const ODO_2 = { id: "odo-2", filled_at: "2026-10-09", liters: "40", cost_amount: "57", cost_currency: "USD", created_at: "2026-10-09T09:00:00Z", odometer_km: 84610 };
+  const LEGACY = { ...ROW_A, odometer_km: null };
+
+  async function typeOdometer(user, text) {
+    await user.type(screen.getByLabelText("Odometer (km)"), text);
+  }
+
+  function setDate(value) {
+    fireEvent.change(screen.getByLabelText("Date *"), { target: { value } });
+  }
+
+  function averageBlock() {
+    return screen.getByText(/Your real average/).closest(".fuel-log-real-average");
+  }
+
+  it("adds Odometer and km/L columns after the existing ones, in this order", async () => {
+    mockDatabase({ logsByCar: { "car-1": { data: [LEGACY], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Date", "Liters", "Cost", "Price per liter", "Price per 20 L", "Odometer", "km/L",
+    ]);
+  });
+
+  it("shows dashes and no average for older fill-ups without a reading (legacy rows)", async () => {
+    mockDatabase({ cars: [RATED_CAR], logsByCar: { "car-1": { data: [ROW_B, LEGACY], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    expect(odometerCells()).toEqual([["-", "-"], ["-", "-"]]);
+    expect(screen.queryByText(/Your real average/)).not.toBeInTheDocument();
+    expect(screen.getByText(/you do not have to fill the tank to full/)).toBeInTheDocument();
+  });
+
+  it("shows km/L on the later of two readings and the real vs rated average (normal case)", async () => {
+    mockDatabase({ cars: [RATED_CAR], logsByCar: { "car-1": { data: [ODO_2, ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    // Newest first: the 9 Oct fill-up closes the 360 km / 40 L interval.
+    expect(odometerCells()).toEqual([["84,610 km", "9.0"], ["84,250 km", "-"]]);
+    expect(averageBlock()).toHaveTextContent("Your real average: 9.0 km/L (rated: 12.0 km/L)");
+    expect(averageBlock()).toHaveTextContent("Based on 1 measured fill-up over 360 km. Trip Planner starts using it after 3 fill-ups and 500 km.");
+  });
+
+  it("says so plainly when the car has no rated figure, never NaN or 0", async () => {
+    mockDatabase({ cars: [{ ...CAR_1, fuel_efficiency: null }], logsByCar: { "car-1": { data: [ODO_2, ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    expect(averageBlock()).toHaveTextContent("9.0 km/L (no rated figure set for this car)");
+    expect(averageBlock()).not.toHaveTextContent(/NaN|rated: 0/);
+  });
+
+  it("flags an implausible interval in its row and leaves it out of the average", async () => {
+    // 84,610 -> 846,100 is an extra digit: 761,490 km on 30 L.
+    const typo = { id: "odo-3", filled_at: "2026-10-15", liters: "30", cost_amount: "40", cost_currency: "USD", created_at: "2026-10-15T09:00:00Z", odometer_km: 846100 };
+    mockDatabase({ cars: [RATED_CAR], logsByCar: { "car-1": { data: [typo, ODO_2, ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    expect(odometerCells()[0]).toEqual(["846,100 km", "- (check reading)"]);
+    expect(averageBlock()).toHaveTextContent("Your real average: 9.0 km/L");
+  });
+
+  it("shows a partial-fill step (kept by the average) as a plain dash with a tooltip, not 'check reading'", async () => {
+    // Small top-up (500 km / 8 L = 62.5, out of band) merges with the big fill
+    // (500 km / 58 L = 8.6); the average keeps it, so its row is not an error.
+    const anchor = { id: "pf1", filled_at: "2026-10-01", liters: "30", cost_amount: "20", cost_currency: "USD", created_at: "2026-10-01T09:00:00Z", odometer_km: 10000 };
+    const topUp = { id: "pf2", filled_at: "2026-10-10", liters: "8", cost_amount: "6", cost_currency: "USD", created_at: "2026-10-10T09:00:00Z", odometer_km: 10500 };
+    const bigFill = { id: "pf3", filled_at: "2026-10-20", liters: "58", cost_amount: "45", cost_currency: "USD", created_at: "2026-10-20T09:00:00Z", odometer_km: 11000 };
+    mockDatabase({ cars: [RATED_CAR], logsByCar: { "car-1": { data: [bigFill, topUp, anchor], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+
+    // Newest first: big fill (8.6), top-up (merged dash), anchor (no step).
+    expect(odometerCells()).toEqual([["11,000 km", "8.6"], ["10,500 km", "-"], ["10,000 km", "-"]]);
+    expect(screen.getByTitle("Counted as part of a partial fill in your average.")).toBeInTheDocument();
+    expect(screen.queryByText("- (check reading)")).not.toBeInTheDocument();
+    expect(averageBlock()).toHaveTextContent("Your real average: 15.2 km/L");
+  });
+
+  it("saves the reading as a number with the fill-up", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ cars: [RATED_CAR], logsByCar: { "car-1": { data: [ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "40", cost: "57" });
+    await typeOdometer(user, "84610");
+    expect(screen.getByLabelText("Odometer (km)")).toHaveValue("84,610"); // thousand separators
+    await addFillUp(user);
+
+    expect(calls.inserts).toHaveLength(1);
+    expect(calls.inserts[0]).toMatchObject({ car_id: "car-1", liters: 40, odometer_km: 84610 });
+    await screen.findByRole("status");
+    expect(screen.getByLabelText("Odometer (km)")).toHaveValue(""); // ready for the next one
+  });
+
+  it("leaves odometer_km out entirely when no reading is given (stored exactly as before)", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase();
+
+    renderPage();
+    await screen.findByText("No fill-ups logged yet");
+    await fillForm(user, { liters: "20", cost: "30" });
+    await addFillUp(user);
+
+    await screen.findByRole("status");
+    expect(calls.inserts[0]).not.toHaveProperty("odometer_km");
+  });
+
+  it.each([
+    ["above the 2,000,000 km limit", "2000001", /too large/],
+    ["zero", "0", /must be greater than 0/],
+  ])("refuses a reading %s outright, without saving (the database would reject it)", async (_label, reading, message) => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "40", cost: "57" });
+    await typeOdometer(user, reading);
+    await addFillUp(user);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(screen.getByLabelText("Odometer (km)")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.queryByRole("button", { name: "Save anyway" })).not.toBeInTheDocument();
+    expect(calls.inserts).toEqual([]);
+  });
+
+  it.each([
+    ["lower than the previous reading", "84000", /^This isn't higher than your previous reading of 84,250 km \(1 Oct 2026\)/],
+    ["equal to the previous reading", "84250", /^This isn't higher than your previous reading of 84,250 km/],
+  ])("warns about a reading %s, and only saves it after 'Save anyway'", async (_label, reading, message) => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "40", cost: "57" });
+    await typeOdometer(user, reading);
+    await addFillUp(user);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(screen.getByLabelText("Odometer (km)")).not.toHaveAttribute("aria-invalid");
+    expect(calls.inserts).toEqual([]); // nothing saved until the user confirms
+
+    await user.click(screen.getByRole("button", { name: "Save anyway" }));
+
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(calls.inserts[0]).toMatchObject({ odometer_km: Number(reading) });
+    expect(await screen.findByRole("status")).toHaveTextContent("Fill-up added.");
+  });
+
+  it("drops the warning (and its Save anyway) as soon as the reading is changed", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "40", cost: "57" });
+    await typeOdometer(user, "8400"); // missing a digit
+    await addFillUp(user);
+    await screen.findByRole("button", { name: "Save anyway" });
+
+    await typeOdometer(user, "0"); // now 84,000... still lower, but a NEW reading: confirm again
+    expect(screen.queryByRole("button", { name: "Save anyway" })).not.toBeInTheDocument();
+    expect(calls.inserts).toEqual([]);
+  });
+
+  it("warns about a backdated reading that isn't below a later one, and saves it after 'Save anyway'", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [ODO_2, ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    setDate("2026-10-05"); // between the two existing readings
+    await fillForm(user, { liters: "20", cost: "30" });
+    await typeOdometer(user, "84700");
+    await addFillUp(user);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This isn't lower than your later reading of 84,610 km (9 Oct 2026). Check the reading and the date.",
+    );
+    expect(calls.inserts).toEqual([]);
+    await user.click(screen.getByRole("button", { name: "Save anyway" }));
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(calls.inserts[0]).toMatchObject({ filled_at: "2026-10-05", odometer_km: 84700 });
+  });
+
+  it("covers a typo in the very FIRST reading: the correct one after it can still be saved", async () => {
+    const user = userEvent.setup();
+    // The car's only reading is a typo (an extra digit); it has no earlier
+    // reading, so nothing can flag it. The real mileage must still be savable.
+    const firstTypo = { ...ODO_1, odometer_km: 842500 };
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [firstTypo], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "40", cost: "57" });
+    await typeOdometer(user, "84610");
+    await addFillUp(user);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/previous reading of 842,500 km/);
+    await user.click(screen.getByRole("button", { name: "Save anyway" }));
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(calls.inserts[0]).toMatchObject({ odometer_km: 84610 });
+  });
+
+  it("lets the user carry on with correct readings after a saved typo (fill-ups can't be edited)", async () => {
+    const user = userEvent.setup();
+    const typo = { id: "odo-3", filled_at: "2026-10-15", liters: "30", cost_amount: "40", cost_currency: "USD", created_at: "2026-10-15T09:00:00Z", odometer_km: 846100 };
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [typo, ODO_2, ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "30", cost: "40" });
+    await typeOdometer(user, "84900"); // the real mileage, far below the typo
+
+    expect(screen.getByText("+290 km since your last reading (84,610 km).")).toBeInTheDocument();
+    await addFillUp(user);
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(calls.inserts[0]).toMatchObject({ odometer_km: 84900 });
+  });
+
+  it("shows the distance since the last reading as you type, so a typo stands out", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "40" });
+    await typeOdometer(user, "84610");
+
+    expect(screen.getByText("+360 km since your last reading (84,250 km).")).toBeInTheDocument();
+  });
+
+  it("warns (without blocking) when the distance is unrealistic for the liters typed", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await fillForm(user, { liters: "40", cost: "57" });
+    await typeOdometer(user, "846100"); // an extra digit
+
+    expect(screen.getByText(/doesn't look like a realistic distance/)).toBeInTheDocument();
+    // A real but unlogged trip in between can look like this too, so it can still be saved.
+    await addFillUp(user);
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+  });
+
+  it("won't save a reading while the car's fill-ups are still loading (nothing to check it against)", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": new Promise(() => {}) } });
+
+    renderPage();
+    await screen.findByText("Loading fill-ups...");
+    await fillForm(user, { liters: "40", cost: "57" });
+    await typeOdometer(user, "84610");
+    await addFillUp(user);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Still loading this car's fill-ups.");
+    expect(calls.inserts).toEqual([]);
+  });
+
+  it("never mixes two cars' readings: validation, km/L and the average are per car", async () => {
+    const user = userEvent.setup();
+    const CAR_2_ODO_1 = { id: "c2-1", filled_at: "2026-10-01", liters: "30", cost_amount: "40", cost_currency: "USD", created_at: "2026-10-01T09:00:00Z", odometer_km: 10000 };
+    const CAR_2_ODO_2 = { id: "c2-2", filled_at: "2026-10-09", liters: "30", cost_amount: "40", cost_currency: "USD", created_at: "2026-10-09T09:00:00Z", odometer_km: 10450 };
+    const calls = mockDatabase({
+      cars: [RATED_CAR, { ...CAR_2, fuel_efficiency: 15 }],
+      logsByCar: {
+        "car-1": { data: [ODO_2, ODO_1], error: null },
+        "car-2": { data: [CAR_2_ODO_2, CAR_2_ODO_1], error: null },
+      },
+    });
+
+    renderPage();
+    await screen.findByRole("table");
+    expect(averageBlock()).toHaveTextContent("9.0 km/L (rated: 12.0 km/L)");
+
+    await user.selectOptions(screen.getByLabelText("Car"), "car-2");
+    await waitFor(() => expect(odometerCells()).toEqual([["10,450 km", "15.0"], ["10,000 km", "-"]]));
+    // 450 km / 30 L = 15.0, and the rated figure is car 2's own.
+    expect(averageBlock()).toHaveTextContent("15.0 km/L (rated: 15.0 km/L)");
+
+    // 10,900 km is fine for car 2 even though it is far below car 1's 84,610 km.
+    await fillForm(user, { liters: "30", cost: "40" });
+    await typeOdometer(user, "10900");
+    expect(screen.getByText("+450 km since your last reading (10,450 km).")).toBeInTheDocument();
+    await addFillUp(user);
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(calls.inserts[0]).toMatchObject({ car_id: "car-2", odometer_km: 10900 });
+  });
+});
+
+describe("FuelLogPage — camera scans (Step 2)", () => {
+  function scanFile(name = "pump.jpg") {
+    return new File(["x"], name, { type: "image/jpeg" });
+  }
+
+  it("fills Liters, Cost and currency from a readable pump scan, leaving the form for review", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    apiFetch.mockImplementation((path) =>
+      path === "/fuel-log/scan-pump"
+        ? Promise.resolve({ readable: true, liters: 19.6, total_price: 2_940_000, currency: "LBP" })
+        : Promise.resolve(FUEL_PRICES_REPLY),
+    );
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+
+    await user.upload(document.getElementById("scanPumpFile"), scanFile());
+
+    await waitFor(() => expect(screen.getByLabelText("Liters *")).toHaveValue(19.6));
+    expect(screen.getByLabelText("Cost *")).toHaveValue(2_940_000);
+    expect(screen.getByLabelText("Currency of the cost")).toHaveValue("LBP");
+    // Never auto-saved: the user still has to submit it themselves.
+    expect(screen.queryByText("Fill-up logged.")).not.toBeInTheDocument();
+  });
+
+  it("does not overwrite a Liters/Cost value the user already typed", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    apiFetch.mockImplementation((path) =>
+      path === "/fuel-log/scan-pump"
+        ? Promise.resolve({ readable: true, liters: 19.6, total_price: 30, currency: "USD" })
+        : Promise.resolve(FUEL_PRICES_REPLY),
+    );
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    await fillForm(user, { liters: "40" });
+
+    await user.upload(document.getElementById("scanPumpFile"), scanFile());
+
+    await waitFor(() => expect(screen.getByLabelText("Cost *")).toHaveValue(30));
+    expect(screen.getByLabelText("Liters *")).toHaveValue(40); // untouched
+  });
+
+  it("shows a message and changes nothing when the pump photo isn't readable", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    apiFetch.mockImplementation((path) =>
+      path === "/fuel-log/scan-pump"
+        ? Promise.resolve({ readable: false, liters: null, total_price: null, currency: null })
+        : Promise.resolve(FUEL_PRICES_REPLY),
+    );
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    await user.upload(document.getElementById("scanPumpFile"), scanFile());
+
+    expect(await screen.findByText(/Couldn't read that as a pump display/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Liters *")).toHaveValue(null);
+  });
+
+  it("fills Odometer from a readable scan, but never overwrites an already-typed reading", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    apiFetch.mockImplementation((path) =>
+      path === "/fuel-log/scan-odometer"
+        ? Promise.resolve({ readable: true, odometer_km: 84610 })
+        : Promise.resolve(FUEL_PRICES_REPLY),
+    );
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    await user.upload(document.getElementById("scanOdometerFile"), scanFile("odo.jpg"));
+
+    await waitFor(() => expect(screen.getByLabelText("Odometer (km)")).toHaveValue("84,610"));
+  });
+
+  it("surfaces a capped/503 scan error from the backend as plain text", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    apiFetch.mockImplementation((path) =>
+      path === "/fuel-log/scan-pump"
+        ? Promise.reject(new Error("You've reached today's limit of 20 for this feature. It resets at midnight Beirut time."))
+        : Promise.resolve(FUEL_PRICES_REPLY),
+    );
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    await user.upload(document.getElementById("scanPumpFile"), scanFile());
+
+    expect(await screen.findByText(/reached today's limit of 20/)).toBeInTheDocument();
+  });
+
+  it("uploads the browser-resized JPEG (photo.jpg), not the original file", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    apiFetch.mockImplementation((path) =>
+      path === "/fuel-log/scan-odometer" ? Promise.resolve({ readable: true, odometer_km: 84610 }) : Promise.resolve(FUEL_PRICES_REPLY),
+    );
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    await user.upload(document.getElementById("scanOdometerFile"), new File([new Uint8Array(9_000_000)], "IMG_8000.jpg", { type: "image/jpeg" }));
+
+    await waitFor(() => expect(screen.getByLabelText("Odometer (km)")).toHaveValue("84,610"));
+    const scanCall = apiFetch.mock.calls.find(([path]) => path === "/fuel-log/scan-odometer");
+    const sent = scanCall[1].body.get("file");
+    expect(sent.name).toBe("photo.jpg");
+    expect(sent.size).toBe(100); // the 9 MB original never leaves the phone
+  });
+
+  it("accepts a HEIC photo and a large one (they are re-encoded), but refuses a non-image", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    apiFetch.mockImplementation((path) =>
+      path === "/fuel-log/scan-pump" ? Promise.resolve({ readable: true, liters: 20, total_price: 30, currency: "USD" }) : Promise.resolve(FUEL_PRICES_REPLY),
+    );
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    await user.upload(document.getElementById("scanPumpFile"), new File([new Uint8Array(12_000_000)], "p.heic", { type: "image/heic" }));
+    await waitFor(() => expect(screen.getByLabelText("Liters *")).toHaveValue(20));
+
+    await user.upload(document.getElementById("scanOdometerFile"), new File(["x"], "doc.pdf", { type: "application/pdf" }));
+    expect(await screen.findByText(/Please choose a photo/)).toBeInTheDocument();
+    expect(apiFetch.mock.calls.some(([path]) => path === "/fuel-log/scan-odometer")).toBe(false);
+  });
+
+  it("shows a privacy notice beside both the pump and odometer scan buttons", async () => {
+    mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+    renderPage();
+    await screen.findByLabelText("Liters *");
+
+    const notices = screen.getAllByText(/sent to Google's Gemini API/);
+    expect(notices).toHaveLength(2);
+  });
+});
+
+describe("FuelLogPage — price-per-liter and tank-capacity warnings (Step 2)", () => {
+  it("warns when the price per liter is far from today's fuel price, and 'Save anyway' submits it as typed", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    // 20 L for $300 is far above today's mocked 150,000 LBP/L price.
+    await fillForm(user, { liters: "20", cost: "300" });
+    await addFillUp(user);
+
+    expect(await screen.findByText(/far from today's fuel price/)).toBeInTheDocument();
+    expect(calls.inserts).toHaveLength(0);
+
+    await user.click(screen.getByRole("button", { name: "Save anyway" }));
+    await user.click(await screen.findByRole("button", { name: "Save without odometer" }));
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(calls.inserts[0]).toMatchObject({ liters: 20, cost_amount: 300 });
+  });
+
+  it("warns when liters exceed the car's tank capacity, naming it", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({
+      cars: [{ ...CAR_1, fuel_tank_capacity_liters: 60 }],
+      logsByCar: { "car-1": { data: [], error: null } },
+    });
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    // 65 L at a normal price (so the price warning doesn't also fire).
+    await fillForm(user, { liters: "65", cost: "9750000" });
+    await user.selectOptions(screen.getByLabelText("Currency of the cost"), "LBP");
+    await addFillUp(user);
+
+    expect(await screen.findByText(/more than your car's tank capacity \(60 L\)/)).toBeInTheDocument();
+    expect(calls.inserts).toHaveLength(0);
+
+    await user.click(screen.getByRole("button", { name: "Save anyway" }));
+    await user.click(await screen.findByRole("button", { name: "Save without odometer" }));
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+  });
+
+  it("says nothing for a normal fill-up within the tank and close to today's price", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({
+      cars: [{ ...CAR_1, fuel_tank_capacity_liters: 60 }],
+      logsByCar: { "car-1": { data: [], error: null } },
+    });
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    // 45 L at 150,000 LBP/L = 6,750,000 LBP, exactly today's mocked price.
+    await fillForm(user, { liters: "45", cost: "6750000" });
+    await user.selectOptions(screen.getByLabelText("Currency of the cost"), "LBP");
+    await addFillUp(user);
+
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(screen.queryByText(/far from today's fuel price/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/tank capacity/)).not.toBeInTheDocument();
+  });
+});
+
+describe("FuelLogPage — skip-the-odometer prompt (dashboard fix)", () => {
+  const PROMPT = "Skip the odometer? Fuel economy and service reminders need it.";
+
+  async function fillAndSave(user, { odometer } = {}) {
+    await fillForm(user, { liters: "20", cost: "30" });
+    if (odometer) await user.type(screen.getByLabelText("Odometer (km)"), odometer);
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+  }
+
+  it("saves straight away, with no prompt, when a reading is given", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase();
+
+    renderPage();
+    await screen.findByText("No fill-ups logged yet");
+    await fillAndSave(user, { odometer: "84610" });
+
+    await screen.findByRole("status");
+    expect(calls.inserts).toHaveLength(1);
+    expect(calls.inserts[0]).toMatchObject({ odometer_km: 84610 });
+    expect(screen.queryByText(PROMPT)).not.toBeInTheDocument();
+  });
+
+  it("asks before saving a fill-up that has no reading, and saves nothing yet", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase();
+
+    renderPage();
+    await screen.findByText("No fill-ups logged yet");
+    await fillAndSave(user);
+
+    expect(await screen.findByText(PROMPT)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save without odometer" })).toBeInTheDocument();
+    expect(calls.inserts).toHaveLength(0);
+  });
+
+  it("saves without odometer_km once the skip is confirmed (the reading stays optional)", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase();
+
+    renderPage();
+    await screen.findByText("No fill-ups logged yet");
+    await fillAndSave(user);
+    await user.click(await screen.findByRole("button", { name: "Save without odometer" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Fill-up added.");
+    expect(calls.inserts).toHaveLength(1);
+    expect(calls.inserts[0]).not.toHaveProperty("odometer_km");
+    expect(screen.queryByText(PROMPT)).not.toBeInTheDocument();
+  });
+
+  it("drops the prompt as soon as any field changes, and typing a reading then saves it", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase();
+
+    renderPage();
+    await screen.findByText("No fill-ups logged yet");
+    await fillAndSave(user);
+    await screen.findByText(PROMPT);
+
+    await user.type(screen.getByLabelText("Odometer (km)"), "84610");
+    expect(screen.queryByText(PROMPT)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    await screen.findByRole("status");
+    expect(calls.inserts[0]).toMatchObject({ odometer_km: 84610 });
+  });
+
+  it("does not ask for an earlier warning again after the skip is confirmed (one save, no loop)", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+
+    renderPage();
+    await screen.findByLabelText("Liters *");
+    await fillForm(user, { liters: "20", cost: "300" }); // far above today's mocked price
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+    await user.click(await screen.findByRole("button", { name: "Save anyway" }));
+    await user.click(await screen.findByRole("button", { name: "Save without odometer" }));
+
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(screen.queryByText(/far from today's fuel price/)).not.toBeInTheDocument();
+  });
+
+  describe("scrolling the prompt into view", () => {
+    // jsdom has no scrollIntoView: give elements one for these tests, and remove it after.
+    const scroll = vi.fn();
+    beforeEach(() => {
+      scroll.mockClear();
+      Element.prototype.scrollIntoView = scroll;
+    });
+    afterEach(() => {
+      delete Element.prototype.scrollIntoView;
+    });
+
+    it("scrolls the prompt itself into view when it appears (the submit button is below the field)", async () => {
+      const user = userEvent.setup();
+      mockDatabase();
+
+      renderPage();
+      await screen.findByText("No fill-ups logged yet");
+      await fillAndSave(user);
+      await screen.findByText(PROMPT);
+
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll.mock.contexts[0]).toBe(screen.getByText(PROMPT).closest(".fuel-log-order-warning"));
+      expect(scroll).toHaveBeenCalledWith({ block: "center" });
+    });
+
+    it("does not scroll when there is no prompt (a reading was given)", async () => {
+      const user = userEvent.setup();
+      mockDatabase();
+
+      renderPage();
+      await screen.findByText("No fill-ups logged yet");
+      await fillAndSave(user, { odometer: "84610" });
+      await screen.findByRole("status");
+
+      expect(scroll).not.toHaveBeenCalled();
+    });
+
+    it("does not scroll again when the prompt is only confirmed away", async () => {
+      const user = userEvent.setup();
+      mockDatabase();
+
+      renderPage();
+      await screen.findByText("No fill-ups logged yet");
+      await fillAndSave(user);
+      await user.click(await screen.findByRole("button", { name: "Save without odometer" }));
+      await screen.findByRole("status");
+
+      expect(scroll).toHaveBeenCalledTimes(1); // only when it appeared
+    });
+  });
+
+  it("says in the field's hint that fuel economy and service reminders need the reading", async () => {
+    mockDatabase();
+
+    renderPage();
+
+    expect(await screen.findByText(/fuel economy and service reminders need it/)).toBeInTheDocument();
   });
 });

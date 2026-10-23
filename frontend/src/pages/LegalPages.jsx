@@ -3,13 +3,15 @@
 // soon" placeholders with real, plain-language content describing what
 // CarSage actually does and which third-party services it calls, not a
 // substitute for review by a lawyer, but accurate to the running app
-// rather than a generic template. LAST_UPDATED is a single source so both
-// pages (and a future changelog) stay in sync.
+// rather than a generic template. Each page has its own "last updated"
+// date, since a change to one (e.g. the Privacy Policy's photo-scan
+// section) doesn't mean the other changed too.
 
 import { Link } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 
 const LAST_UPDATED = "September 2026";
+const PRIVACY_LAST_UPDATED = "21 October 2026";
 
 /**
  * Terms of Service page.
@@ -85,9 +87,9 @@ export function TermsPage() {
         <h2>Contact</h2>
         <p>
           Questions about these terms can be sent to the project&apos;s maintainer via
-          the contact details on the{" "}
-          <a href="https://github.com/mohamaddib147/carsage" target="_blank" rel="noopener noreferrer">
-            project&apos;s GitHub page
+          the contact details on their{" "}
+          <a href="https://github.com/mohamaddib147" target="_blank" rel="noopener noreferrer">
+            GitHub profile
           </a>
           .
         </p>
@@ -106,7 +108,7 @@ export function PrivacyPage() {
   return (
     <PageShell
       title="Privacy Policy"
-      description={`Last updated: ${LAST_UPDATED}`}
+      description={`Last updated: ${PRIVACY_LAST_UPDATED}`}
     >
       <div className="legal-content">
         <p>
@@ -118,8 +120,13 @@ export function PrivacyPage() {
         <p>
           When you create an account, CarSage stores your email address and the
           data you add yourself: your cars and their specs, trip searches, fuel
-          fill-up logs, and your AI Advisor conversations. We don&apos;t ask for or
-          store payment information, and we don&apos;t sell your data to anyone.
+          fill-up logs, maintenance and expenses, any photos you attach to them, and
+          your AI Advisor conversations. We don&apos;t ask for or store payment
+          information, and we don&apos;t sell your data to anyone.
+        </p>
+        <p>
+          Photos you attach to maintenance and expenses stay in your private storage
+          and are never sent to Google.
         </p>
 
         <h2>Row-level security</h2>
@@ -155,11 +162,8 @@ export function PrivacyPage() {
             <strong>Google Gemini and Groq</strong>: the AI models used to classify a
             described car issue and generate AI Advisor guidance. The issue
             description you type is sent to whichever of these is available.
-            Gemini is also used, when you choose to scan a registration card
-            on Car Onboarding, to read that photo and extract your car's
-            make, model, year, VIN and license plate; the photo itself is
-            never stored, only the resulting fields, which you can review
-            and edit before saving.
+            Gemini also reads the photos you choose to scan; see
+            &quot;What goes to Google Gemini&quot; below.
           </li>
           <li>
             <strong>YouTube Data API</strong>: used to find a relevant tutorial video
@@ -172,7 +176,63 @@ export function PrivacyPage() {
         </ul>
         <p>
           None of these services receive your email, password, or account identity,
-          only the specific trip, car, or issue text needed for that one request.
+          only the specific trip, car, issue text, or photo needed for that one
+          request.
+        </p>
+
+        <h2>What goes to Google Gemini</h2>
+        <p>These features send what you give them to Google&apos;s Gemini API:</p>
+        <ul>
+          <li>
+            <strong>AI Advisor</strong>: the problem description you type. If Gemini
+            is unavailable, the same text goes to Groq instead.
+          </li>
+          <li>
+            <strong>Fuel pump display photo</strong> (Fuel Log): to read the liters
+            and total price of a fill-up.
+          </li>
+          <li>
+            <strong>Odometer photo</strong> (Fuel Log and Maintenance): to read your
+            car&apos;s total distance.
+          </li>
+          <li>
+            <strong>Photo of a dashboard light, lamp or visible car problem</strong> (AI
+            Advisor): to say what is wrong. CarSage turns the answer into one short
+            sentence in the Advisor&apos;s input box, which you can edit before sending.
+            It is an AI guess and may be wrong, and you choose whether to send it.
+            Please photograph only the part: if Google&apos;s reading finds people, a
+            license plate or a document in the photo, CarSage discards the result.
+          </li>
+        </ul>
+        <p>
+          Later features may add more. Each will be listed here before it is
+          released.
+        </p>
+        <p>
+          CarSage uses Google&apos;s free (unpaid) tier of the Gemini API. Under
+          Google&apos;s terms for that tier, Google may use the content submitted to
+          it to provide, improve and develop its products and services, and human
+          reviewers may read it. Google states that it disconnects this data from
+          the Google account, API key and project before reviewers see it, and asks
+          that sensitive or personal information not be submitted. Please keep that
+          in mind when you choose what to type or photograph. See Google&apos;s{" "}
+          <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener noreferrer">
+            Gemini API Additional Terms of Service
+          </a>{" "}
+          (&quot;Unpaid Services&quot;, &quot;How Google Uses Your Data&quot;).
+        </p>
+        <p>
+          What CarSage stores: your AI Advisor conversations, saved to your account,
+          and the values a photo scan reads (for example the liters and cost of a
+          fill-up, or an odometer reading), only after you have reviewed them and
+          pressed save. A sentence from a photo is saved only if you send it, like
+          any text you type. Nothing from a scan is saved automatically. What
+          CarSage does not store: a photo you scan. It is read for that one request
+          and then discarded; it is never written to our database, to file storage,
+          or to our server&apos;s disk. (Photos you choose to attach to maintenance and
+          expenses are different: they are kept in your private storage, as
+          described above.) Scanning is always optional, and every field can be
+          typed in by hand instead.
         </p>
 
         <h2>Cookies and local storage</h2>
@@ -183,12 +243,34 @@ export function PrivacyPage() {
         </p>
 
         <h2>Deleting your data</h2>
+        <p>You can delete these yourself in the app:</p>
+        <ul>
+          <li>
+            <strong>A car</strong> (Car Profile). This also permanently deletes that
+            car&apos;s trips, fuel log entries, maintenance items with their history,
+            expenses, and its photo file. Your AI Advisor conversations are kept, no
+            longer linked to a car.
+          </li>
+          <li>
+            <strong>A car&apos;s photo</strong> (Car Profile, Remove photo). The photo
+            file is deleted from file storage.
+          </li>
+          <li>
+            <strong>An expense</strong>, <strong>a maintenance item</strong> (with its
+            history), or <strong>a single maintenance completion</strong>, together
+            with any photos or receipt attached to them.
+          </li>
+          <li>
+            <strong>A photo or receipt you attached</strong> (Remove).
+          </li>
+        </ul>
         <p>
-          You can delete individual cars and fuel logs yourself from within the app.
-          To delete your entire account and all associated data, contact the
-          project maintainer using the details on the{" "}
-          <a href="https://github.com/mohamaddib147/carsage" target="_blank" rel="noopener noreferrer">
-            project&apos;s GitHub page
+          You can&apos;t delete these in the app: individual fuel log entries, saved
+          trips, AI Advisor conversations, or your account. To have any of them
+          deleted, or to delete your account and all associated data, contact the
+          project maintainer using the details on their{" "}
+          <a href="https://github.com/mohamaddib147" target="_blank" rel="noopener noreferrer">
+            GitHub profile
           </a>
           .
         </p>

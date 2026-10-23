@@ -9,15 +9,25 @@
 // drag it toward 0% for no real reason).
 
 /**
+ * The two counts behind the fix rate, from the same rows and the same rule: how many suggestions have feedback
+ * (`answered`) and how many of those were marked fixed (`fixed`). The Dashboard shows them next to the percentage.
+ * @param {{ marked_fixed: boolean | null }[]} diyMessages - 'ai' rows with recommendation = 'diy'.
+ * @returns {{ fixed: number, answered: number }}
+ */
+export function diyFixCounts(diyMessages) {
+  const answered = diyMessages.filter((message) => message.marked_fixed !== null);
+  return { fixed: answered.filter((message) => message.marked_fixed === true).length, answered: answered.length };
+}
+
+/**
  * @param {{ marked_fixed: boolean | null }[]} diyMessages - 'ai' rows with recommendation = 'diy'.
  * @returns {number | null} the percentage (0-100, rounded) marked fixed among
  *   those with feedback, or null when nobody has given feedback yet.
  */
 export function diyFixRate(diyMessages) {
-  const answered = diyMessages.filter((message) => message.marked_fixed !== null);
-  if (answered.length === 0) return null;
-  const fixed = answered.filter((message) => message.marked_fixed === true).length;
-  return Math.round((fixed / answered.length) * 100);
+  const { fixed, answered } = diyFixCounts(diyMessages);
+  if (answered === 0) return null;
+  return Math.round((fixed / answered) * 100);
 }
 
 /**

@@ -38,6 +38,12 @@ ALLOWED_ORIGINS = [
 GEMINI_API_KEY = _require_env("GEMINI_API_KEY")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
+# Optional: a separate Gemini key just for vision calls (the fuel-log
+# camera), so vision usage can be tracked/quota'd apart from
+# text classification at Google's end. Falls back to GEMINI_API_KEY when
+# unset — vision calls work exactly as before.
+GEMINI_VISION_API_KEY = os.environ.get("GEMINI_VISION_API_KEY", "")
+
 # Optional: powers Car Onboarding's spec autofill (CAR-34). If unset, that
 # lookup just returns no API Ninjas data and the user fills specs manually
 # — it must never block onboarding.

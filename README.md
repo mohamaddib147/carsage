@@ -26,7 +26,7 @@ It was built as a capstone project (React + FastAPI + Supabase). Fuel prices are
 
 | Feature | What it does |
 |---|---|
-| **Car Onboarding** | Add your car with a short form. Type the make, model and year and CarSage fills in engine type, fuel efficiency, cylinders, drivetrain, transmission and fuel tank size for you. You can change any of it. (Scanning a registration card is shown as "coming soon".) |
+| **Car Onboarding** | Add your car with a short form. Type the make, model and year and CarSage fills in engine type, fuel efficiency, cylinders, drivetrain, transmission and fuel tank size for you. You can change any of it. |
 | **Car Profile** | See every saved spec for your car, edit any of them, or delete the car. |
 | **Trip Planner** | Enter where you start and where you are going. You get the distance, the driving time with live traffic, the fuel cost, and the cost of a full tank, plus a map of the route. It compares light traffic with current traffic. |
 | **AI Advisor** | Describe a car problem in plain words. You get a clear "DIY Fixable" or "See a Mechanic" verdict with short guidance, and a tutorial video for DIY fixes. Answers are checked against official US recall and complaint data first. Your conversation is saved. |
@@ -127,6 +127,7 @@ Copy each `.env.example` to `.env` and fill it in. **Never commit a `.env` file*
 | `SUPABASE_SERVICE_KEY` | Yes | The Supabase **service role** key. It bypasses Row Level Security, so keep it on the server only and never put it in the frontend. |
 | `GOOGLE_MAPS_API_KEY` | Yes | Google Cloud key with the **Directions API** enabled. Used for routes and traffic-adjusted travel time. |
 | `GEMINI_API_KEY` | Yes | Google AI Studio key for the AI Advisor (primary model) and the tank-size estimate fallback. |
+| `GEMINI_VISION_API_KEY` | No | A separate Gemini key just for vision calls (the fuel-log camera). Without it, those calls reuse `GEMINI_API_KEY`. |
 | `GROQ_API_KEY` | No | Groq key. If Gemini is busy or unavailable the AI Advisor falls back to Groq. Without it, that case shows a clear error instead. |
 | `API_NINJAS_KEY` | No | API Ninjas key for car spec autofill (cylinders, drivetrain, transmission). Without it the form is simply filled in by hand or from the other free sources. |
 | `YOUTUBE_API_KEY` | No | YouTube Data API v3 key for DIY video suggestions. Without it the advisor answers without a video. |
@@ -174,10 +175,16 @@ CarSage uses a Supabase project (PostgreSQL + Auth). The database is described b
 | 17 | `2026-10-01_add_cars_photo_path.sql` | Adds `photo_path` to `cars` (the storage key of its photo, if one was added). |
 | 18 | `2026-10-01_car_photos_storage_rls.sql` | Row Level Security policies on the `car-photos` Storage bucket: a user may only read, add, replace or delete objects inside their own `{user_id}/` folder. (No `bucket_id` foreign key exists, so this runs cleanly before file 19 creates that bucket.) |
 | 19 | `2026-10-01_create_car_photos_bucket.sql` | Creates the private `car-photos` Storage bucket (8 MB limit, JPEG/PNG/WEBP/HEIC/HEIF only). |
+| 20 | `2026-10-19_car61_fuel_logs_odometer_km.sql` | Adds an optional `odometer_km` (whole km, 1 to 2,000,000) to `fuel_logs`, used to work out real km/L between fill-ups. |
+| 21 | `2026-10-19_car62_maintenance_tracking.sql` | `maintenance_items` (a car's recurring service items, due by km and/or months) and `maintenance_records` (each time one was done; no edits, the owner may undo one), both owner-only, an item may only belong to the caller's own car, and a completion only to the caller's own item. |
+| 22 | `2026-10-20_ai_camera_usage_limits.sql` | `api_limits` (the one source of truth for every AI/camera feature's daily caps), `api_usage` and `api_usage_global` (per-user and shared daily counters, atomically enforced by a trigger on each table). Service-key only — RLS on, no policies, no grants to `anon`/`authenticated`. |
+| 23 | `2026-10-20_car64_car_expenses.sql` | `car_expenses`: a car's non-fuel costs (date, category from a fixed list, amount and currency as typed, optional note), owner-only, an expense only on the caller's own car, no edits (the owner may delete one). |
+| 24 | `2026-10-21_record_photos_storage.sql` | Photos you attach to a maintenance completion (`maintenance_record_photos`, up to 3) or an expense (`car_expense_receipts`, one), the private `record-photos` bucket (2 MB, JPEG only) and its Storage policies, and `storage_cleanup_queue`, filled by a trigger whenever a photo row is deleted so the backend can remove the file. Rows can be added and deleted, never edited; 100 photos per user. |
+| 25 | `2026-10-21_remove_registration_scan_limit.sql` | Data only: deletes the `registration_scan` row from `api_limits` (that feature was removed). Run in the SQL editor, so it has no migration-history version. |
 
-   The file names sort in the order they must be run. Files 1 to 11 are verbatim copies of the migration history; files 12 to 19 were checked against what is applied to the project.
+   The file names sort in the order they must be run. Files 1 to 11 are verbatim copies of the migration history; files 12 to 25 were checked against what is applied to the project.
 4. **Copy your keys** (Project Settings → API): the project URL, the `anon` key (frontend) and the `service_role` key (backend only) into the two `.env` files.
-5. **Check it worked.** In the Table Editor you should see `profiles`, `cars`, `trips`, `advisor_conversations`, `advisor_messages`, `fuel_prices` and `fuel_logs`, each with Row Level Security **enabled**. In the Storage section you should see a private `car-photos` bucket. To be thorough, run the access-control check (it creates and deletes two throwaway users):
+5. **Check it worked.** In the Table Editor you should see `profiles`, `cars`, `trips`, `advisor_conversations`, `advisor_messages`, `fuel_prices`, `fuel_logs`, `maintenance_items`, `maintenance_records`, `car_expenses`, `api_limits`, `api_usage`, `api_usage_global`, `maintenance_record_photos`, `car_expense_receipts` and `storage_cleanup_queue`, each with Row Level Security **enabled**. In the Storage section you should see private `car-photos` and `record-photos` buckets. To be thorough, run the access-control check (it creates and deletes two throwaway users):
 
    ```bash
    cd backend
@@ -224,8 +231,10 @@ The FastAPI service is used by the frontend; it is not meant to be called by han
 | `POST /trip-planner/estimate` | The full trip estimate for one of your cars; saves the trip. |
 | `GET /trip-planner/fuel-prices` | Current fuel prices per fuel type (LBP and USD). |
 | `GET /cars/spec-suggestions` | Best-effort spec autofill for a make, model and year. |
-| `POST /cars/scan-registration` | Reads a photographed registration card and extracts make, model, year, VIN and license plate. |
 | `POST /ai-advisor/classify` | Sends a described problem to the AI Advisor and saves the conversation. |
+| `POST /fuel-log/scan-pump` | Reads a photographed fuel pump display and extracts liters, total price and currency. |
+| `POST /fuel-log/scan-odometer` | Reads a photographed odometer display and extracts the reading. |
+| `POST /ai-advisor/scan-photo` | Looks at a photo of a dashboard light, a lamp or a visible car problem and returns a sentence for you to edit before sending (from a fixed list, or a short cleaned description), or a plain message. |
 
 Errors are always short, plain messages; the service never returns stack traces or internal details.
 

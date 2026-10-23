@@ -3,6 +3,7 @@
 // screens, and renders the 404 fallback for unknown routes.
 
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import appSource from "./App.jsx?raw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -46,28 +47,51 @@ function renderAtPath(path) {
 describe("App routing — public screens", () => {
   it("renders the Landing screen at /", () => {
     renderAtPath("/");
+    // CAR-80: the hero headline is the page's h1 (it was a visually hidden "CarSage" before).
     expect(
-      screen.getByRole("heading", { name: "CarSage" }),
+      screen.getByRole("heading", { name: /Know what your car costs/ }),
     ).toBeInTheDocument();
   });
 
-  it("renders the Log In screen at /login", () => {
+  // CAR-71: the form shows once the first session check ends (a signed-in user is redirected instead).
+  it("renders the Log In screen at /login", async () => {
     renderAtPath("/login");
-    expect(screen.getByRole("heading", { name: "Log In" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Log In" })).toBeInTheDocument();
   });
 
-  it("renders the Sign Up screen at /signup", () => {
+  it("renders the Sign Up screen at /signup", async () => {
     renderAtPath("/signup");
     expect(
-      screen.getByRole("heading", { name: "Sign Up" }),
+      await screen.findByRole("heading", { name: "Sign Up" }),
     ).toBeInTheDocument();
   });
 
-  it("renders the Not Found screen for an unknown route (invalid input case)", () => {
+  it("renders the Not Found screen for an unknown route (invalid input case)", async () => {
     renderAtPath("/this-route-does-not-exist");
+    // CAR-67: Not Found is lazily loaded, so wait for its chunk.
     expect(
-      screen.getByRole("heading", { name: "Page Not Found" }),
+      await screen.findByRole("heading", { name: "Page Not Found" }),
     ).toBeInTheDocument();
+  });
+
+  it("wraps the route table in one Suspense whose fallback is the loading skeleton, never a blank screen (CAR-67)", () => {
+    // Checked on the source: React caches a lazy screen once loaded, so a
+    // render-based check would depend on test order. RouteLoading.test.jsx
+    // covers what the skeleton itself shows.
+    expect(appSource.match(/<Suspense/g)).toHaveLength(1);
+    expect(appSource).toMatch(/<Suspense fallback=\{<RouteLoading \/>\}>\s*<Routes>/);
+  });
+
+  it("keeps Landing and Log In / Sign Up in the entry bundle, and lazy-loads every other screen (CAR-67)", () => {
+    expect(appSource).toMatch(/^import LandingPage from "\.\/pages\/LandingPage\.jsx";$/m);
+    expect(appSource).toMatch(/^import AuthPage from "\.\/pages\/AuthPage\.jsx";$/m);
+    for (const page of [
+      "ResetPasswordPage", "DashboardPage", "CarOnboardingPage", "CarProfilePage", "TripPlannerPage",
+      "AIAdvisorPage", "FuelLogPage", "MaintenancePage", "ExpensesPage", "LegalPages", "NotFoundPage",
+    ]) {
+      expect(appSource).toContain(`import("./pages/${page}.jsx")`);
+      expect(appSource).not.toMatch(new RegExp(`^import .* from "\\./pages/${page}\\.jsx";$`, "m"));
+    }
   });
 
   it("logged out: the nav is only the brand, the two marketing anchors and Sign Up / Log In", async () => {
@@ -84,7 +108,7 @@ describe("App routing — public screens", () => {
     ]);
   });
 
-  it("logged in: the nav shows the full app menu (brand + 6 screens) and a Log Out button", async () => {
+  it("logged in: the nav shows the full app menu (brand, 3 top-level screens, the Manage car menu) and a Log Out button", async () => {
     supabase.auth.getSession.mockResolvedValue({
       data: { session: { user: { id: "user-123", email: "driver@example.com" } } },
     });
@@ -92,14 +116,20 @@ describe("App routing — public screens", () => {
     await screen.findByRole("button", { name: "Log Out" });
     const nav = screen.getByRole("navigation");
 
+    // CAR-62: Car Profile, Fuel Log, Maintenance and Add a car sit in the "Manage car" menu.
     expect([...nav.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
       "/",
       "/dashboard",
-      "/cars/new",
-      "/cars/mine",
       "/trip-planner",
       "/advisor",
+    ]);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Manage car" }));
+    expect([...nav.querySelectorAll(".site-nav__menu-list a")].map((a) => a.getAttribute("href"))).toEqual([
+      "/cars/mine",
       "/fuel-log",
+      "/maintenance",
+      "/expenses",
+      "/cars/new",
     ]);
   });
 });
@@ -151,9 +181,9 @@ describe("App routing — every route is either protected or deliberately public
 
   const protectedPaths = declaredRoutes.filter((route) => route.protectedRoute).map((route) => route.path);
 
-  it("protects the app screens (incl. the CAR-53 Fuel Log) and the car profile routes", () => {
+  it("protects the app screens (incl. the CAR-53 Fuel Log, CAR-62 Maintenance and CAR-64 Expenses) and the car profile routes", () => {
     expect([...protectedPaths].sort()).toEqual(
-      ["/advisor", "/cars/:carId", "/cars/mine", "/cars/new", "/dashboard", "/fuel-log", "/trip-planner"].sort(),
+      ["/advisor", "/cars/:carId", "/cars/mine", "/cars/new", "/dashboard", "/expenses", "/fuel-log", "/maintenance", "/trip-planner"].sort(),
     );
   });
 

@@ -12,6 +12,17 @@
 # figure is persisted to `trips.estimated_cost` (unchanged from before
 # CAR-42); the traffic-adjusted one is response-only since it changes
 # every time someone re-checks the same route.
+#
+# CAR-61: the estimate uses the car's REAL km/L (worked out from the caller's
+# own Fuel Log odometer readings for that car, see
+# app/services/real_efficiency.py) once it rests on at least
+# MIN_INTERVALS_FOR_ESTIMATE fill-ups after the first and MIN_DISTANCE_KM_FOR_ESTIMATE
+# km of measured driving; otherwise the rated
+# `cars.fuel_efficiency`, exactly as before. The response says which one was
+# used (`efficiency_source`) and the figure (`efficiency_km_per_l`).
+
+import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -24,8 +35,15 @@ from app.services.fuel_prices import (
     lbp_to_usd,
 )
 from app.services.google_maps import GoogleMapsError, get_route_summary
+from app.services.real_efficiency import (
+    MIN_DISTANCE_KM_FOR_ESTIMATE,
+    MIN_INTERVALS_FOR_ESTIMATE,
+    real_efficiency,
+)
 from app.supabase_client import supabase
 from app.validation import FuelPriceLbp, PlaceText, RecordId
+
+logger = logging.getLogger(__name__)
 
 # CAR-24: authentication is required for EVERY route on this router, declared
 # once at the router level (`dependencies=[...]`) so an endpoint added later is
@@ -179,9 +197,9 @@ class EstimateTripResponse(BaseModel):
     duration_min: int
     duration_in_traffic_min: int
     fuel_price_used_lbp: float
-    # Light-traffic estimate: distance / the car's rated fuel_efficiency,
-    # unchanged since before CAR-42 — this is what `trips.estimated_cost`
-    # persists, same as always.
+    # Light-traffic estimate: distance / the km/L used (the car's rated
+    # fuel_efficiency, or its real Fuel Log average since CAR-61; see
+    # efficiency_source) — this is what `trips.estimated_cost` persists.
     estimated_cost_lbp: float
     estimated_cost_usd: float
     # CAR-42: the same trip, but with fuel efficiency reduced for current
@@ -192,6 +210,41 @@ class EstimateTripResponse(BaseModel):
     # CAR-48: encoded overview polyline of the driving route (response-only,
     # not persisted) so the results map can draw the real route.
     route_polyline: str | None = None
+    # CAR-61 (response-only): which km/L the estimate used and its value, plus
+    # how many valid Fuel Log intervals the real average rests on (0 = none).
+    efficiency_source: Literal["real", "rated"]
+    efficiency_km_per_l: float
+    real_interval_count: int
+
+
+def _real_efficiency_for_car(user_id: str, car_id: str) -> dict | None:
+    """
+    The car's real-world km/L from the caller's own Fuel Log (CAR-61), or None.
+
+    The service role bypasses RLS, so the query is scoped explicitly to BOTH
+    the caller (user_id) and the car: one user's or one car's readings can
+    never feed another's estimate. Best-effort: if the read fails, the
+    estimate falls back to the rated figure rather than failing.
+
+    Args:
+        user_id: the authenticated caller.
+        car_id: a car already confirmed to belong to the caller.
+
+    Returns:
+        real_efficiency()'s dict, or None with no usable data or on error.
+    """
+    try:
+        result = (
+            supabase.table("fuel_logs")
+            .select("filled_at, created_at, liters, odometer_km")
+            .eq("user_id", user_id)
+            .eq("car_id", car_id)
+            .execute()
+        )
+    except Exception:  # noqa: BLE001 - never block an estimate on this lookup
+        logger.warning("Could not read fuel logs for the real km/L; using the rated figure.")
+        return None
+    return real_efficiency((result.data if result else None) or [])
 
 
 @router.post("/estimate", response_model=EstimateTripResponse)
@@ -202,8 +255,12 @@ def post_estimate(
     """
     The full Trip Planner flow: looks up the route via Google Maps,
     computes estimated fuel cost as
-    (distance_km / car's fuel_efficiency) * fuel_price_per_liter,
-    and saves the result as a new row in `trips`.
+    (distance_km / km_per_liter) * fuel_price_per_liter,
+    and saves the result as a new row in `trips`. km_per_liter is the car's
+    real average from its Fuel Log when that rests on at least
+    MIN_INTERVALS_FOR_ESTIMATE fill-ups after the first and
+    MIN_DISTANCE_KM_FOR_ESTIMATE km of measured driving (CAR-61), else its rated
+    fuel_efficiency.
 
     Requires a valid Supabase session (Authorization: Bearer <jwt>) so
     the trip can be attributed to the right user, and so `car_id` can be
@@ -230,15 +287,32 @@ def post_estimate(
     if not car_data:
         raise HTTPException(status_code=404, detail="Car not found.")
 
-    fuel_efficiency = car_data.get("fuel_efficiency")
-    if not fuel_efficiency or fuel_efficiency <= 0:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "This car doesn't have a fuel efficiency (km/L) set yet. "
-                "Add it on the Car Profile page first."
-            ),
-        )
+    # CAR-61: real average if there is enough Fuel Log data, else rated. "Enough"
+    # is at least MIN_INTERVALS_FOR_ESTIMATE fill-ups after the first AND at least
+    # MIN_DISTANCE_KM_FOR_ESTIMATE km measured, so a handful of short hops can't set
+    # the figure. The rated-only error below is unchanged and only reached when
+    # there isn't enough.
+    real = _real_efficiency_for_car(user_id, str(payload.car_id))
+    real_interval_count = real["interval_count"] if real else 0
+    if (
+        real
+        and real_interval_count >= MIN_INTERVALS_FOR_ESTIMATE
+        and real["distance_km"] >= MIN_DISTANCE_KM_FOR_ESTIMATE
+    ):
+        fuel_efficiency = real["km_per_liter"]
+        efficiency_source = "real"
+    else:
+        fuel_efficiency = car_data.get("fuel_efficiency")
+        if not fuel_efficiency or fuel_efficiency <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "This car doesn't have a fuel efficiency (km/L) set yet. "
+                    "Add it on the Car Profile page first."
+                ),
+            )
+        fuel_efficiency = float(fuel_efficiency)
+        efficiency_source = "rated"
 
     if payload.fuel_price_per_liter_lbp is not None:
         fuel_price = payload.fuel_price_per_liter_lbp
@@ -302,4 +376,7 @@ def post_estimate(
             estimated_cost_current_traffic_lbp
         ),
         "route_polyline": route.get("route_polyline"),
+        "efficiency_source": efficiency_source,
+        "efficiency_km_per_l": fuel_efficiency,
+        "real_interval_count": real_interval_count,
     }

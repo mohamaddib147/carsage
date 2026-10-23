@@ -1,30 +1,67 @@
 // Root component — defines client-side routing for all CarSage screens (the 7
-// original ones plus the Fuel Log, CAR-53) and the placeholder Terms / Privacy
-// pages linked from the footer.
+// original ones plus the Fuel Log, CAR-53, Maintenance, CAR-62, and Expenses, CAR-64) and the
+// placeholder Terms / Privacy pages linked from the footer.
+//
+// CAR-67: every screen except Landing and Log In / Sign Up is loaded on
+// demand (React.lazy), so a first visit downloads only the screen it opens.
+// Landing and Auth stay in the entry bundle because they are the two most
+// common first screens. Recharts, the largest dependency, is imported only
+// by Fuel Log and Expenses, so it now ships only with those two screens.
+//
+// Follow-up: lazyScreen() is React.lazy that also counts in-flight downloads,
+// so a thin bar (and aria-busy on <main>) appears when a screen takes longer
+// than ~300 ms; ScreenErrorBoundary shows a message and a Reload button if a
+// screen fails to download or render. See lib/screenLoading.js and
+// lib/chunkReload.js (the one-time reload after a new deploy).
 
-import { Route, Routes } from "react-router-dom";
+import { Suspense, useLayoutEffect, useRef } from "react";
+import { Route, Routes, useLocation } from "react-router-dom";
 import backgroundTexture from "./assets/background-texture-icon.svg";
 import ColdStartBanner from "./components/ColdStartBanner.jsx";
+import RouteLoading from "./components/RouteLoading.jsx";
+import ScreenErrorBoundary from "./components/ScreenErrorBoundary.jsx";
+import ScreenLoadingBar from "./components/ScreenLoadingBar.jsx";
 import SiteFooter from "./components/SiteFooter.jsx";
 import SiteNav from "./components/SiteNav.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import RedirectIfSignedIn from "./components/RedirectIfSignedIn.jsx";
+import { lazyScreen } from "./lib/screenLoading.js";
+import { useSlowScreenLoad } from "./lib/useSlowScreenLoad.js";
 import LandingPage from "./pages/LandingPage.jsx";
 import AuthPage from "./pages/AuthPage.jsx";
-import ResetPasswordPage from "./pages/ResetPasswordPage.jsx";
-import DashboardPage from "./pages/DashboardPage.jsx";
-import CarOnboardingPage from "./pages/CarOnboardingPage.jsx";
-import CarProfilePage from "./pages/CarProfilePage.jsx";
-import TripPlannerPage from "./pages/TripPlannerPage.jsx";
-import AIAdvisorPage from "./pages/AIAdvisorPage.jsx";
-import FuelLogPage from "./pages/FuelLogPage.jsx";
-import { PrivacyPage, TermsPage } from "./pages/LegalPages.jsx";
-import NotFoundPage from "./pages/NotFoundPage.jsx";
+
+const ResetPasswordPage = lazyScreen(() => import("./pages/ResetPasswordPage.jsx"));
+const DashboardPage = lazyScreen(() => import("./pages/DashboardPage.jsx"));
+const CarOnboardingPage = lazyScreen(() => import("./pages/CarOnboardingPage.jsx"));
+const CarProfilePage = lazyScreen(() => import("./pages/CarProfilePage.jsx"));
+const TripPlannerPage = lazyScreen(() => import("./pages/TripPlannerPage.jsx"));
+const AIAdvisorPage = lazyScreen(() => import("./pages/AIAdvisorPage.jsx"));
+const FuelLogPage = lazyScreen(() => import("./pages/FuelLogPage.jsx"));
+const MaintenancePage = lazyScreen(() => import("./pages/MaintenancePage.jsx"));
+const ExpensesPage = lazyScreen(() => import("./pages/ExpensesPage.jsx"));
+// LegalPages.jsx has two named exports; both share one chunk. The `m &&` keeps
+// an empty module (a swallowed failed download, see lazyScreen) empty.
+const PrivacyPage = lazyScreen(() => import("./pages/LegalPages.jsx").then((m) => m && { default: m.PrivacyPage }));
+const TermsPage = lazyScreen(() => import("./pages/LegalPages.jsx").then((m) => m && { default: m.TermsPage }));
+const NotFoundPage = lazyScreen(() => import("./pages/NotFoundPage.jsx"));
 
 /**
  * Application root: renders the nav and the route table.
  * @returns {JSX.Element}
  */
 function App() {
+  const { pathname } = useLocation();
+  const slowScreenLoad = useSlowScreenLoad();
+
+  // CAR-75: the page fade and the Dashboard card entrance (index.css) play only after an in-app navigation, never
+  // on a fresh page load, where they would delay the largest contentful paint by their own duration (measured:
+  // Landing 80 ms -> 360 ms). This marks <html> on the first navigation away from the page the visit started on. It
+  // is a layout effect so the mark is there before the new screen paints, and the fade starts at its first frame.
+  const firstPathname = useRef(pathname);
+  useLayoutEffect(() => {
+    if (pathname !== firstPathname.current) document.documentElement.dataset.routed = "true";
+  }, [pathname]);
+
   return (
     <>
       {/* Decorative only, never a second brand mark (CAR-51 follow-up):
@@ -40,74 +77,101 @@ function App() {
         aria-hidden="true"
         className="app-background-texture"
       />
+      <ScreenLoadingBar active={slowScreenLoad} />
       <SiteNav />
       <ColdStartBanner />
-      <main className="app-main">
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<AuthPage />} />
-          <Route path="/signup" element={<AuthPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/terms" element={<TermsPage />} />
-          <Route path="/privacy" element={<PrivacyPage />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <DashboardPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/cars/new"
-            element={
-              <ProtectedRoute>
-                <CarOnboardingPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/cars/mine"
-            element={
-              <ProtectedRoute>
-                <CarProfilePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/cars/:carId"
-            element={
-              <ProtectedRoute>
-                <CarProfilePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/trip-planner"
-            element={
-              <ProtectedRoute>
-                <TripPlannerPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/advisor"
-            element={
-              <ProtectedRoute>
-                <AIAdvisorPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/fuel-log"
-            element={
-              <ProtectedRoute>
-                <FuelLogPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+      <main className="app-main" aria-busy={slowScreenLoad}>
+        {/* One boundary for all lazy screens: the skeleton stands in for
+            the page while its chunk downloads; nav and footer stay put.
+            The error boundary around it shows a Reload button if a screen
+            can't download or render, and resets when the path changes. */}
+        <ScreenErrorBoundary resetKey={pathname}>
+          <Suspense fallback={<RouteLoading />}>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              {/* CAR-71: signed-in users skip Log In / Sign Up. Never the
+                  reset page: a recovery link signs the user in first. */}
+              <Route path="/login" element={<RedirectIfSignedIn><AuthPage /></RedirectIfSignedIn>} />
+              <Route path="/signup" element={<RedirectIfSignedIn><AuthPage /></RedirectIfSignedIn>} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <DashboardPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/cars/new"
+                element={
+                  <ProtectedRoute>
+                    <CarOnboardingPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/cars/mine"
+                element={
+                  <ProtectedRoute>
+                    <CarProfilePage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/cars/:carId"
+                element={
+                  <ProtectedRoute>
+                    <CarProfilePage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/trip-planner"
+                element={
+                  <ProtectedRoute>
+                    <TripPlannerPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/advisor"
+                element={
+                  <ProtectedRoute>
+                    <AIAdvisorPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/fuel-log"
+                element={
+                  <ProtectedRoute>
+                    <FuelLogPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/maintenance"
+                element={
+                  <ProtectedRoute>
+                    <MaintenancePage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/expenses"
+                element={
+                  <ProtectedRoute>
+                    <ExpensesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </Suspense>
+        </ScreenErrorBoundary>
         {/* CAR-52: rendered once here (not per page) so Terms of Service /
             Privacy Policy are linked from every screen's footer. */}
         <SiteFooter />

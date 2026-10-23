@@ -4,7 +4,7 @@
 // exist) renders the same safe "not found" state rather than leaking
 // anything about it or crashing.
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -158,6 +158,31 @@ describe("CarProfilePage — viewing", () => {
     expect(screen.getByText("55")).toBeInTheDocument();
     expect(screen.getByText("ABC-123")).toBeInTheDocument();
     expect(screen.getByText("1HGCM82633A004352")).toBeInTheDocument();
+  });
+
+  it("builds the spec list as a valid description list: each row is one div holding only its term and value (CAR-72)", async () => {
+    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+
+    renderAt("/cars/mine");
+    await screen.findByText("Toyota");
+
+    const list = document.querySelector("dl.car-profile__fields");
+    expect(list.children).toHaveLength(12);
+    for (const row of list.children) {
+      expect(row.tagName).toBe("DIV");
+      expect([...row.children].map((child) => child.tagName)).toEqual(["DT", "DD"]);
+      // CAR-76: the icon is an aria-hidden SVG inside the term, so the row stays a valid description list item.
+      const icon = row.querySelector("dt > .car-profile__field-icon");
+      expect(icon).toHaveAttribute("aria-hidden", "true");
+      expect(icon.querySelector("svg.icon")).toBeInTheDocument();
+    }
+    // Every term and value sits directly in a row, and every row directly in the list (what axe checks).
+    expect(list.querySelectorAll("dt, dd")).toHaveLength(24);
+    for (const item of list.querySelectorAll("dt, dd")) {
+      expect(item.parentElement.parentElement).toBe(list);
+    }
+    expect(within(list.children[0]).getByText("Make").tagName).toBe("DT");
+    expect(within(list.children[0]).getByText("Toyota").tagName).toBe("DD");
   });
 
   it("shows a placeholder dash for spec-autofill fields that were never set (edge case)", async () => {
@@ -337,7 +362,7 @@ describe("CarProfilePage — car switcher and default car (mentor feedback, no J
     expect(await screen.findByText("Corolla")).toBeInTheDocument();
   });
 
-  it("shows a 'Set as Default' button for a non-default car, and it saves and flips to the '✓ Default car' badge", async () => {
+  it("shows a 'Set as Default' button for a non-default car, and it saves and flips to the 'Default car' badge", async () => {
     const user = userEvent.setup();
     const { profilesUpdate, eqForProfileUpdate } = mockCarsTable({
       carsById: {
@@ -351,16 +376,16 @@ describe("CarProfilePage — car switcher and default car (mentor feedback, no J
     renderAt("/cars/car-456");
     await screen.findByText("Toyota");
 
-    expect(screen.queryByText("✓ Default car")).not.toBeInTheDocument();
+    expect(screen.queryByText("Default car")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Set as Default" }));
 
-    expect(await screen.findByText("✓ Default car")).toBeInTheDocument();
+    expect(await screen.findByText("Default car")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Set as Default" })).not.toBeInTheDocument();
     expect(profilesUpdate).toHaveBeenCalledWith({ default_car_id: "car-456" });
     expect(eqForProfileUpdate).toHaveBeenCalledWith("id", "user-123");
   });
 
-  it("shows the '✓ Default car' badge (no button) for the car that's already the default", async () => {
+  it("shows the 'Default car' badge (no button) for the car that's already the default", async () => {
     mockCarsTable({
       carsById: {
         "car-456": { data: SAMPLE_CAR, error: null },
@@ -372,7 +397,7 @@ describe("CarProfilePage — car switcher and default car (mentor feedback, no J
 
     renderAt("/cars/car-456");
 
-    expect(await screen.findByText("✓ Default car")).toBeInTheDocument();
+    expect(await screen.findByText("Default car")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Set as Default" })).not.toBeInTheDocument();
   });
 
@@ -576,6 +601,62 @@ describe("CarProfilePage — deleting (CAR-38)", () => {
     expect(eqForDelete).toHaveBeenCalledWith("id", "car-456");
     await waitFor(() =>
       expect(screen.getByText("Dashboard placeholder")).toBeInTheDocument(),
+    );
+  });
+
+  it("also deletes the car's photo file, only after the row is deleted", async () => {
+    const user = userEvent.setup();
+    const { eqForDelete } = mockCarsTable({
+      selectResult: { data: { ...SAMPLE_CAR, photo_path: "user-123/car-456/photo.jpg" }, error: null },
+    });
+    const { remove } = mockStorage();
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Delete Car" }));
+    await user.click(screen.getByRole("button", { name: "Yes, Delete" }));
+
+    await waitFor(() => expect(remove).toHaveBeenCalledWith(["user-123/car-456/photo.jpg"]));
+    expect(eqForDelete.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
+    await waitFor(() => expect(screen.getByText("Dashboard placeholder")).toBeInTheDocument());
+  });
+
+  it("makes no Storage call when the car has no photo", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+    const { remove } = mockStorage();
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Delete Car" }));
+    await user.click(screen.getByRole("button", { name: "Yes, Delete" }));
+    await waitFor(() => expect(screen.getByText("Dashboard placeholder")).toBeInTheDocument());
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("keeps the photo file when the car delete fails", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({
+      selectResult: { data: { ...SAMPLE_CAR, photo_path: "user-123/car-456/photo.jpg" }, error: null },
+      deleteResult: { error: { code: "42501", message: "rls" } },
+    });
+    const { remove } = mockStorage();
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Delete Car" }));
+    await user.click(screen.getByRole("button", { name: "Yes, Delete" }));
+
+    expect(await screen.findByText("You don't have permission to do that.")).toBeInTheDocument();
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("the confirmation lists everything the delete takes with it", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+
+    renderAt("/cars/mine");
+    await user.click(await screen.findByRole("button", { name: "Delete Car" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Delete this car? This also permanently deletes its trips, fuel log entries, maintenance items and their history, expenses, and photos. Your AI Advisor conversations are kept. This can't be undone.",
     );
   });
 

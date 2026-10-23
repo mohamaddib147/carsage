@@ -38,5 +38,8 @@ npm-debug.log*
 # Claude Code local config/artifacts — never share these
 .claude/
 .claude.json
+CLAUDE.md
 CLAUDE.local.md
 .mcp.json
+# Graphify output (generated)
+graphify-out/

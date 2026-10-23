@@ -1,0 +1,13 @@
+/* Tailwind for the shadcn/Aceternity components only: theme + utilities, NO preflight,
+   so it never resets the existing hand-written styles in index.css. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* CAR-68: Tailwind's font utilities (font-sans, font-display) follow the same
+   brand tokens as index.css, so a component can't drift from the page fonts.
+   `inline` makes the utility use var(--font-body) directly, unresolved. */
+@theme inline {
+  --font-sans: var(--font-body);
+  --font-display: var(--font-heading);
+}

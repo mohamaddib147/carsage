@@ -57,6 +57,14 @@
 // — adjusted down for congestion server-side), with a caption explaining
 // why they differ. Both new fields are optional on the result object so
 // this degrades gracefully against an older cached response shape.
+//
+// CAR-61: the backend now uses the car's real km/L from its Fuel Log once it
+// rests on enough measured fill-ups, else the rated figure, and says which
+// (`efficiency_source`, `efficiency_km_per_l`, `real_interval_count`). The
+// results show that basis in one line, and the fuel-cost info tip and the
+// traffic explainer only talk about "rated" efficiency when rated was used.
+// A response without `efficiency_source` (older shape) shows no basis line
+// and the original rated wording.
 
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -72,7 +80,53 @@ import { apiFetch } from "../lib/apiClient.js";
 import { LIMITS, getFuelPriceError } from "../lib/limits.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { getTrafficLevel } from "../lib/trafficLevel.js";
+import {
+  formatKmPerLiter,
+  MIN_DISTANCE_FOR_TRIP_PLANNER,
+  MIN_INTERVALS_FOR_TRIP_PLANNER,
+} from "../lib/odometer.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
+import { ArrowRight } from "../components/icons.jsx";
+import { Droplets, Fuel, MapPin, Timer, TrafficCone } from "../components/iconsMore.jsx";
+
+/**
+ * CAR-61: one line saying which km/L the estimate used. The figure and the
+ * source both come from the backend's response, never worked out here, so
+ * the line can't disagree with the cost it explains.
+ * @param {{ result: { efficiency_source?: "real" | "rated", efficiency_km_per_l?: number, real_interval_count?: number } }} props
+ * @returns {JSX.Element | null} nothing for an older response without a source.
+ */
+function EfficiencyBasis({ result }) {
+  const kmPerLiter = Number(result.efficiency_km_per_l);
+  if (!result.efficiency_source || !Number.isFinite(kmPerLiter) || kmPerLiter <= 0) return null;
+  const intervals = Number(result.real_interval_count) || 0;
+
+  if (result.efficiency_source === "real") {
+    return (
+      <p className="trip-result__basis">
+        Based on your real average of <strong>{formatKmPerLiter(kmPerLiter)} km/L</strong>,
+        from {intervals} measured fill-ups in your <Link to="/fuel-log">Fuel Log</Link>.
+      </p>
+    );
+  }
+  return (
+    <p className="trip-result__basis">
+      Based on the car&apos;s rated <strong>{formatKmPerLiter(kmPerLiter)} km/L</strong>.{" "}
+      {intervals > 0 ? (
+        <>
+          Your <Link to="/fuel-log">Fuel Log</Link> has {intervals} measured{" "}
+          {intervals === 1 ? "fill-up" : "fill-ups"}; estimates switch to your real average once
+          there are {MIN_INTERVALS_FOR_TRIP_PLANNER} over {MIN_DISTANCE_FOR_TRIP_PLANNER} km.
+        </>
+      ) : (
+        <>
+          Add odometer readings to your fill-ups in the <Link to="/fuel-log">Fuel Log</Link> to
+          use your real-world figure instead.
+        </>
+      )}
+    </p>
+  );
+}
 
 /** Maps a car's general fuel_type onto the price bucket fuel-prices
  * tracks — mirrors app/routers/trip_planner.py's
@@ -110,7 +164,7 @@ function tankInputFor(car) {
  */
 function TripPlannerPage() {
   const { user, session } = useAuth();
-  const { setActiveCarId } = useActiveCar();
+  const { setActiveCarId, selectInitialCar } = useActiveCar();
 
   const [cars, setCars] = useState([]);
   const [loadingCar, setLoadingCar] = useState(true);
@@ -152,8 +206,10 @@ function TripPlannerPage() {
       if (cancelled) return;
       const loadedCars = data ?? [];
       setCars(loadedCars);
-      setSelectedCarId(loadedCars[0]?.id ?? "");
-      setTankSizeInput(tankInputFor(loadedCars[0]));
+      // CAR-70: start on the active car (else the first) and report it, so the theme matches.
+      const startId = selectInitialCar(loadedCars);
+      setSelectedCarId(startId);
+      setTankSizeInput(tankInputFor(loadedCars.find((car) => car.id === startId)));
       setLoadingCar(false);
     }
 
@@ -161,7 +217,7 @@ function TripPlannerPage() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, selectInitialCar]);
 
   // CAR-41: fetch the current default fuel prices once, to prefill the
   // editable fuel price field — non-critical, so a failure here just
@@ -203,7 +259,7 @@ function TripPlannerPage() {
   function handleCarChange(carId) {
     setSelectedCarId(carId);
     setTankSizeInput(tankInputFor(cars.find((car) => car.id === carId)));
-    setActiveCarId(carId);
+    setActiveCarId(carId, cars.find((car) => car.id === carId)?.make);
   }
 
   // Prefills the fuel price for the selected car's fuel grade, but never
@@ -275,7 +331,15 @@ function TripPlannerPage() {
   }
 
   if (loadingCar) {
-    return <PageShell title="Trip Planner" description="Loading your car..." />;
+    return (
+      <PageShell title="Trip Planner" description="">
+        <p role="status" className="sr-only">Loading your car...</p>
+        <div className="skeleton-stack" aria-hidden="true">
+          <div className="skeleton-bar skeleton-bar--w-40 skeleton-bar--h-md" />
+          <div className="skeleton-bar skeleton-bar--card" />
+        </div>
+      </PageShell>
+    );
   }
 
   if (cars.length === 0) {
@@ -456,7 +520,7 @@ function TripPlannerPage() {
             disabled={submitting}
           >
             {submitting ? "Planning..." : "Plan Trip"}
-            {!submitting && <span aria-hidden="true">→</span>}
+            {!submitting && <ArrowRight size={18} />}
           </button>
         </form>
       </div>
@@ -471,103 +535,114 @@ function TripPlannerPage() {
             />
           )}
           <p className="trip-result-card__route">
-            {origin ? `${origin} → ${destination}` : destination}
+            {origin ? (
+              <>
+                {origin}
+                <span className="sr-only"> to </span>
+                <ArrowRight size={16} className="icon--route" />
+                {destination}
+              </>
+            ) : (
+              destination
+            )}
           </p>
+          <EfficiencyBasis result={result} />
+
           <dl className="trip-result">
             <div className="trip-result__field">
-              <span className="trip-result__icon" aria-hidden="true">
-                ⛽
-              </span>
               <dt>
+                <span className="trip-result__icon" aria-hidden="true"><Fuel size={20} /></span>
                 Fuel Cost{hasTrafficComparison ? " (Light Traffic)" : ""}
                 <InfoTip label="About this fuel cost estimate">
-                  This estimate uses your car&apos;s rated fuel efficiency under
-                  ideal conditions. Actual consumption may be higher in heavy
-                  traffic.
+                  {result.efficiency_source === "real" ? (
+                    <>
+                      This estimate uses your real average from your Fuel Log,
+                      which already reflects how you usually drive. It can still
+                      be higher in heavy traffic.
+                    </>
+                  ) : (
+                    <>
+                      This estimate uses your car&apos;s rated fuel efficiency under
+                      ideal conditions. Actual consumption may be higher in heavy
+                      traffic.
+                    </>
+                  )}
                 </InfoTip>
               </dt>
               <dd>
                 <Price amount={result.estimated_cost_lbp} currency="LBP" />
               </dd>
-              <p className="trip-result__caption">
+              <dd className="trip-result__caption">
                 Based on{" "}
                 <Price amount={result.fuel_price_used_lbp} currency="LBP" suffix="/L" />
-              </p>
+              </dd>
             </div>
             {hasTrafficComparison && (
               <div className="trip-result__field">
-                <span className="trip-result__icon" aria-hidden="true">
-                  🚦
-                </span>
-                <dt>Fuel Cost (Current Traffic)</dt>
+                <dt><span className="trip-result__icon" aria-hidden="true"><TrafficCone size={20} /></span>Fuel Cost (Current Traffic)</dt>
                 <dd>
                   <Price amount={result.estimated_cost_current_traffic_lbp} currency="LBP" />
                 </dd>
-                <p className="trip-result__caption">
+                <dd className="trip-result__caption">
                   Adjusted for current congestion
-                </p>
+                </dd>
               </div>
             )}
             <div className="trip-result__field">
-              <span className="trip-result__icon" aria-hidden="true">
-                ⏱️
-              </span>
-              <dt>Duration</dt>
+              <dt><span className="trip-result__icon" aria-hidden="true"><Timer size={20} /></span>Duration</dt>
               <dd>{result.duration_in_traffic_min} min</dd>
               {trafficLevel && (
-                <span
+                <dd className="trip-result__badge">
+                  <span
                   className={`traffic-badge traffic-badge--${trafficLevel.level}`}
                 >
                   <span className="traffic-badge__dot" aria-hidden="true" />
                   {trafficLevel.label}
                 </span>
+                </dd>
               )}
-              <p className="trip-result__caption">Traffic-adjusted estimate</p>
+              <dd className="trip-result__caption">Traffic-adjusted estimate</dd>
             </div>
             <div className="trip-result__field">
-              <span className="trip-result__icon" aria-hidden="true">
-                📍
-              </span>
-              <dt>Distance</dt>
+              <dt><span className="trip-result__icon" aria-hidden="true"><MapPin size={20} /></span>Distance</dt>
               <dd>{result.distance_km} km</dd>
             </div>
             <div className="trip-result__field">
-              <span className="trip-result__icon" aria-hidden="true">
-                🛢️
-              </span>
-              <dt>Full Tank Cost</dt>
+              <dt><span className="trip-result__icon" aria-hidden="true"><Droplets size={20} /></span>Full Tank Cost</dt>
               {tankCostLbp != null ? (
                 <>
                   <dd>
                     <Price amount={tankCostLbp} currency="LBP" />
                   </dd>
-                  <p className="trip-result__caption">
+                  <dd className="trip-result__caption">
                     {tankSizeLiters}L at{" "}
                     <Price amount={result.fuel_price_used_lbp} currency="LBP" suffix="/L" />
-                  </p>
+                  </dd>
                 </>
               ) : tankSizeError ? (
                 <>
                   <dd>Tank size out of range</dd>
-                  <p className="trip-result__caption">
+                  <dd className="trip-result__caption">
                     Enter a tank size between 5 and 200 L to see this figure.
-                  </p>
+                  </dd>
                 </>
               ) : (
                 <>
                   <dd>Tank size not set</dd>
-                  <p className="trip-result__caption">
+                  <dd className="trip-result__caption">
                     Enter a tank size under Advanced options, or add it on{" "}
                     <Link to={`/cars/${selectedCarId}`}>this car&apos;s profile</Link>.
-                  </p>
+                  </dd>
                 </>
               )}
             </div>
           </dl>
           {hasTrafficComparison && (
             <p className="trip-result__explainer">
-              Light traffic assumes free-flowing driving close to your
-              car&apos;s rated fuel efficiency. Heavy traffic means more
+              Light traffic assumes free-flowing driving close to{" "}
+              {result.efficiency_source === "real"
+                ? "your real average"
+                : <>your car&apos;s rated fuel efficiency</>}. Heavy traffic means more
               stop-and-go driving, idling, and lower average speeds, all of
               which burn noticeably more fuel per km, so the current-traffic
               estimate is usually higher.

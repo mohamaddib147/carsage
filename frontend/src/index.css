@@ -19,6 +19,11 @@ iframe#nl-badge-frame {
   --color-background: #f5f1e8;
   --color-text: #2b2b2b;
   --color-accent: #c9a24b;
+  /* CAR-69: --color-accent is for FILLS and icons only (buttons, badges, chart bars). Text
+     uses --color-accent-text, and text on an accent fill uses --color-on-accent. Each car
+     theme sets both (theme/carBrandThemes.js); theme/themeContrast.test.js checks them. */
+  --color-accent-text: #826627;
+  --color-on-accent: #2b2b2b;
 
   --color-primary-hover: #00473d;
   --color-surface: #ffffff;
@@ -27,7 +32,38 @@ iframe#nl-badge-frame {
   --color-text-muted: #6b6a63;
   --color-danger: #b3261e;
 
-  --font-family-base: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* CAR-76: icons (components/icons.jsx). One stroke weight for every icon, and the tint behind
+     an icon tile: the car's accent at 16% over white. The icon on a tile uses --color-accent-text;
+     theme/iconTileContrast.test.js checks that pair is at least 3:1 on every theme. */
+  --icon-stroke: 1.75;
+  --color-icon-tile: color-mix(in srgb, var(--color-accent) 16%, #ffffff);
+
+  /* CAR-81: status colours. Fixed red, amber and green for Overdue, Due soon and OK and for the Advisor's
+     mechanic and DIY chips. No car theme sets them (themes only set the six tokens in theme/carBrandThemes.js), so
+     "Due soon" can never turn into the brand's red or blue. Text on each is at least 4.5:1;
+     theme/statusColours.test.js checks that, on every theme. */
+  --status-overdue-bg: var(--color-danger);
+  --status-overdue-text: #ffffff;
+  --status-soon-bg: #f5b400;
+  --status-soon-text: #2b2b2b;
+  --status-ok-bg: #1b7a3d;
+  --status-ok-text: #ffffff;
+
+  /* CAR-75: the motion system (docs/DESIGN_PASS_2.md 3.2). Three durations and two easings are all that
+     moves anything, apart from the looping loading indicators. Everything respects prefers-reduced-motion
+     (see the blocks at the end of this file); theme and motion tests are in motionCss.test.js. */
+  --motion-fast: 120ms;   /* hover and focus colour, small state changes */
+  --motion-base: 180ms;   /* menus, dropdowns, the mobile panel */
+  --motion-slow: 280ms;   /* page fade, card entrance */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);      /* things appearing */
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);     /* state changes and closing */
+
+  /* CAR-68: the brand fonts are declared in fonts.css. Each stack lists the web
+     font, then its metric-matched Arial fallback (limits layout shift while the
+     font loads), then the system fonts this app used before. */
+  --font-body: "Manrope", "Manrope Fallback", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-heading: "Space Grotesk", "Space Grotesk Fallback", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-family-base: var(--font-body);
 
   --radius-base: 8px;
   --radius-lg: 12px;
@@ -42,6 +78,12 @@ html,
 body,
 #root {
   height: 100%;
+}
+
+/* CAR-77: the header is sticky, so anything scrolled to (a Landing anchor, a maintenance card, or an element the
+   browser scrolls into view when it takes focus) must stop below it, never under it. 72 px bar + 16 px of air. */
+html {
+  scroll-padding-top: 88px;
 }
 
 body {
@@ -59,6 +101,19 @@ h2,
 h3 {
   color: var(--color-primary);
   line-height: 1.2;
+}
+
+/* CAR-68: Space Grotesk for every heading, plus the Landing hero's wordmark,
+   which is styled text rather than a heading element. (The hero headline was
+   listed here until CAR-80 made it the page's h1.) */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.landing-hero__brand {
+  font-family: var(--font-heading);
 }
 
 a {
@@ -97,7 +152,7 @@ button {
 
 .btn-accent {
   background-color: var(--color-accent);
-  color: var(--color-text);
+  color: var(--color-on-accent);
   border: none;
   border-radius: var(--radius-base);
   padding: calc(var(--spacing-unit) * 1.5) calc(var(--spacing-unit) * 3);
@@ -108,14 +163,26 @@ button {
   gap: calc(var(--spacing-unit) * 1);
 }
 
+/* CAR-77: sticky at every width (the narrow block keeps its own 64 px row), above the page but below the route
+   loading bar. The shadow only appears once the page has scrolled past 8 px (SiteNav adds .is-scrolled), and it is a
+   box-shadow, so it never moves the layout. */
 .site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: 72px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: calc(var(--spacing-unit) * 2);
-  padding: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 3);
+  padding: 0 calc(var(--spacing-unit) * 3);
   background-color: var(--color-primary);
   color: #ffffff;
+  transition: box-shadow var(--motion-fast) var(--ease-out);
+}
+
+.site-nav.is-scrolled {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
 }
 
 .site-nav__brand {
@@ -139,16 +206,105 @@ button {
 .site-nav__links a {
   color: #ffffff;
   text-decoration: none;
-  opacity: 0.85;
+  opacity: 0.92;
   font-size: 0.9375rem;
 }
 
 .site-nav__links a:hover,
 .site-nav__links a.active {
   opacity: 1;
-  text-decoration: underline;
-  text-decoration-color: var(--color-accent);
-  text-underline-offset: 6px;
+}
+
+/* CAR-77: the screen you are on carries a 2 px bar. It is WHITE, not the accent: the accent reaches only 1.35:1 on
+   the Audi header (and under 3:1 on Toyota, Honda and BMW), while white is at least 5.5:1 on all nine brand headers
+   (theme/headerActiveBar.test.js checks every theme). Only the top-level rows get it — the My Car dropdown sits on a
+   light panel and keeps its own active style. */
+.site-nav__links > li > a,
+.site-nav__menu-btn {
+  position: relative;
+}
+
+.site-nav__links > li > a.active::after,
+.site-nav__menu-btn.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  height: 2px;
+  background-color: #ffffff;
+}
+
+/* CAR-62: the "My Car" disclosure menu in the header (Car Profile, Fuel Log,
+   Maintenance, Add a car). The button looks like the other header links; the
+   list drops down on a light panel, so its links use the normal dark text. */
+.site-nav__menu {
+  position: relative;
+}
+
+.site-nav__menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #ffffff;
+  opacity: 0.92;
+  font: inherit;
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.site-nav__menu-btn:hover,
+.site-nav__menu-btn.active,
+.site-nav__menu-btn[aria-expanded="true"] {
+  opacity: 1;
+}
+
+
+.site-nav__menu-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 4px;
+}
+
+.site-nav__menu-list {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  min-width: 190px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  text-align: left;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(43, 43, 43, 0.18);
+}
+
+.site-nav__links .site-nav__menu-list a {
+  display: block;
+  padding: 8px 12px;
+  border-radius: var(--radius-base);
+  color: var(--color-text);
+  opacity: 1;
+  text-decoration: none;
+}
+
+.site-nav__links .site-nav__menu-list a:hover,
+.site-nav__links .site-nav__menu-list a:focus-visible {
+  background-color: var(--color-input-bg);
+  outline: none;
+  text-decoration: none;
+}
+
+.site-nav__links .site-nav__menu-list a.active {
+  font-weight: 700;
+  color: var(--color-primary);
+  text-decoration: none;
 }
 
 .site-nav__actions {
@@ -161,7 +317,7 @@ button {
 }
 
 .site-nav__auth-link {
-  color: var(--color-text);
+  color: var(--color-on-accent);
   background-color: var(--color-accent);
   padding: calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 2);
   border-radius: var(--radius-lg);
@@ -175,18 +331,217 @@ button {
   opacity: 0.9;
 }
 
+/* CAR-74: the Menu button and the panel only exist as boxes on narrow screens.
+   Wide screens never show the button, and the panel is `display: contents`, so
+   the links and actions stay grid items of .site-nav exactly as before. */
+.site-nav__toggle {
+  display: none;
+}
+
+.site-nav__panel {
+  display: contents;
+}
+
 @media (max-width: 860px) {
+  /* One fixed 64 px row from the first paint, whatever the session state. Sticky here too (CAR-77); the panel below
+     is absolute and still anchors to this bar, because a sticky box is a positioned box. */
   .site-nav {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    text-align: center;
+    position: sticky;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(var(--spacing-unit) * 2);
+    box-sizing: border-box;
+    height: 64px;
+    padding: 0 calc(var(--spacing-unit) * 2);
   }
 
-  .site-nav__brand,
+  /* The bar is 64 px here, so anything scrolled to needs less clearance than on the desktop header. */
+  html {
+    scroll-padding-top: 80px;
+  }
+
+  .site-nav__brand {
+    flex-shrink: 0;
+  }
+
+  .site-nav__toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-sizing: border-box;
+    width: 96px;
+    height: 44px;
+    flex-shrink: 0;
+    padding: 0 calc(var(--spacing-unit) * 1.5);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: var(--radius-base);
+    background: transparent;
+    color: #ffffff;
+    font: inherit;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .site-nav__toggle:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .site-nav__toggle[aria-expanded="true"] {
+    background-color: rgba(255, 255, 255, 0.12);
+  }
+
+  /* Neutral stand-in while the session is restored: same box, no words. */
+  .site-nav__toggle--pending {
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  /* Three bars drawn with box-shadows. */
+  .site-nav__toggle-icon {
+    width: 16px;
+    height: 2px;
+    border-radius: 1px;
+    background-color: currentColor;
+    box-shadow: 0 -5px 0 currentColor, 0 5px 0 currentColor;
+  }
+
+  .site-nav__panel {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    box-sizing: border-box;
+    max-height: calc(100vh - 64px);
+    overflow-y: auto;
+    padding: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 2);
+    background-color: var(--color-primary);
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+    transform: translateY(-8px);
+    transition: transform var(--motion-base) var(--ease-out), display var(--motion-base) allow-discrete;
+  }
+
+  .site-nav__panel.is-open {
+    display: block;
+    transform: translateY(0);
+  }
+
+  @starting-style {
+    .site-nav__panel.is-open {
+      transform: translateY(-8px);
+    }
+  }
+
+  /* Full panel width: the desktop justify-self (center / end) also applies to
+     block boxes in current browsers, so it is reset here. */
   .site-nav__links,
   .site-nav__actions {
-    grid-column: 1;
-    justify-self: center;
+    justify-self: stretch;
+    text-align: left;
+  }
+
+  .site-nav__links {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  /* Every row in the panel is at least 44 px tall. */
+  .site-nav__links > li > a,
+  .site-nav__menu-btn {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 44px;
+    text-underline-offset: 4px;
+  }
+
+  .site-nav__menu-btn {
+    justify-content: space-between;
+  }
+
+  /* In the panel the rows are full width, so the desktop bar under a row would read as a divider: the active row
+     gets a 3 px bar down its left edge instead, in the same white (CAR-77). The rows themselves are unchanged. */
+  .site-nav__links > li > a.active::after,
+  .site-nav__menu-btn.active::after {
+    top: 6px;
+    right: auto;
+    bottom: 6px;
+    left: calc(var(--spacing-unit) * -1);
+    width: 3px;
+    height: auto;
+  }
+
+  /* My Car opens in place inside the panel instead of as a floating card. */
+  .site-nav__menu-list {
+    position: static;
+    transform: none;
+    min-width: 0;
+    padding: 0 0 calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 2);
+    background: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .site-nav__links .site-nav__menu-list a {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 12px;
+    color: #ffffff;
+  }
+
+  .site-nav__links .site-nav__menu-list a:hover,
+  .site-nav__links .site-nav__menu-list a:focus-visible {
+    background-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .site-nav__links .site-nav__menu-list a:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
+  }
+
+  .site-nav__links .site-nav__menu-list a.active {
+    color: #ffffff;
+    text-decoration: underline;
+    text-decoration-color: var(--color-accent);
+  }
+
+  .site-nav__actions {
+    justify-content: space-between;
+    margin-top: calc(var(--spacing-unit) * 1);
+    padding-top: calc(var(--spacing-unit) * 1.5);
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+  }
+
+  .site-nav__actions:empty {
+    display: none;
+  }
+
+  .site-nav__auth-link,
+  .site-nav__logout {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .currency-toggle__option {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 860px) and (prefers-reduced-motion: reduce) {
+  .site-nav__panel {
+    transition: none;
   }
 }
 
@@ -195,15 +550,18 @@ button {
    crop of the source file down to just the gear/tire/wrench circle, no
    baked-in text. Fixed to fill the viewport (inset: 0 + 100vw/100vh) so it
    covers the whole screen on every route; object-fit: cover fills without
-   stretching. Kept at a low opacity since it's now behind every screen's
-   content, not just a slice of empty background. */
+   stretching. Kept at a very low opacity since it's behind every screen's
+   content: 0.035 until the Dashboard fix, when it was still busy behind the
+   heading and body copy there. At 0.02 the Dashboard heading's contrast against
+   the darkest texture pixel behind it went from 8.02:1 to 8.26:1 (7.98 to 8.20
+   at the busiest point of the viewport). */
 .app-background-texture {
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100vh;
   object-fit: cover;
-  opacity: 0.035;
+  opacity: 0.02;
   pointer-events: none;
   z-index: -1;
 }
@@ -220,7 +578,7 @@ button {
   gap: calc(var(--spacing-unit) * 1.25);
   padding: calc(var(--spacing-unit) * 1.25) calc(var(--spacing-unit) * 2);
   background-color: var(--color-accent);
-  color: var(--color-text);
+  color: var(--color-on-accent);
   font-size: 0.875rem;
   text-align: center;
 }
@@ -229,8 +587,8 @@ button {
   flex-shrink: 0;
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(43, 43, 43, 0.3);
-  border-top-color: var(--color-text);
+  border: 2px solid color-mix(in srgb, var(--color-on-accent) 30%, transparent);
+  border-top-color: var(--color-on-accent);
   border-radius: 50%;
   animation: cold-start-spin 0.8s linear infinite;
 }
@@ -314,7 +672,8 @@ input[type="email"],
 input[type="password"],
 input[type="number"],
 input[type="date"],
-select {
+select,
+textarea {
   font-family: inherit;
   font-size: 1rem;
   padding: calc(var(--spacing-unit) * 1.5) calc(var(--spacing-unit) * 1.5);
@@ -326,7 +685,8 @@ select {
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: 2px solid var(--color-primary);
   outline-offset: 1px;
 }
@@ -409,10 +769,8 @@ select:focus {
   background-color: var(--color-border);
 }
 
-/* CAR-57 registration-card scan: the "Scan Registration Card" card above
-   the manual form, and the divider under it. Reinstates the shape the
-   earlier disabled placeholder had (removed in the site-audit pass) now
-   that "Scan Document" does something real. */
+/* Camera-scan card: an icon, a title and description, and the button that
+   opens the camera. Used by the Fuel Log's pump and odometer scans. */
 .scan-card {
   display: flex;
   align-items: center;
@@ -458,30 +816,26 @@ select:focus {
   cursor: pointer;
 }
 
+/* Shown beside every camera-scan button (fuel pump, odometer): a one-line disclosure that the photo is sent to Google's
+   Gemini API, sourced from Gemini's own API Additional Terms of Service
+   (see lib/geminiPrivacyNotice.js). */
+.camera-privacy-note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+/* The Fuel Log's pump/odometer scan cards sit between other form fields,
+   so they need less surrounding space than a standalone card. */
+.scan-card--compact {
+  margin-top: 0;
+  margin-bottom: calc(var(--spacing-unit) * 1);
+}
+
 .btn-accent--loading {
   opacity: 0.7;
   cursor: default;
-}
-
-.form-divider {
-  display: flex;
-  align-items: center;
-  gap: calc(var(--spacing-unit) * 2);
-  margin: calc(var(--spacing-unit) * 3) 0;
-  max-width: 640px;
-  color: var(--color-text-muted);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.form-divider::before,
-.form-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background-color: var(--color-border);
 }
 
 .btn-block {
@@ -568,10 +922,15 @@ select:focus {
   display: block;
 }
 
-.car-photo__overlay-btn {
+/* Design-unification pass (no Jira task): this was duplicated almost
+   identically as `.car-photo__overlay-btn` here and `.profile-header__photo-btn`
+   below (same round-button-on-a-photo pattern, just two different sizes/
+   contexts) — merged into one shared `.overlay-icon-btn` base below, with
+   `--lg`/`--sm` size modifiers and shared `--change`/`--remove` placement
+   and `--remove`'s red styling, so future photo-style edit controls reuse
+   this instead of growing a third near-copy. */
+.overlay-icon-btn {
   position: absolute;
-  width: 36px;
-  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -579,33 +938,68 @@ select:focus {
   border: none;
   background-color: rgba(20, 20, 20, 0.6);
   color: #ffffff;
+  padding: 0;
   cursor: pointer;
-  transition: background-color 0.15s ease, transform 0.15s ease;
+  transition: background-color var(--motion-fast) var(--ease-in-out), transform var(--motion-fast) var(--ease-out);
 }
 
-.car-photo__overlay-btn:hover:not(:disabled) {
+.overlay-icon-btn:hover:not(:disabled) {
   background-color: rgba(20, 20, 20, 0.8);
-  transform: scale(1.06);
 }
 
-.car-photo__overlay-btn:disabled {
+.overlay-icon-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.car-photo__overlay-btn--change {
+.overlay-icon-btn--remove {
+  background-color: rgba(179, 38, 30, 0.75);
+}
+
+.overlay-icon-btn--remove:hover:not(:disabled) {
+  background-color: rgba(179, 38, 30, 0.92);
+}
+
+/* Large variant: Car Onboarding's photo frame — sits just inside the
+   frame's own rounded corners, no border needed since the frame's edge
+   already separates it from the surrounding page. */
+.overlay-icon-btn--lg {
+  width: 36px;
+  height: 36px;
+}
+
+.overlay-icon-btn--lg:hover:not(:disabled) {
+  transform: scale(1.06);
+}
+
+.overlay-icon-btn--lg.overlay-icon-btn--change {
   bottom: 10px;
   right: 10px;
 }
 
-.car-photo__overlay-btn--remove {
+.overlay-icon-btn--lg.overlay-icon-btn--remove {
   top: 10px;
   right: 10px;
-  background-color: rgba(179, 38, 30, 0.75);
 }
 
-.car-photo__overlay-btn--remove:hover:not(:disabled) {
-  background-color: rgba(179, 38, 30, 0.92);
+/* Small variant: Car Profile's round identity icon — a visible border in
+   the surface color is needed here so the button reads as separate from
+   the photo it's sitting on, since it sits right on the circle's edge
+   rather than inside a larger frame. */
+.overlay-icon-btn--sm {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--color-surface);
+}
+
+.overlay-icon-btn--sm.overlay-icon-btn--change {
+  bottom: -2px;
+  right: -2px;
+}
+
+.overlay-icon-btn--sm.overlay-icon-btn--remove {
+  top: -2px;
+  right: -2px;
 }
 
 /* Car Onboarding's smaller, left-aligned variant (vs. Car Profile's
@@ -637,7 +1031,7 @@ select:focus {
   color: var(--color-text-muted);
   font-size: 0.875rem;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: border-color var(--motion-fast) var(--ease-in-out), color var(--motion-fast) var(--ease-in-out);
 }
 
 .car-photo__well:hover {
@@ -677,55 +1071,17 @@ select:focus {
 /* CAR-58 restyle (no Jira task, direct feedback): the car's photo fills
    this same round identity icon instead of a separate box above the
    header — round, cropped to fit (`object-fit: cover`), no photo at all
-   shown when none is set (just the usual BrandBadge/🚗 fallback). Small
-   edit buttons sit right on the circle's own edge, like a typical
-   profile-picture editor, rather than a photo box with controls below it. */
+   shown when none is set (just the usual BrandBadge or car-icon fallback). Small
+   edit buttons (`.overlay-icon-btn--sm`, shared with Car Onboarding's
+   larger frame — see the comment above `.overlay-icon-btn`) sit right on
+   the circle's own edge, like a typical profile-picture editor, rather
+   than a photo box with controls below it. */
 .profile-header__photo {
   width: 100%;
   height: 100%;
   object-fit: cover;
   border-radius: 999px;
   display: block;
-}
-
-.profile-header__photo-btn {
-  position: absolute;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  border: 2px solid var(--color-surface);
-  background-color: rgba(20, 20, 20, 0.75);
-  color: #ffffff;
-  padding: 0;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.profile-header__photo-btn:hover:not(:disabled) {
-  background-color: rgba(20, 20, 20, 0.92);
-}
-
-.profile-header__photo-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.profile-header__photo-btn--change {
-  bottom: -2px;
-  right: -2px;
-}
-
-.profile-header__photo-btn--remove {
-  top: -2px;
-  right: -2px;
-  background-color: rgba(179, 38, 30, 0.85);
-}
-
-.profile-header__photo-btn--remove:hover:not(:disabled) {
-  background-color: rgba(179, 38, 30, 0.95);
 }
 
 .profile-header__info {
@@ -758,10 +1114,14 @@ select:focus {
   margin: calc(var(--spacing-unit) * 2) 0 0;
 }
 
+/* CAR-72: a row is <div><dt/><dd/></div>, the only structure a <dl> allows. The
+   icon box is the row's ::before (from data-icon), in the first grid column and
+   spanning both lines, so the row looks exactly as it did with a separate icon. */
 .car-profile__field {
-  display: flex;
-  align-items: flex-start;
-  gap: calc(var(--spacing-unit) * 2);
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: start;
+  column-gap: calc(var(--spacing-unit) * 2);
   padding: calc(var(--spacing-unit) * 1.5) 0;
   border-bottom: 1px solid var(--color-border);
 }
@@ -770,19 +1130,27 @@ select:focus {
   border-bottom: none;
 }
 
+/* CAR-76: the icon sits inside the <dt> (hidden from assistive tech) so the row stays a valid
+   <div><dt/><dd/></div>; it is placed in the empty first grid column, level with the label. */
 .car-profile__field-icon {
+  position: absolute;
+  top: 0;
+  right: calc(100% + var(--spacing-unit) * 2);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 36px;
   height: 36px;
-  flex-shrink: 0;
   border-radius: var(--radius-base);
-  background-color: var(--color-input-bg);
-  font-size: 1rem;
+}
+
+.car-profile__field dt,
+.car-profile__field dd {
+  grid-column: 2;
 }
 
 .car-profile__field dt {
+  position: relative;
   font-weight: 600;
   font-size: 0.75rem;
   letter-spacing: 0.04em;
@@ -831,22 +1199,13 @@ select:focus {
   margin-top: calc(var(--spacing-unit) * 5);
 }
 
-.dashboard-section__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: calc(var(--spacing-unit) * 2);
-  flex-wrap: wrap;
-}
 
-.dashboard-section__header h2 {
-  margin-bottom: 0;
-}
 
 .dashboard-add-car {
   display: inline-flex;
   align-items: center;
   gap: calc(var(--spacing-unit) * 0.75);
+  flex-shrink: 0;
   padding: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 2);
   border-radius: 999px;
   background-color: var(--color-input-bg);
@@ -854,27 +1213,14 @@ select:focus {
   text-decoration: none;
   font-weight: 600;
   font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .dashboard-add-car:hover {
   background-color: var(--color-border);
 }
 
-.dashboard-car-list {
-  list-style: none;
-  margin: calc(var(--spacing-unit) * 2) 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--spacing-unit) * 1.5);
-}
 
-.dashboard-car-card {
-  padding: calc(var(--spacing-unit) * 2.5);
-  background-color: var(--color-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
-}
 
 /* CAR-55: a small brand-identifying badge — the manufacturer's real logo
    mark (.brand-badge--logo) where BrandBadge has one, else a colored
@@ -898,57 +1244,17 @@ select:focus {
   vertical-align: -0.2em;
 }
 
-.dashboard-car-card__title {
-  display: block;
-  font-weight: 700;
-  font-size: 1.125rem;
-  color: var(--color-primary);
-  text-decoration: none;
-  overflow-wrap: break-word;
-}
 
-.dashboard-car-card__title:hover {
-  text-decoration: underline;
-}
 
-.dashboard-car-card__meta {
-  margin: calc(var(--spacing-unit) * 0.5) 0 0;
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-  overflow-wrap: break-word;
-}
 
-.dashboard-car-card__specs {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: var(--spacing-unit) calc(var(--spacing-unit) * 2);
-  margin: calc(var(--spacing-unit) * 1.5) 0 0;
-  padding-top: calc(var(--spacing-unit) * 1.5);
-  border-top: 1px solid var(--color-border);
-}
 
-.dashboard-car-card__spec dt {
-  color: var(--color-text-muted);
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
 
-.dashboard-car-card__spec dd {
-  margin: calc(var(--spacing-unit) * 0.25) 0 0;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
+/* The skeleton rows reserve the same height as a loaded row (a label line plus a value that can wrap to two). */
 
-.dashboard-car-card__hint {
-  margin: calc(var(--spacing-unit) * 1.5) 0 0;
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-}
 
-.dashboard-car-card__hint a {
-  color: var(--color-primary);
-}
+
+
+
 
 .dashboard-diy-empty {
   color: var(--color-text-muted);
@@ -956,6 +1262,13 @@ select:focus {
 
 .dashboard-diy-empty a {
   color: var(--color-primary);
+}
+
+/* The car list failed to load: a plain error above its Try again button. */
+.dashboard-error {
+  margin: 0 0 var(--spacing-unit);
+  color: var(--color-danger);
+  font-weight: 600;
 }
 
 .dashboard-diy-stats {
@@ -1014,22 +1327,17 @@ select:focus {
   }
 }
 
-.dashboard-car-card--skeleton .skeleton-bar--title {
-  width: 55%;
-  height: 1.25rem;
-  margin-bottom: calc(var(--spacing-unit) * 1.5);
-}
+/* CAR-74: while "Your Cars" is still waiting for its list, the Dashboard
+   sections after it are laid out but not shown. The real list is usually a
+   different height (it depends on how many cars there are), and pushing
+   visible sections down or up when it arrives was the page's main layout
+   shift; hidden boxes that move don't count. They appear, with their own
+   skeletons or data, as soon as the cars are in (well under a second). The
+   page drops the --waiting class after 1.5 s (CARS_WAIT_MS), so a slow or
+   failing connection never keeps them hidden. */
 
-.dashboard-car-card--skeleton .skeleton-bar--meta {
-  width: 40%;
-  height: 0.875rem;
-  margin-bottom: calc(var(--spacing-unit) * 2);
-}
 
-.dashboard-car-card--skeleton .skeleton-bar--specs {
-  width: 100%;
-  height: 2.5rem;
-}
+
 
 .dashboard-stat-tile--skeleton .skeleton-bar--stat-value {
   width: 4rem;
@@ -1040,6 +1348,95 @@ select:focus {
 .dashboard-stat-tile--skeleton .skeleton-bar--stat-label {
   width: 70%;
   height: 0.875rem;
+}
+
+/* Design-unification pass (no Jira task): Dashboard's skeleton above was
+   the only page with a loading skeleton — Car Profile, Trip Planner,
+   Fuel Log and AI Advisor all still showed a plain "Loading..." sentence
+   via PageShell. Rather than hand-rolling another one-off set of
+   page-specific selectors per page (as Dashboard's own skeleton-bar--title/
+   --meta/--specs did), this is a generic, reusable set any page can
+   compose from: `.skeleton-stack` lays bars out with consistent spacing,
+   and the `--w-*`/`--h-*` modifiers below size individual `.skeleton-bar`s
+   to roughly match the real content they stand in for. */
+.skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 1.25);
+}
+
+.skeleton-stack--section {
+  margin-top: calc(var(--spacing-unit) * 3);
+}
+
+/* CAR-67: the <Suspense> fallback while a lazy screen's code downloads, and
+   (CAR-74) what a protected screen shows while the session is checked. At
+   least a full screen tall, so the footer starts below the fold and the page
+   never paints it at the top first and then pushes it down. */
+.route-loading {
+  min-height: 100vh;
+}
+
+/* CAR-67 follow-up: a thin bar across the top while a screen takes longer than
+   ~300 ms to download (ScreenLoadingBar). Fixed and above everything, so it
+   never moves the layout. The accent colour follows the car theme. */
+.screen-loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  height: 3px;
+  overflow: hidden;
+  pointer-events: none;
+  /* The primary-coloured track keeps the bar visible over both the nav (also
+     primary, where the accent fill shows) and the cream page when scrolled. */
+  background-color: var(--color-primary);
+}
+
+.screen-loading-bar__fill {
+  width: 40%;
+  height: 100%;
+  background-color: var(--color-accent);
+  animation: screen-loading-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes screen-loading-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+/* Shown when a screen can't download or render (ScreenErrorBoundary). */
+.screen-error {
+  min-height: 40vh;
+}
+
+.skeleton-bar--w-25 { width: 25%; }
+.skeleton-bar--w-40 { width: 40%; }
+.skeleton-bar--w-55 { width: 55%; }
+.skeleton-bar--w-70 { width: 70%; }
+.skeleton-bar--w-100 { width: 100%; }
+
+.skeleton-bar--h-sm { height: 0.875rem; }
+.skeleton-bar--h-md { height: 1.25rem; }
+.skeleton-bar--h-lg { height: 2.25rem; }
+.skeleton-bar--h-xl { height: 2.5rem; }
+
+.skeleton-bar--avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.skeleton-bar--card {
+  width: 100%;
+  height: 9rem;
+  border-radius: var(--radius-lg);
 }
 
 .dashboard-latest-fix {
@@ -1072,54 +1469,405 @@ select:focus {
   font-size: 0.8125rem;
 }
 
-.dashboard-modules {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: calc(var(--spacing-unit) * 3);
+/* ---- CAR-79 Dashboard v2: hero, tiles, switcher chips and the three lower cards. ---- */
+
+.dashboard-hero-section {
   margin-top: calc(var(--spacing-unit) * 2);
 }
 
-.dashboard-module-card {
-  display: block;
+/* The hero card for the active car. A soft surface card; the four tiles sit inside it. The min-height matches the
+   loading skeleton (measured), so whichever resolves — the real hero, the empty card or the error card — the hero box
+   is the same size and nothing below it moves when the cars arrive (CLS measured on Slow 4G). Taller at phone width,
+   where the tiles stack two by two. */
+.dashboard-hero {
   padding: calc(var(--spacing-unit) * 3);
   background-color: var(--color-surface);
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+  min-height: 19.5rem;
+}
+
+@media (max-width: 719px) {
+  .dashboard-hero {
+    min-height: 33.5rem;
+  }
+}
+
+/* The empty ("Add your first car") and error states reuse the hero card, centred in its reserved height. */
+.dashboard-hero--message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.dashboard-hero--message .btn-primary {
+  margin-top: calc(var(--spacing-unit) * 2);
+}
+
+.dashboard-hero__empty-icon {
+  display: inline-flex;
+  color: var(--color-accent-text);
+}
+
+.dashboard-hero__empty-title {
+  margin: calc(var(--spacing-unit) * 1.5) 0 calc(var(--spacing-unit) * 0.5);
+}
+
+.dashboard-hero__head {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--spacing-unit) * 2);
+}
+
+.dashboard-hero__badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.dashboard-hero__title-block {
+  min-width: 0;
+  flex: 1;
+  /* Reserve the name-plus-specs height so the Default badge (loaded from profiles a moment later) and a wrapped name
+     never push the tiles down (CLS measured on Slow 4G). Taller at phone width, where the name and specs wrap. */
+  min-height: 3.75rem;
+}
+
+@media (max-width: 600px) {
+  .dashboard-hero__title-block {
+    min-height: 6rem;
+  }
+}
+
+.dashboard-hero__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 1.5);
+  margin: 0;
+  font-size: 1.375rem;
+}
+
+.dashboard-hero__name {
+  color: var(--color-primary);
   text-decoration: none;
-  color: var(--color-text);
+  overflow-wrap: anywhere;
 }
 
-.dashboard-module-card:hover {
-  box-shadow: 0 4px 16px rgba(43, 43, 43, 0.08);
+.dashboard-hero__name:hover {
+  text-decoration: underline;
 }
 
-.dashboard-module-card__icon {
+.dashboard-hero__default {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px calc(var(--spacing-unit) * 1.25);
+  border-radius: 999px;
+  /* White on the brand primary (AA on every theme, guaranteed by themeContrast.test.js); the 16% accent tile only
+     reaches ~4:1 for small text, so it is kept for icons, not for this badge's words. */
+  background-color: var(--color-primary);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.dashboard-hero__specs {
+  margin: calc(var(--spacing-unit) * 0.75) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+/* The four stat tiles: two by two at phone width, four across when there is room. */
+.dashboard-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin: calc(var(--spacing-unit) * 2.5) 0;
+}
+
+@media (min-width: 720px) {
+  .dashboard-tiles {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.dashboard-tile {
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--spacing-unit) * 2);
+  background-color: var(--color-input-bg);
+  border-radius: var(--radius-base);
+  /* Every state (skeleton, empty, value) is reserved to this height, so the hero never grows when the data lands. */
+  min-height: 7.5rem;
+}
+
+.dashboard-tile__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  margin-bottom: calc(var(--spacing-unit) * 1.5);
+  width: 36px;
+  height: 36px;
+  margin-bottom: calc(var(--spacing-unit) * 1);
   border-radius: var(--radius-base);
-  background-color: var(--color-input-bg);
+}
+
+.dashboard-tile__label {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dashboard-tile__value {
+  margin: calc(var(--spacing-unit) * 0.5) 0 0;
   font-size: 1.25rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
-.dashboard-module-card h3 {
-  margin-top: 0;
+.dashboard-tile__caption {
+  margin: calc(var(--spacing-unit) * 0.25) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
 }
 
-.dashboard-module-card p {
-  margin-bottom: 0;
+.dashboard-tile__empty {
+  margin: calc(var(--spacing-unit) * 0.5) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
 }
 
-.dashboard-module-card__cta {
-  display: inline-block;
-  margin-top: calc(var(--spacing-unit) * 2);
+.dashboard-tile__empty a {
+  color: var(--color-primary);
+}
+
+/* The Next service tile's "Set up reminders": a small outline button (btn-secondary--sm, outline look shared with the
+   outline quick actions above), quieter than the accent action. */
+.dashboard-tile__button {
+  margin-top: calc(var(--spacing-unit) * 0.5);
+  padding-block: calc(var(--spacing-unit) * 0.5);
+  font-weight: 600;
+}
+
+.dashboard-tile__loading {
+  margin-top: calc(var(--spacing-unit) * 0.5);
+}
+
+.skeleton-bar--tile-value {
+  display: block;
+  width: 70%;
+  height: 1.25rem;
+  margin-bottom: calc(var(--spacing-unit) * 0.75);
+}
+
+.skeleton-bar--tile-caption {
+  display: block;
+  width: 50%;
+  height: 0.8125rem;
+}
+
+.skeleton-bar--action {
+  display: block;
+  height: 44px;
+  border-radius: var(--radius-base);
+}
+
+/* The three fuel tiles share one request, so one error line (with Try again) spans their columns. */
+.dashboard-tiles__fuel-error {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1.5);
+  padding: calc(var(--spacing-unit) * 2);
+  background-color: var(--color-input-bg);
+  border-radius: var(--radius-base);
+}
+
+.dashboard-tiles__service-error {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 0.5);
+  padding: calc(var(--spacing-unit) * 2);
+  background-color: var(--color-input-bg);
+  border-radius: var(--radius-base);
+  min-height: 7.5rem;
+}
+
+.dashboard-tile__error-text {
+  margin: 0;
+  color: var(--color-danger);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.dashboard-tile__error-link {
   color: var(--color-primary);
   font-weight: 600;
   font-size: 0.875rem;
 }
+
+/* Quick actions: links styled as buttons, 44 px tall, two by two at phone width. */
+.dashboard-hero__actions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: calc(var(--spacing-unit) * 1.5);
+}
+
+@media (min-width: 720px) {
+  .dashboard-hero__actions {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.dashboard-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--spacing-unit) * 1);
+  min-height: 44px;
+  padding: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 1.5);
+  border-radius: var(--radius-base);
+  background-color: var(--color-primary);
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.dashboard-action:hover {
+  background-color: var(--color-primary-hover);
+}
+
+/* With no odometer reading yet: "Log a fill-up" is the accent call to action, the other three are outlines. */
+.dashboard-action--cta {
+  background-color: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.dashboard-action--cta:hover {
+  background-color: var(--color-accent);
+}
+
+.dashboard-action--outline,
+.dashboard-action--outline:hover,
+.dashboard-tile__button {
+  background-color: transparent;
+  color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
+/* The car switcher: a chip per car (the active one pressed), plus Add another car. Chips scroll sideways on a phone. */
+.dashboard-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--spacing-unit) * 2);
+  margin-top: calc(var(--spacing-unit) * 2);
+}
+
+.dashboard-switcher__list {
+  display: flex;
+  gap: calc(var(--spacing-unit) * 1);
+  margin: 0;
+  padding: calc(var(--spacing-unit) * 0.5) 0;
+  list-style: none;
+  overflow-x: auto;
+}
+
+.dashboard-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 0.75);
+  min-height: 40px;
+  padding: calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 1.5);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dashboard-chip:hover {
+  border-color: var(--color-primary);
+}
+
+.dashboard-chip[aria-pressed="true"] {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+  color: #ffffff;
+}
+
+.dashboard-chip__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background-color: var(--chip-dot);
+}
+
+.dashboard-chip__name {
+  overflow-wrap: anywhere;
+}
+
+/* The three summary cards below the hero, equal width on a wide screen and stacked on a phone. */
+.dashboard-lower {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: calc(var(--spacing-unit) * 2.5);
+  margin-top: calc(var(--spacing-unit) * 4);
+}
+
+@media (min-width: 900px) {
+  .dashboard-lower {
+    grid-template-columns: repeat(3, 1fr);
+    align-items: start;
+  }
+}
+
+.dashboard-lower__card {
+  margin-top: 0;
+  padding: calc(var(--spacing-unit) * 3);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+  /* Reserve each card's height so its own skeleton -> data swap, which arrives after the cars, does not push the cards
+     below it (stacked at phone width) or the page footer (CLS measured on Slow 4G). A card with a lot of content (a
+     long maintenance list, or the month card's cost breakdown) still grows past this, but the common and empty cases
+     do not; the skeletons below are sized close to their loaded content to keep that growth small. */
+  min-height: 13rem;
+}
+
+/* The month card's skeleton stands in for the value, label, the fuel/other split and the link, so it is close to the
+   loaded height (the cost breakdown is the tallest of the three cards). */
+.dashboard-stat-tile--skeleton-tall {
+  min-height: 11rem;
+}
+
+.dashboard-lower__card > h2 {
+  margin-top: 0;
+}
+
+/* A smaller secondary button, for the inline "Try again" in the fuel-tiles error. */
+.btn-secondary--sm {
+  padding: calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 1.5);
+  font-size: 0.875rem;
+}
+
+
+
+
+
+
+
 
 .route-params-card {
   max-width: 480px;
@@ -1202,7 +1950,7 @@ select:focus {
 }
 
 .trip-result__icon {
-  display: inline-flex;
+  display: flex;   /* inside the <dt> (valid <dl>), on its own line above the label */
   margin-bottom: calc(var(--spacing-unit) * 1);
   font-size: 1.125rem;
 }
@@ -1221,10 +1969,25 @@ select:focus {
   font-weight: 700;
 }
 
-.trip-result__caption {
+/* CAR-61: "Based on your real average of 9.0 km/L ..." above the results. */
+.trip-result__basis {
+  margin: 0 0 calc(var(--spacing-unit) * 1.5);
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+/* The caption and the traffic badge are <dd>s of their row (a <dl> row may hold only <dt> and <dd>), so they undo the value styling. */
+.trip-result__field .trip-result__caption {
   margin: 4px 0 0;
   font-size: 0.75rem;
+  font-weight: 400;
   color: var(--color-text-muted);
+}
+
+.trip-result__field .trip-result__badge {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 400;
 }
 
 .trip-result__explainer {
@@ -1301,6 +2064,15 @@ select:focus {
   margin: 0 auto calc(var(--spacing-unit) * 3);
   color: var(--color-text-muted);
   font-size: 0.875rem;
+}
+
+/* CAR-73: the expired reset-link page's two ways forward, side by side when
+   they fit and stacked on a phone. */
+.auth-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: calc(var(--spacing-unit) * 1.5);
 }
 
 /* Mentor feedback (no Jira task): "Continue with Google" button and its
@@ -1420,12 +2192,17 @@ select:focus {
   gap: calc(var(--spacing-unit) * 8);
 }
 
-.landing-hero {
-  position: relative;
+/* The hero and the closing call to action are both a centred column. */
+.landing-hero,
+.landing-closing-cta {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+}
+
+.landing-hero {
+  position: relative;
   padding-top: calc(var(--spacing-unit) * 3);
   overflow: hidden;
 }
@@ -1446,8 +2223,37 @@ select:focus {
 }
 
 
-.landing-hero__logo {
-  margin-bottom: calc(var(--spacing-unit) * 3);
+/* Brand lockup: the cropped icon (see Logo.jsx) with the wordmark as text beside it. */
+.landing-hero__brand {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin: 0 0 calc(var(--spacing-unit) * 3);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+/* Crops the vertical lockup to its icon, dropping the wordmark and tagline text it draws below.
+   Measured on the artwork (373x480 viewBox): the icon paths end at y=344.3, and the "CarSage"
+   <text> box begins at y=345 (its baseline is y=412 at font-size 62, so the glyphs themselves ink
+   from about y=367). 344 is therefore the last row that is still icon. A 373:344 box with `cover`
+   scales the image so that row is the bottom of the frame: the icon alone, full width, nothing
+   cropped at the sides. A square box would instead scale to the full 373 width and leave the
+   wordmark's first 28 rows showing under the icon.
+   If logo.svg's geometry changes, re-measure: LandingPage.test.jsx pins the numbers this assumes. */
+.logo--mark {
+  aspect-ratio: 373 / 344;
+  object-fit: cover;
+  object-position: top;
+}
+
+/* The two gold badges: the hero's tagline pill and the label on each feature card. */
+.landing-eyebrow,
+.landing-feature-card__eyebrow {
+  background-color: rgba(201, 162, 75, 0.18);
+  color: var(--color-text);
+  font-weight: 600;
 }
 
 .landing-eyebrow {
@@ -1456,10 +2262,7 @@ select:focus {
   gap: calc(var(--spacing-unit) * 1);
   padding: calc(var(--spacing-unit) * 0.75) calc(var(--spacing-unit) * 2);
   border-radius: var(--radius-lg);
-  background-color: rgba(201, 162, 75, 0.18);
-  color: var(--color-text);
   font-size: 0.8125rem;
-  font-weight: 600;
   margin-bottom: calc(var(--spacing-unit) * 3);
 }
 
@@ -1471,6 +2274,8 @@ select:focus {
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--color-text);
+  /* Evens the lines out, so the last one is never a single orphan word. */
+  text-wrap: balance;
 }
 
 .landing-hero__subtitle {
@@ -1481,11 +2286,16 @@ select:focus {
   color: var(--color-text-muted);
 }
 
-.landing-hero__cta-row {
+/* The two centred, wrapping rows under the headline. */
+.landing-hero__cta-row,
+.landing-trust-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
+}
+
+.landing-hero__cta-row {
   gap: calc(var(--spacing-unit) * 2);
 }
 
@@ -1497,10 +2307,6 @@ select:focus {
 }
 
 .landing-trust-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
   gap: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 3);
   margin-top: calc(var(--spacing-unit) * 4);
   font-size: 0.8125rem;
@@ -1519,7 +2325,7 @@ select:focus {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .landing-section-header h2 {
@@ -1538,23 +2344,48 @@ select:focus {
   gap: calc(var(--spacing-unit) * 3);
 }
 
-.landing-feature-card {
-  display: flex;
-  flex-direction: column;
-  padding: calc(var(--spacing-unit) * 3);
+/* The raised surfaces on this page. */
+.landing-feature-card,
+.landing-pillars__grid {
   background-color: var(--color-surface);
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
 }
 
-.landing-feature-card__icon {
+.landing-feature-card {
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--spacing-unit) * 3);
+}
+
+/* Bento: the example spans the grid's full width above the three feature cards. */
+.landing-feature-card--example {
+  grid-column: 1 / -1;
+}
+
+.landing-example__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: calc(var(--spacing-unit) * 2);
+  margin: 0;
+}
+
+.landing-example__tiles dd {
+  margin: 0;
+}
+
+/* The two icon tiles. Their fill comes from the shared icon-tile rule further down. */
+.landing-feature-card__icon,
+.landing-pillar__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--radius-lg);
+}
+
+.landing-feature-card__icon {
   width: 44px;
   height: 44px;
-  border-radius: var(--radius-lg);
-  background-color: var(--color-input-bg);
   font-size: 1.375rem;
   margin-bottom: calc(var(--spacing-unit) * 2);
 }
@@ -1564,10 +2395,7 @@ select:focus {
   align-self: flex-start;
   padding: 2px calc(var(--spacing-unit) * 1.25);
   border-radius: var(--radius-base);
-  background-color: rgba(201, 162, 75, 0.18);
-  color: var(--color-text);
   font-size: 0.75rem;
-  font-weight: 600;
   margin-bottom: calc(var(--spacing-unit) * 1.5);
 }
 
@@ -1601,9 +2429,6 @@ select:focus {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: calc(var(--spacing-unit) * 4);
   padding: calc(var(--spacing-unit) * 4);
-  background-color: var(--color-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
 }
 
 .landing-pillar {
@@ -1614,13 +2439,8 @@ select:focus {
 
 .landing-pillar__icon {
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: var(--radius-lg);
-  background-color: var(--color-input-bg);
   font-size: 1.125rem;
 }
 
@@ -1637,10 +2457,6 @@ select:focus {
 }
 
 .landing-closing-cta {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
   padding: calc(var(--spacing-unit) * 6) calc(var(--spacing-unit) * 4);
   background-color: var(--color-primary);
   border-radius: var(--radius-lg);
@@ -1666,7 +2482,7 @@ select:focus {
 .landing-closing-cta p {
   max-width: 480px;
   margin: calc(var(--spacing-unit) * 1.5) 0 calc(var(--spacing-unit) * 3);
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .site-footer {
@@ -1836,7 +2652,9 @@ select:focus {
 }
 
 .advisor-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 2px calc(var(--spacing-unit) * 1.25);
   border-radius: var(--radius-base);
   font-size: 0.75rem;
@@ -1846,9 +2664,12 @@ select:focus {
   margin-bottom: calc(var(--spacing-unit) * 1);
 }
 
+/* CAR-81: the recommendation chips use the same fixed status colours: DIY fixable is the OK green, See a mechanic
+   the Overdue red (so they never take the brand's accent), each with an icon. */
 .advisor-badge--diy {
-  background-color: var(--color-accent);
-  color: var(--color-text);
+  background-color: var(--status-ok-bg);
+  color: var(--status-ok-text);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
 }
 
 /* A car-brand theme (theme/carBrandThemes.js) can turn the assistant
@@ -1856,8 +2677,8 @@ select:focus {
    red, so without this border a red badge can visually blend into a red
    bubble. The white ring keeps it a distinct badge on any bubble color. */
 .advisor-badge--mechanic {
-  background-color: var(--color-danger);
-  color: #ffffff;
+  background-color: var(--status-overdue-bg);
+  color: var(--status-overdue-text);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
 }
 
@@ -1878,6 +2699,38 @@ select:focus {
   margin: 0;
 }
 
+/* CAR-65: "Find a mechanic near me" under a mechanic reply. Same
+   surface-colored pill as the "Did this fix it?" buttons below, with the
+   page's own text color: --color-surface and --color-text are not touched
+   by any car-brand theme (carBrandThemes.js only overrides primary,
+   primary-hover, accent and background), so it stays readable on the dark
+   assistant bubble whatever brand color that bubble becomes. */
+.advisor-mechanic-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: calc(var(--spacing-unit) * 1.5);
+  padding: 6px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color var(--motion-fast) var(--ease-in-out), color var(--motion-fast) var(--ease-in-out);
+}
+
+.advisor-mechanic-link:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.advisor-mechanic-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .advisor-video-card {
   display: flex;
   align-items: center;
@@ -1890,7 +2743,7 @@ select:focus {
   text-decoration: none;
   color: var(--color-text);
   box-shadow: 0 1px 4px rgba(43, 43, 43, 0.06);
-  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: box-shadow var(--motion-fast) var(--ease-in-out), border-color var(--motion-fast) var(--ease-in-out);
 }
 
 .advisor-video-card:hover {
@@ -1972,10 +2825,11 @@ select:focus {
 }
 
 .advisor-fix-feedback__prompt {
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.92);
 }
 
-.advisor-fix-feedback__btn {
+.advisor-fix-feedback__btn,
+.fuel-log-order-warning__btn {
   padding: 4px 14px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -1986,25 +2840,27 @@ select:focus {
   cursor: pointer;
 }
 
-.advisor-fix-feedback__btn:hover:not(:disabled) {
+.advisor-fix-feedback__btn:hover:not(:disabled),
+.fuel-log-order-warning__btn:hover:not(:disabled) {
   border-color: var(--color-primary);
   color: var(--color-primary);
 }
 
-.advisor-fix-feedback__btn:disabled {
+.advisor-fix-feedback__btn:disabled,
+.fuel-log-order-warning__btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
 .advisor-fix-feedback__answered {
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .advisor-fix-feedback__change {
   border: none;
   background: none;
   padding: 0;
-  color: var(--color-accent);
+  color: #ffffff;
   font-size: 0.8125rem;
   font-weight: 600;
   text-decoration: underline;
@@ -2017,6 +2873,28 @@ select:focus {
   /* .auth-form__error's red is tuned for the page's light background; on this
      dark bubble it needs to be much lighter to stay readable. */
   color: #ffb4a9;
+}
+
+.advisor-scan {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.advisor-scan__btn {
+  cursor: pointer;
+}
+
+.advisor-scan__btn--disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.advisor-scan__note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
 }
 
 .advisor-input-row {
@@ -2206,14 +3084,22 @@ select:focus {
   display: none;
 }
 
+/* CAR-76: the disclosure caret is drawn with borders (the fonts have no small right-pointing triangle): a chevron pointing
+   right, turned to point down when the section is open. */
 .advanced-options__toggle::before {
-  content: "▸";
+  content: "";
   display: inline-block;
-  transition: transform 0.15s ease;
+  width: 0.5em;
+  height: 0.5em;
+  margin-left: 0.1em;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--motion-fast) var(--ease-out);
 }
 
 .advanced-options[open] > .advanced-options__toggle::before {
-  transform: rotate(90deg);
+  transform: rotate(135deg);
 }
 
 .advanced-options__toggle:focus-visible {
@@ -2329,10 +3215,623 @@ select:focus {
   box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
 }
 
+/* CAR-72: the scroll area takes keyboard focus (tabindex 0), so it shows a ring
+   in the brand colour, like the other focusable controls. */
+.fuel-log-table-wrap:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .fuel-log-chart__caption {
   margin: 0 0 var(--spacing-unit);
   color: var(--color-text-muted);
   font-size: 0.9rem;
+}
+
+/* CAR-61: odometer hint turns into a warning when the distance since the last
+   reading gives an unrealistic km/L for the liters typed (likely a typo). */
+.form-hint--warning {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+/* CAR-62: Maintenance page. Status badges: Overdue, Due soon, OK (CAR-81: fixed red, amber and green from the
+   --status-* tokens, never the brand's colours) and "Add an odometer reading" (neutral outline). Each badge
+   also has an icon and its words (components/StatusBadge.jsx), so colour is never the only signal. */
+.maintenance-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.maintenance-badge--overdue {
+  background-color: var(--status-overdue-bg);
+  color: var(--status-overdue-text);
+}
+
+.maintenance-badge--due_soon {
+  background-color: var(--status-soon-bg);
+  color: var(--status-soon-text);
+}
+
+.maintenance-badge--ok {
+  background-color: var(--status-ok-bg);
+  color: var(--status-ok-text);
+}
+
+.maintenance-badge--needs_reading {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px dashed var(--color-text-muted);
+}
+
+.maintenance-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin-bottom: calc(var(--spacing-unit) * 2);
+}
+
+.maintenance-toolbar__car {
+  min-width: 240px;
+  margin: 0;
+}
+
+.maintenance-toolbar__reading {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.maintenance-notice {
+  margin: 0 0 calc(var(--spacing-unit) * 2);
+  padding: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 1.5);
+  border-left: 3px solid var(--color-accent);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-base);
+  font-size: 0.875rem;
+}
+
+.maintenance-add {
+  margin-bottom: calc(var(--spacing-unit) * 3);
+}
+
+.maintenance-add__hint {
+  margin: 0 0 calc(var(--spacing-unit) * 1.5);
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.maintenance-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--spacing-unit) * 1);
+}
+
+.maintenance-preset {
+  padding: 6px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background-color: var(--color-input-bg);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-in-out), color var(--motion-fast) var(--ease-in-out);
+}
+
+.maintenance-preset:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.maintenance-preset--custom {
+  background-color: var(--color-surface);
+  border-style: dashed;
+}
+
+.maintenance-interval {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.maintenance-interval legend {
+  margin-bottom: calc(var(--spacing-unit) * 0.75);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.maintenance-interval__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--spacing-unit) * 1.5);
+}
+
+.maintenance-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin-top: calc(var(--spacing-unit) * 1);
+}
+
+.maintenance-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin: calc(var(--spacing-unit) * 2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.maintenance-card {
+  padding: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 2.5);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+  /* CAR-77: the clearance under the sticky header is now `scroll-padding-top` on <html>, for every scroll target. */
+}
+
+.maintenance-card:target {
+  outline: 2px solid var(--color-accent);
+}
+
+.maintenance-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-unit);
+}
+
+.maintenance-card__header h3 {
+  margin: 0;
+  font-size: 1.0625rem;
+}
+
+.maintenance-card__due {
+  margin: calc(var(--spacing-unit) * 1) 0 0;
+  font-weight: 600;
+}
+
+.maintenance-card__remaining {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.maintenance-card__last,
+.maintenance-card__note,
+.maintenance-card__notes {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.maintenance-card__notes {
+  font-style: italic;
+}
+
+.maintenance-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin-top: calc(var(--spacing-unit) * 1.5);
+}
+
+.maintenance-card__done {
+  padding: 6px 16px;
+  font-size: 0.875rem;
+}
+
+.maintenance-link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.maintenance-link-btn--danger {
+  color: var(--color-danger);
+}
+
+.maintenance-danger-btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-danger);
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.maintenance-danger-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.maintenance-panel,
+.maintenance-confirm {
+  margin-top: calc(var(--spacing-unit) * 1.5);
+  padding-top: calc(var(--spacing-unit) * 1.5);
+  border-top: 1px solid var(--color-border);
+}
+
+.maintenance-confirm p {
+  margin: 0;
+}
+
+.maintenance-history {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing-unit) * 1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+}
+
+.maintenance-history__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-unit);
+}
+
+.maintenance-history__note,
+.maintenance-history__empty {
+  color: var(--color-text-muted);
+}
+
+.maintenance-history__empty {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.maintenance-history__confirm {
+  font-weight: 600;
+}
+
+/* Step 3: photos on a maintenance completion or an expense (components/RecordPhotos.jsx).
+   Shown small; they only load once the user opens them. */
+.maintenance-history__row .attached-photos {
+  flex-basis: 100%;
+}
+
+.attached-photos__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-unit);
+  margin-top: 4px;
+}
+
+.attached-photos__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-unit);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attached-photos__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.attached-photos__img,
+.attached-photos__missing {
+  width: 120px;
+  height: 120px;
+  border-radius: var(--radius-base);
+}
+
+.attached-photos__img {
+  object-fit: cover;
+  background-color: var(--color-input-bg);
+}
+
+.attached-photos__missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.pending-photos {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.pending-photos__label {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.odometer-scan {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.odometer-scan__btn {
+  cursor: pointer;
+}
+
+.odometer-scan__note {
+  margin: 0;
+}
+
+.attached-photos__add {
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+@media (max-width: 520px) {
+  .maintenance-interval__row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* CAR-64: Expenses page: this month's cost of ownership and its breakdown. */
+.costs-empty {
+  max-width: 640px;
+  color: var(--color-text-muted);
+}
+
+.costs-summary {
+  max-width: 640px;
+  padding: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 2.5);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+}
+
+.costs-summary__label {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.costs-summary__value {
+  margin: 4px 0 0;
+  font-size: 1.5rem;
+}
+
+.costs-summary__split,
+.dashboard-costs__split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--spacing-unit) * 1.5);
+  margin: calc(var(--spacing-unit) * 1.5) 0 0;
+}
+
+.costs-summary__split dt,
+.dashboard-costs__split dt {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.costs-summary__split dd,
+.dashboard-costs__split dd {
+  margin: 2px 0 0;
+}
+
+.costs-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: calc(var(--spacing-unit) * 1.5) 0 0;
+  padding: calc(var(--spacing-unit) * 1.5) 0 0;
+  border-top: 1px solid var(--color-border);
+  list-style: none;
+  font-size: 0.9375rem;
+}
+
+.costs-breakdown li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--spacing-unit);
+}
+
+/* CAR-83: expense category icons. The name is always drawn beside the icon; the icon takes the AA-safe accent text colour. */
+.category-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.category-name .icon,
+.category-select__icon {
+  flex-shrink: 0;
+  color: var(--color-accent-text);
+}
+
+/* The chosen category's icon sits inside the select's left padding, which is there with or without it, so the field never changes width or text position. */
+.category-select {
+  position: relative;
+}
+
+.category-select__icon {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--spacing-unit) * 1.5);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.category-select select {
+  padding-left: calc(var(--spacing-unit) * 4.5);
+}
+
+.costs-confirm {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* CAR-64: the Dashboard's "All cars, this month" tile. */
+.dashboard-costs {
+  max-width: 640px;
+}
+
+.dashboard-costs__month {
+  font-weight: 400;
+  font-size: 1rem;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 520px) {
+  .costs-summary__split,
+  .dashboard-costs__split {
+    grid-template-columns: 1fr;
+  }
+
+  .costs-confirm {
+    white-space: normal;
+  }
+}
+
+/* CAR-62: the Dashboard's Maintenance card. */
+.dashboard-maintenance {
+  max-width: 640px;
+  padding: calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 2.5);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(43, 43, 43, 0.04);
+}
+
+.dashboard-maintenance__clear {
+  margin: 0 0 var(--spacing-unit);
+}
+
+.dashboard-maintenance__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 var(--spacing-unit);
+  padding: 0;
+  list-style: none;
+}
+
+.dashboard-maintenance__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px calc(var(--spacing-unit) * 1);
+  padding: 8px 10px;
+  border-radius: var(--radius-base);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.dashboard-maintenance__item:hover,
+.dashboard-maintenance__item:focus-visible {
+  background-color: var(--color-input-bg);
+}
+
+.dashboard-maintenance__name {
+  font-weight: 600;
+}
+
+.dashboard-maintenance__car,
+.dashboard-maintenance__when {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.dashboard-maintenance__when {
+  margin-left: auto;
+}
+
+.dashboard-maintenance__more {
+  margin: 0 0 var(--spacing-unit);
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.dashboard-maintenance__all {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+/* CAR-61: an out-of-order odometer reading: a warning (not a block) with a
+   "Save anyway" button, in the accent color rather than the error red. */
+.fuel-log-order-warning {
+  margin-top: 6px;
+  padding: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 1.5);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-base);
+  background-color: var(--color-surface);
+  font-size: 0.8125rem;
+}
+
+.fuel-log-order-warning p {
+  margin: 0 0 calc(var(--spacing-unit) * 1);
+}
+
+/* CAR-61: "Your real average: 9.0 km/L (rated: 12.0 km/L)" under the chart. */
+.fuel-log-real-average {
+  margin-top: calc(var(--spacing-unit) * 1.5);
+}
+
+.fuel-log-real-average__figure {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.fuel-log-real-average__note {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+/* CAR-61: the full-tank assumption, stated under the fill-ups table. */
+.fuel-log-table__caption {
+  margin: 0;
+  padding: var(--spacing-unit) calc(var(--spacing-unit) * 2) calc(var(--spacing-unit) * 1.5);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+/* CAR-61: a km/L cell outside the realistic range, excluded from the average. */
+.fuel-log-check-reading {
+  color: var(--color-danger);
+  cursor: help;
+  white-space: nowrap;
+}
+
+/* CAR-61 step 1c: a per-step km/L outside 2-40 that the average KEPT as part of a
+   partial fill -- a neutral dash with a tooltip, not the red "check reading". */
+.fuel-log-merged-step {
+  color: var(--color-text-muted);
+  cursor: help;
 }
 
 .fuel-log-chart__wrap {
@@ -2388,6 +3887,11 @@ select:focus {
 /* Prices and the USD/LBP toggle (CAR-54) */
 .price__primary {
   font-weight: 700;
+}
+
+/* An amount and its unit never split; the (secondary) figure drops below as one piece. */
+.price > * {
+  white-space: nowrap;
 }
 
 .price__secondary {
@@ -2499,14 +4003,51 @@ select:focus {
     animation: none;
   }
 
+  /* CAR-72: both indicators stop moving but are still shown, as static dots, so
+     "something is happening" survives. The banner and the "Thinking..." bubble
+     keep their own words (and the banner its role="status"). */
+  .cold-start-banner__spinner {
+    animation: none;
+    width: 18px;
+    height: 4px;
+    border: 0;
+    border-radius: 0;
+    background: radial-gradient(circle, var(--color-on-accent) 1.75px, transparent 2px) 0 0 / 6px 4px repeat-x;
+  }
+
+  .advisor-typing span {
+    animation: none;
+  }
+
+  .advisor-typing span:nth-child(1) {
+    opacity: 0.5;
+  }
+
+  .advisor-typing span:nth-child(2) {
+    opacity: 0.75;
+  }
+
+  .advisor-typing span:nth-child(3) {
+    opacity: 1;
+  }
+
   .skeleton-bar {
     animation: none;
+  }
+
+  /* Still shown while loading, but static: half the bar in the accent colour,
+     half dark track, so it stays visible on the nav and on the cream page
+     (a solid accent bar would be only about 2:1 against cream). */
+  .screen-loading-bar__fill {
+    animation: none;
+    width: 50%;
   }
 }
 
 /* A field with an error (a required field left empty on submit, or an invalid value) */
 input[aria-invalid="true"],
-select[aria-invalid="true"] {
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
   outline: 2px solid var(--color-danger);
   outline-offset: 1px;
   background-color: rgba(179, 38, 30, 0.06);
@@ -2527,4 +4068,161 @@ select[aria-invalid="true"] {
 .form-actions .btn-block {
   flex: 1;
   width: auto;
+}
+
+/* CAR-76: icons. The base class for every <Icon> (components/icons.jsx): one stroke weight, sits on the
+   text baseline when inline, never shrinks inside a flex row. */
+.icon {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: -0.2em;
+  stroke-width: var(--icon-stroke);
+}
+
+.icon--turn {
+  transform: rotate(90deg);
+}
+
+.icon--route {
+  margin: 0 0.35em;
+}
+
+/* Tiles that hold an icon share one tint, and the icon takes the AA-safe accent text colour. */
+.scan-card__icon,
+.dashboard-tile__icon,
+.landing-feature-card__icon,
+.landing-pillar__icon,
+.car-profile__field-icon {
+  background-color: var(--color-icon-tile);
+  color: var(--color-accent-text);
+}
+
+.trip-result__icon {
+  color: var(--color-accent-text);
+}
+
+/* The Advisor's play marks are solid triangles. */
+.advisor-video-card__play .icon,
+.advisor-video-card__cta .icon {
+  fill: currentColor;
+}
+
+/* The Landing hero's small inline icons line up with their text. */
+.landing-trust-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Holds the place of the lazy Landing sections: a full screen tall, so the footer starts below the
+   fold while they load and nothing visible jumps when they arrive. */
+.landing-sections-placeholder {
+  min-height: 100vh;
+}
+
+/* CAR-75: what moves, and nothing else (the looping loading indicators above are the other animations).
+   Money, km, km/L, percentages and advice text are never animated themselves: the page and the cards
+   only fade, and motionCss.test.js fails if a rule animates them. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The menu rises 4 px as it fades in. It uses the `translate` property, not `transform`, so it
+   does not replace the desktop menu's translateX(-50%) centring. */
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+/* Page fade: the screen of a new route fades in, after an in-app navigation only (App.jsx marks <html data-routed>;
+   on a fresh load the fade would delay the largest contentful paint by its duration). Not the footer, and not the
+   loading skeleton. */
+:root[data-routed] .app-main > :not(.site-footer):not(.route-loading) {
+  animation: fade-in var(--motion-slow) var(--ease-out) backwards;
+}
+
+/* Card entrance (CAR-79): the Dashboard's hero and the three lower cards fade in one after another, 40 ms apart
+   (--i is set on the lower cards in DashboardPage.jsx; the hero has none, so it is first), after an in-app
+   navigation only. */
+:root[data-routed] .dashboard-hero, :root[data-routed] .dashboard-lower__card {
+  animation: fade-in var(--motion-slow) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+
+/* Hover states: buttons change colour smoothly; the two kinds of card that invite a click lift 2 px. */
+.btn-primary,
+.btn-secondary,
+.btn-accent,
+.site-nav__logout,
+.site-nav__auth-link {
+  transition:
+    background-color var(--motion-fast) var(--ease-in-out),
+    border-color var(--motion-fast) var(--ease-in-out),
+    color var(--motion-fast) var(--ease-in-out),
+    opacity var(--motion-fast) var(--ease-in-out);
+}
+
+.dashboard-action,
+.landing-feature-card {
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
+}
+
+.dashboard-action:hover,
+.dashboard-action:focus-visible,
+.landing-feature-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(43, 43, 43, 0.1);
+}
+
+/* Menus: the My Car dropdown fades in. (The mobile panel's own transition is in the 860 px block.) */
+.site-nav__menu-list {
+  animation: menu-in var(--motion-base) var(--ease-out);
+}
+
+/* Reduced motion: everything above is off, and the information stays (a loading state is still shown by
+   its static form above). */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-routed] .app-main > :not(.site-footer):not(.route-loading),
+  :root[data-routed] .dashboard-hero, :root[data-routed] .dashboard-lower__card,
+  .site-nav__menu-list {
+    animation: none;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-accent,
+  .site-nav,
+  .site-nav__logout,
+  .site-nav__auth-link,
+  .dashboard-action,
+  .landing-feature-card {
+    transition: none;
+  }
+
+  .dashboard-action:hover,
+  .dashboard-action:focus-visible,
+  .landing-feature-card:hover {
+    transform: none;
+  }
+}
+
+/* Reduced motion, safety net: any animation or transition not listed above (a new one, or a library's)
+   becomes effectively instant and runs once. The specific rules above keep a static equivalent where one
+   is needed; this catches the rest. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
 }

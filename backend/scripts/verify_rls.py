@@ -12,6 +12,26 @@ uses — that:
   9. fuel_prices is service-role only,
  10. fuel_logs (CAR-53): owner-only read/insert, no cross-user car references, no
      edit/delete, nothing for anonymous visitors, and the database's own input limits.
+     CAR-61 adds the optional odometer_km column: null still accepted, 1-2,000,000
+     whole km only, and the same owner-only / no-edit rules apply to it.
+ 11. maintenance_items / maintenance_records (CAR-62): owner-only read; an item only
+     on the caller's own car, a completion only on the caller's own item; items can
+     be edited (only name/intervals/baseline/notes, never owner or car) and deleted
+     by their owner; completions can be deleted (undo) but never edited, by anyone;
+     nothing for anonymous visitors; and the database's own input limits.
+ 12. car_expenses (CAR-64): owner-only read; an expense only on the caller's own car;
+     the owner may delete one but nobody can edit one; nothing for anonymous visitors;
+     the database's own limits, including the fixed category list.
+ 13. api_limits / api_usage / api_usage_global (AI usage limiting, no Jira task yet):
+     unlike every table above, these have NO owner at all -- RLS is on with zero
+     policies, so a logged-in user gets exactly the same (total) refusal as anon.
+     Only the backend's service-role key, which bypasses RLS, can read or write them.
+ 14. record-photos (Step 3): maintenance photos and expense receipts. The owner adds a row
+     (exact canonical path only), uploads, reads through a 5-minute signed URL, and can
+     remove a file after its row is gone; odd paths, a 4th photo, a 2nd receipt, edits,
+     overwrites, over-2-MB and non-JPEG files, the public URL, the 101st photo, user B and
+     anonymous visitors are all refused; undoing a completion and deleting a car queue
+     every path, and the drainer removes the files and empties the queue.
 It also asserts the key shipped to the browser is the `anon` key.
 Everything it creates is deleted at the end. Exit code is 1 on any gap.
 
@@ -92,6 +112,8 @@ def affected(r):
 
 
 A = B = None
+extra_users = []  # section 14's third user (the 100-photo cap)
+uploaded_paths = []  # every file section 14 put in record-photos, removed at the end
 try:
     A, B = make_user("a"), make_user("b")
     # Seed each user's rows with the service role (the backend writes trips/advisor rows this way).
@@ -277,14 +299,437 @@ try:
         check(f"the database rejects a fill-up with {label}", r.status_code in (400, 409), f"-> {r.status_code} {r.text[:70]}")
     r = as_(A, "POST", "fuel_logs", json={**good, "liters": 200, "cost_amount": 0.01})
     works("boundary values are accepted (200 L, 0.01 cost)", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
-finally:
+
+    print("    -- odometer_km (CAR-61): optional, whole km, 1 to 2,000,000; same owner-only rules --")
+    r = as_(A, "POST", "fuel_logs", json={**good, "odometer_km": 84250})
+    works("A logs a fill-up WITH an odometer reading", r.status_code == 201 and r.json()[0].get("odometer_km") == 84250, f"-> {r.status_code} {r.text[:70]}")
+    odo_row = r.json()[0]["id"] if r.status_code == 201 else None
+    r = as_(A, "POST", "fuel_logs", json={**good, "odometer_km": None})
+    works("a fill-up with no odometer reading (like every older row) is still accepted", r.status_code == 201, f"-> {r.status_code}")
+    r = as_(A, "POST", "fuel_logs", json={**good, "odometer_km": 2000000})
+    works("boundary odometer 2,000,000 km is accepted", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+    for label, value in [("0 km", 0), ("a negative reading", -1), ("above the 2,000,000 km ceiling", 2000001),
+                         ("a decimal reading", 84250.5), ("text", "84k")]:
+        r = as_(A, "POST", "fuel_logs", json={**good, "odometer_km": value})
+        check(f"the database rejects an odometer of {label}", r.status_code in (400, 409), f"-> {r.status_code} {r.text[:70]}")
+    r = as_(B, "POST", "fuel_logs", json={**good, "user_id": B["id"], "odometer_km": 90000})
+    check("B logs an odometer reading against A's car_id", r.status_code >= 400, f"-> {r.status_code} (row created!)" if r.status_code < 300 else "")
+    r = as_(B, "GET", f"fuel_logs?select=odometer_km&id=eq.{odo_row}")
+    check("B reads A's odometer reading", affected(r) == 0, f"-> {r.status_code} {r.text[:60]}")
+    r = as_(A, "PATCH", f"fuel_logs?id=eq.{odo_row}", json={"odometer_km": 1})
+    check("even the OWNER cannot change a saved odometer reading", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(B, "PATCH", f"fuel_logs?id=eq.{odo_row}", json={"odometer_km": 1})
+    check("B changes A's odometer reading", affected(r) in (0, None), f"-> {r.status_code}")
+    still = svc("GET", f"fuel_logs?id=eq.{odo_row}&select=odometer_km").json()
+    check("A's odometer reading is unchanged after both attempts (service role)", still == [{"odometer_km": 84250}], str(still))
+
+    print("\n== 11. maintenance_items / maintenance_records (CAR-62) ==")
+    item_body = {"name": "Oil change", "interval_km": 5000, "interval_months": 6, "baseline_date": "2026-09-01", "baseline_km": 84000}
     for u in (A, B):
+        u["item"] = svc("POST", "maintenance_items", json={"user_id": u["id"], "car_id": u["car"], **item_body}).json()[0]["id"]
+        u["record"] = svc("POST", "maintenance_records", json={"user_id": u["id"], "item_id": u["item"], "done_on": "2026-09-15", "odometer_km": 85000}).json()[0]["id"]
+
+    print("    -- positive controls: the owner can do everything the page needs --")
+    r = as_(A, "POST", "maintenance_items", json={"user_id": A["id"], "car_id": A["car"], "name": "Mecanique", "interval_months": 12, "baseline_date": "2026-01-10"})
+    works("A adds a date-only item to HIS car", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+    tmp_item = r.json()[0]["id"] if r.status_code == 201 else None
+    r = as_(A, "PATCH", f"maintenance_items?id=eq.{tmp_item}", json={"name": "Mecanique inspection", "interval_months": 11, "notes": "Bring the papers"})
+    works("A edits HIS item's name, interval and notes", affected(r) == 1, f"-> {r.status_code} {r.text[:70]}")
+    r = as_(A, "POST", "maintenance_records", json={"user_id": A["id"], "item_id": tmp_item, "done_on": "2026-10-01", "note": "All good"})
+    works("A marks HIS item as done (a completion with no odometer)", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+    tmp_record = r.json()[0]["id"] if r.status_code == 201 else None
+    r = as_(A, "GET", f"maintenance_items?select=id,maintenance_records(id)&id=eq.{A['item']}")
+    works("A reads HIS item with its history (embedded)", affected(r) == 1 and len(r.json()[0]["maintenance_records"]) == 1, f"-> {r.status_code} {r.text[:70]}")
+    r = as_(A, "DELETE", f"maintenance_records?id=eq.{tmp_record}")
+    works("A deletes (undoes) HIS OWN completion", affected(r) == 1, f"-> {r.status_code}")
+    r = as_(A, "DELETE", f"maintenance_items?id=eq.{tmp_item}")
+    works("A deletes HIS item", affected(r) == 1, f"-> {r.status_code}")
+
+    print("    -- user B against user A's maintenance data --")
+    r = as_(B, "GET", f"maintenance_items?select=*&id=eq.{A['item']}")
+    check("B reads A's maintenance item by id", affected(r) == 0, f"-> {r.status_code} {r.text[:60]}")
+    r = as_(B, "GET", f"maintenance_items?select=*&car_id=eq.{A['car']}")
+    check("B lists maintenance items filtered by A's car_id", affected(r) == 0, f"-> {r.status_code}")
+    r = as_(B, "GET", f"maintenance_records?select=*&id=eq.{A['record']}")
+    check("B reads A's completion by id", affected(r) == 0, f"-> {r.status_code}")
+    for table in ("maintenance_items", "maintenance_records"):
+        r = as_(B, "GET", f"{table}?select=*")
+        rows = r.json() if r.status_code == 200 else []
+        check(f"B's full {table} listing contains none of A's data ({len(rows)} rows visible, all B's)", not [x for x in rows if A["id"] in json.dumps(x)])
+    r = as_(B, "GET", f"cars?select=id,maintenance_items(id,maintenance_records(id))&id=eq.{A['car']}")
+    check("B reads A's items/history through an embedded join (cars -> items -> records)", affected(r) == 0)
+    r = as_(B, "POST", "maintenance_items", json={"user_id": A["id"], "car_id": A["car"], **item_body})
+    check("B inserts an item owned by A", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "POST", "maintenance_items", json={"user_id": B["id"], "car_id": A["car"], **item_body})
+    check("B attaches HIS item to A's car (cross-user reference)", r.status_code >= 400, f"-> {r.status_code} (row created!)" if r.status_code < 300 else "")
+    r = as_(B, "PATCH", f"maintenance_items?id=eq.{A['item']}", json={"name": "HACKED"})
+    check("B edits A's item", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(B, "PATCH", f"maintenance_items?id=eq.{B['item']}", json={"car_id": A["car"]})
+    check("B moves HIS item onto A's car", affected(r) in (0, None) or r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "PATCH", f"maintenance_items?id=eq.{B['item']}", json={"user_id": A["id"]})
+    check("B hands HIS item to A", affected(r) in (0, None) or r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "DELETE", f"maintenance_items?id=eq.{A['item']}")
+    check("B deletes A's item", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(B, "POST", "maintenance_records", json={"user_id": B["id"], "item_id": A["item"], "done_on": "2026-10-01"})
+    check("B records a completion on A's item", r.status_code >= 400, f"-> {r.status_code} (row created!)" if r.status_code < 300 else "")
+    r = as_(B, "POST", "maintenance_records", json={"user_id": A["id"], "item_id": A["item"], "done_on": "2026-10-01"})
+    check("B inserts a completion owned by A", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "DELETE", f"maintenance_records?id=eq.{A['record']}")
+    check("B deletes A's completion", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(B, "PATCH", f"maintenance_records?id=eq.{A['record']}", json={"done_on": "2020-01-01"})
+    check("B edits A's completion", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(A, "PATCH", f"maintenance_records?id=eq.{A['record']}", json={"done_on": "2020-01-01", "odometer_km": 1})
+    check("even the OWNER cannot edit a completion (undo = delete, never rewrite)", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(A, "PATCH", f"maintenance_records?id=eq.{A['record']}", json={"item_id": B["item"]})
+    check("the owner cannot move a completion onto another item", affected(r) in (0, None), f"-> {r.status_code}")
+    item_now = svc("GET", f"maintenance_items?id=eq.{A['item']}&select=name,car_id,user_id").json()
+    check("A's item is unchanged after B's attempts (service role)", item_now == [{"name": "Oil change", "car_id": A["car"], "user_id": A["id"]}], str(item_now))
+    rec_now = svc("GET", f"maintenance_records?id=eq.{A['record']}&select=done_on,odometer_km,item_id").json()
+    check("A's completion is unchanged after every edit attempt (service role)", rec_now == [{"done_on": "2026-09-15", "odometer_km": 85000, "item_id": A["item"]}], str(rec_now))
+    for table, body in [("maintenance_items", {"user_id": A["id"], "car_id": A["car"], **item_body}),
+                        ("maintenance_records", {"user_id": A["id"], "item_id": A["item"], "done_on": "2026-10-01"})]:
+        r = as_(None, "GET", f"{table}?select=*")
+        check(f"anon reads {table}", affected(r) in (0, None), f"-> {r.status_code}")
+        r = as_(None, "POST", table, json=body)
+        check(f"anon inserts into {table}", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(None, "DELETE", f"maintenance_records?id=eq.{A['record']}")
+    check("anon deletes a completion", affected(r) in (0, None), f"-> {r.status_code}")
+
+    print("    -- the database's own input limits --")
+    good_item = {"user_id": A["id"], "car_id": A["car"], **item_body}
+    for label, patch in [
+        ("a blank name", {"name": "   "}), ("a 61-character name", {"name": "x" * 61}),
+        ("no interval at all", {"interval_km": None, "interval_months": None}),
+        ("interval_km 99", {"interval_km": 99}), ("interval_km 200,001", {"interval_km": 200001}),
+        ("interval_months 0", {"interval_months": 0}), ("interval_months 121", {"interval_months": 121}),
+        ("a km interval with no baseline km", {"baseline_km": None}),
+        ("baseline km 0", {"baseline_km": 0}), ("baseline km 2,000,001", {"baseline_km": 2000001}),
+        ("a baseline date before 2000", {"baseline_date": "1999-12-31"}), ("no baseline date", {"baseline_date": None}),
+        ("501-character notes", {"notes": "x" * 501}),
+    ]:
+        r = as_(A, "POST", "maintenance_items", json={**good_item, **patch})
+        check(f"the database rejects an item with {label}", r.status_code in (400, 409), f"-> {r.status_code} {r.text[:70]}")
+    for label, patch in [("name at 60 characters", {"name": "x" * 60}), ("interval_km 100", {"interval_km": 100}),
+                         ("interval_km 200,000", {"interval_km": 200000}), ("interval_months 1", {"interval_months": 1}), ("interval_months 120", {"interval_months": 120}),
+                         ("a date-only item with no baseline km", {"interval_km": None, "baseline_km": None})]:
+        r = as_(A, "POST", "maintenance_items", json={**good_item, **patch})
+        works(f"boundary accepted: {label}", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+    good_record = {"user_id": A["id"], "item_id": A["item"], "done_on": "2026-10-01"}
+    for label, patch in [("a date before 2000", {"done_on": "1999-12-31"}), ("no date", {"done_on": None}),
+                         ("odometer 0", {"odometer_km": 0}), ("odometer 2,000,001", {"odometer_km": 2000001}),
+                         ("a 501-character note", {"note": "x" * 501}),
+                         ("a cost (costs belong to CAR-64)", {"cost_amount": 10})]:
+        r = as_(A, "POST", "maintenance_records", json={**good_record, **patch})
+        check(f"the database rejects a completion with {label}", r.status_code in (400, 409), f"-> {r.status_code} {r.text[:70]}")
+
+    print("\n== 12. car_expenses (CAR-64) ==")
+    expense_body = {"spent_on": "2026-10-05", "category": "parking", "amount": 5, "currency": "USD"}
+    for u in (A, B):
+        u["expense"] = svc("POST", "car_expenses", json={"user_id": u["id"], "car_id": u["car"], **expense_body}).json()[0]["id"]
+
+    print("    -- positive controls --")
+    r = as_(A, "POST", "car_expenses", json={"user_id": A["id"], "car_id": A["car"], "spent_on": "2026-10-10", "category": "insurance", "amount": 450000, "currency": "LBP", "note": "Yearly"})
+    works("A adds an expense (in LBP) to HIS car", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+    tmp_expense = r.json()[0]["id"] if r.status_code == 201 else None
+    r = as_(A, "GET", f"car_expenses?select=id&car_id=eq.{A['car']}")
+    works("A reads HIS car's expenses (2 = one seeded + one just added)", affected(r) == 2, f"-> {r.status_code} rows={affected(r)}")
+    r = as_(A, "DELETE", f"car_expenses?id=eq.{tmp_expense}")
+    works("A deletes HIS OWN expense", affected(r) == 1, f"-> {r.status_code}")
+
+    print("    -- user B against user A's expenses --")
+    r = as_(B, "GET", f"car_expenses?select=*&id=eq.{A['expense']}")
+    check("B reads A's expense by id", affected(r) == 0, f"-> {r.status_code} {r.text[:60]}")
+    r = as_(B, "GET", f"car_expenses?select=*&car_id=eq.{A['car']}")
+    check("B lists expenses filtered by A's car_id", affected(r) == 0, f"-> {r.status_code}")
+    r = as_(B, "GET", "car_expenses?select=*")
+    rows = r.json() if r.status_code == 200 else []
+    check(f"B's full car_expenses listing contains none of A's data ({len(rows)} rows visible, all B's)", not [x for x in rows if A["id"] in json.dumps(x)])
+    r = as_(B, "GET", f"cars?select=id,car_expenses(id,amount)&id=eq.{A['car']}")
+    check("B reads A's expenses through an embedded join (cars -> car_expenses)", affected(r) == 0)
+    r = as_(B, "POST", "car_expenses", json={"user_id": A["id"], "car_id": A["car"], **expense_body})
+    check("B inserts an expense owned by A", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "POST", "car_expenses", json={"user_id": B["id"], "car_id": A["car"], **expense_body})
+    check("B adds HIS expense to A's car (cross-user reference)", r.status_code >= 400, f"-> {r.status_code} (row created!)" if r.status_code < 300 else "")
+    r = as_(B, "DELETE", f"car_expenses?id=eq.{A['expense']}")
+    check("B deletes A's expense", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(B, "PATCH", f"car_expenses?id=eq.{A['expense']}", json={"amount": 1})
+    check("B edits A's expense", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(B, "PATCH", f"car_expenses?id=eq.{B['expense']}", json={"car_id": A["car"]})
+    check("B moves HIS expense onto A's car", affected(r) in (0, None) or r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(A, "PATCH", f"car_expenses?id=eq.{A['expense']}", json={"amount": 1, "category": "other"})
+    check("even the OWNER cannot edit an expense (delete and re-add instead)", affected(r) in (0, None), f"-> {r.status_code}")
+    still = svc("GET", f"car_expenses?id=eq.{A['expense']}&select=amount,category,car_id").json()
+    check("A's expense is unchanged after every edit/delete attempt (service role)",
+          len(still) == 1 and float(still[0]["amount"]) == 5 and still[0]["category"] == "parking" and still[0]["car_id"] == A["car"], str(still))
+    r = as_(None, "GET", "car_expenses?select=*")
+    check("anon reads car_expenses", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(None, "POST", "car_expenses", json={"user_id": A["id"], "car_id": A["car"], **expense_body})
+    check("anon inserts into car_expenses", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(None, "DELETE", f"car_expenses?id=eq.{A['expense']}")
+    check("anon deletes an expense", affected(r) in (0, None), f"-> {r.status_code}")
+
+    print("    -- the database's own input limits --")
+    good_expense = {"user_id": A["id"], "car_id": A["car"], **expense_body}
+    for label, patch in [
+        ("an unknown category", {"category": "snacks"}), ("a category in the wrong case", {"category": "Parking"}),
+        ("a label instead of a key", {"category": "Car wash"}), ("no category", {"category": None}),
+        ("amount 0", {"amount": 0}), ("a negative amount", {"amount": -5}), ("an absurd amount", {"amount": 10**13}),
+        ("no amount", {"amount": None}), ("an unknown currency", {"currency": "EUR"}), ("no currency", {"currency": None}),
+        ("a date before 2000", {"spent_on": "1999-12-31"}), ("no date", {"spent_on": None}),
+        ("a timestamp-looking value with a bad date", {"spent_on": "2026-13-01"}), ("a 301-character note", {"note": "x" * 301}),
+    ]:
+        r = as_(A, "POST", "car_expenses", json={**good_expense, **patch})
+        check(f"the database rejects an expense with {label}", r.status_code in (400, 409), f"-> {r.status_code} {r.text[:70]}")
+    for category in ("repair", "maintenance", "insurance", "registration", "parking", "car_wash", "tolls", "fines", "other"):
+        r = as_(A, "POST", "car_expenses", json={**good_expense, "category": category})
+        works(f"category '{category}' is accepted", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+    r = as_(A, "POST", "car_expenses", json={**good_expense, "amount": 0.01, "note": "x" * 300})
+    works("boundaries accepted (0.01, a 300-character note)", r.status_code == 201, f"-> {r.status_code} {r.text[:70]}")
+
+    print("\n== 13. api_limits / api_usage / api_usage_global (AI usage limiting) ==")
+    rls_probe_feature = f"rls_probe_{uuid.uuid4().hex[:8]}"
+    for table, body in (
+        ("api_limits", {"feature": rls_probe_feature, "per_user_daily": 1}),
+        ("api_usage", {"user_id": A["id"], "feature": rls_probe_feature, "usage_date": "2026-01-01"}),
+        ("api_usage_global", {"feature": rls_probe_feature, "usage_date": "2026-01-01"}),
+    ):
+        for who, label in ((A, "a logged-in user"), (None, "anon")):
+            r = as_(who, "GET", f"{table}?select=*")
+            check(f"{label} reads {table} -> no rows visible", affected(r) in (0, None), f"-> {r.status_code} {r.text[:60]}")
+            r = as_(who, "POST", table, json=body)
+            check(f"{label} inserts into {table} -> refused", r.status_code >= 400, f"-> {r.status_code}")
+    r = svc("GET", f"api_limits?select=feature&feature=eq.{rls_probe_feature}")
+    check("none of the refused inserts above actually created a row", r.json() == [], str(r.json()))
+    print("\n== 14. record-photos: maintenance photos and expense receipts (Step 3) ==")
+    from app.services.storage_cleanup import drain_storage_cleanup  # noqa: E402
+
+    def jpeg_bytes():
+        import io
+        from PIL import Image
+        buffer = io.BytesIO()
+        Image.new("RGB", (24, 24), (30, 120, 60)).save(buffer, "JPEG")
+        return buffer.getvalue()
+
+    JPEG = jpeg_bytes()
+
+    def st(who, method, path, **kw):
+        """A Storage API call as `who` (None = anonymous visitor)."""
+        token = who["tok"] if who else ANON
+        headers = {"apikey": ANON, "Authorization": f"Bearer {token}", **kw.pop("headers", {})}
+        return httpx.request(method, f"{URL}/storage/v1/{path}", headers=headers, timeout=60, **kw)
+
+    def upload(who, path, data=JPEG, content_type="image/jpeg", upsert=False):
+        r = st(who, "POST", f"object/record-photos/{path}", content=data,
+                  headers={"Content-Type": content_type, "x-upsert": "true" if upsert else "false"})
+        if r.status_code == 200:
+            uploaded_paths.append(path)
+        return r
+
+    def objects_in(prefix):
+        """What is really in the bucket under `prefix`, seen with the service key."""
+        r = httpx.post(f"{URL}/storage/v1/object/list/record-photos", headers=ADMIN, json={"prefix": prefix, "limit": 1000}, timeout=60)
+        return [o["name"] for o in r.json()] if r.status_code == 200 else None
+
+    def queued(prefix):
+        return [row["object_path"] for row in svc("GET", f"storage_cleanup_queue?select=object_path&object_path=like.{prefix}*").json()]
+
+    def drain_until_empty(prefix):
+        for _ in range(10):
+            if not queued(prefix):
+                return True
+            drain_storage_cleanup()
+        return not queued(prefix)
+
+    def photo_path(u, record, pid):
+        return f"{u['id']}/maintenance/{record}/{pid}.jpg"
+
+    def new_record(u, item):
+        return svc("POST", "maintenance_records", json={"user_id": u["id"], "item_id": item, "done_on": "2026-10-10"}).json()[0]["id"]
+
+    photo_item = {"name": "Photo test", "interval_months": 6, "baseline_date": "2026-01-01"}
+    for u in (A, B):
+        u["pitem"] = svc("POST", "maintenance_items", json={"user_id": u["id"], "car_id": u["car"], **photo_item}).json()[0]["id"]
+        u["prec"] = new_record(u, u["pitem"])
+        u["pexp"] = svc("POST", "car_expenses", json={"user_id": u["id"], "car_id": u["car"], "spent_on": "2026-10-05", "category": "parking", "amount": 5, "currency": "USD"}).json()[0]["id"]
+
+    print("    -- positive controls --")
+    pid = str(uuid.uuid4())
+    a_path = photo_path(A, A["prec"], pid)
+    r = as_(A, "POST", "maintenance_record_photos", json={"id": pid, "user_id": A["id"], "record_id": A["prec"], "slot": 1, "storage_path": a_path})
+    works("A adds a photo row to HIS completion (canonical path)", r.status_code == 201, f"-> {r.status_code} {r.text[:90]}")
+    r = upload(A, a_path)
+    works("A uploads the file for that row", r.status_code == 200, f"-> {r.status_code} {r.text[:90]}")
+    r = st(A, "POST", f"object/sign/record-photos/{a_path}", json={"expiresIn": 300})
+    signed = r.json().get("signedURL") if r.status_code == 200 else None
+    works("A gets a 5-minute signed URL for HIS file", bool(signed), f"-> {r.status_code} {r.text[:90]}")
+    if signed:
+        r = httpx.get(f"{URL}/storage/v1{signed}", timeout=60)
+        works("the signed URL serves the JPEG", r.status_code == 200 and r.content == JPEG, f"-> {r.status_code}")
+    r = st(A, "POST", "object/list/record-photos", json={"prefix": f"{A['id']}/maintenance/{A['prec']}", "limit": 10})
+    works("A lists HIS folder and sees the file", r.status_code == 200 and any(o["name"] == f"{pid}.jpg" for o in r.json()), f"-> {r.status_code} {r.text[:90]}")
+    rid = str(uuid.uuid4())
+    a_receipt = f"{A['id']}/receipts/{A['pexp']}/{rid}.jpg"
+    r = as_(A, "POST", "car_expense_receipts", json={"id": rid, "user_id": A["id"], "expense_id": A["pexp"], "storage_path": a_receipt})
+    works("A adds a receipt row to HIS expense", r.status_code == 201, f"-> {r.status_code} {r.text[:90]}")
+    r = upload(A, a_receipt)
+    works("A uploads the receipt file", r.status_code == 200, f"-> {r.status_code} {r.text[:90]}")
+
+    print("    -- item (a): the owner removes a file AFTER its row is gone --")
+    tmp_rec = new_record(A, A["pitem"])
+    tid = str(uuid.uuid4())
+    t_path = photo_path(A, tmp_rec, tid)
+    as_(A, "POST", "maintenance_record_photos", json={"id": tid, "user_id": A["id"], "record_id": tmp_rec, "slot": 1, "storage_path": t_path})
+    upload(A, t_path)
+    r = as_(A, "DELETE", f"maintenance_record_photos?id=eq.{tid}")
+    works("A deletes the photo row", affected(r) == 1, f"-> {r.status_code}")
+    works("deleting the row queued its path (service role)", t_path in queued(A["id"]), str(queued(A["id"])))
+    r = st(A, "DELETE", "object/record-photos", json={"prefixes": [t_path]})
+    works("A removes the file after the row is gone (the API returns the removed object)", r.status_code == 200 and len(r.json()) == 1, f"-> {r.status_code} {r.text[:90]}")
+    works("the file is really gone (service role)", objects_in(f"{A['id']}/maintenance/{tmp_rec}") == [], str(objects_in(f"{A['id']}/maintenance/{tmp_rec}")))
+
+    print("    -- the database refuses a bad photo row --")
+    for label, path in [
+        ("'..' in the path", f"{A['id']}/maintenance/{A['prec']}/../{pid}.jpg"),
+        ("'//' in the path", f"{A['id']}//maintenance/{A['prec']}/{{id}}.jpg"),
+        ("an encoded slash (%2F)", f"{A['id']}%2Fmaintenance%2F{A['prec']}%2F{{id}}.jpg"),
+        ("an upper-case uuid", f"{A['id'].upper()}/maintenance/{A['prec']}/{{id}}.jpg"),
+        ("a .png extension", f"{A['id']}/maintenance/{A['prec']}/{{id}}.png"),
+        ("another user's id in the path", f"{B['id']}/maintenance/{A['prec']}/{{id}}.jpg"),
+        ("the receipts folder", f"{A['id']}/receipts/{A['prec']}/{{id}}.jpg"),
+    ]:
+        bad_id = str(uuid.uuid4())
+        r = as_(A, "POST", "maintenance_record_photos", json={"id": bad_id, "user_id": A["id"], "record_id": A["prec"], "slot": 2, "storage_path": path.replace("{id}", bad_id)})
+        check(f"A adds a photo row with {label}", r.status_code >= 400, f"-> {r.status_code} (row created!)")
+    for slot in (2, 3):
+        sid = str(uuid.uuid4())
+        r = as_(A, "POST", "maintenance_record_photos", json={"id": sid, "user_id": A["id"], "record_id": A["prec"], "slot": slot, "storage_path": photo_path(A, A["prec"], sid)})
+        works(f"A adds photo {slot} of 3 to the completion", r.status_code == 201, f"-> {r.status_code} {r.text[:90]}")
+    for label, slot in (("a 4th photo (slot 4)", 4), ("a second photo in a used slot", 2)):
+        sid = str(uuid.uuid4())
+        r = as_(A, "POST", "maintenance_record_photos", json={"id": sid, "user_id": A["id"], "record_id": A["prec"], "slot": slot, "storage_path": photo_path(A, A["prec"], sid)})
+        check(f"A adds {label} to one completion", r.status_code >= 400, f"-> {r.status_code}")
+    rid2 = str(uuid.uuid4())
+    r = as_(A, "POST", "car_expense_receipts", json={"id": rid2, "user_id": A["id"], "expense_id": A["pexp"], "storage_path": f"{A['id']}/receipts/{A['pexp']}/{rid2}.jpg"})
+    check("A adds a second receipt to one expense", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(A, "PATCH", f"maintenance_record_photos?id=eq.{pid}", json={"slot": 3})
+    check("even the OWNER cannot edit a photo row", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(A, "PATCH", f"car_expense_receipts?id=eq.{rid}", json={"storage_path": "x"})
+    check("even the OWNER cannot edit a receipt row", affected(r) in (0, None), f"-> {r.status_code}")
+
+    print("    -- user B against user A --")
+    bid = str(uuid.uuid4())
+    r = as_(B, "POST", "maintenance_record_photos", json={"id": bid, "user_id": A["id"], "record_id": A["prec"], "slot": 2, "storage_path": photo_path(A, A["prec"], bid)})
+    check("B adds a photo row with user_id = A", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "POST", "maintenance_record_photos", json={"id": bid, "user_id": B["id"], "record_id": A["prec"], "slot": 2, "storage_path": photo_path(B, A["prec"], bid)})
+    check("B adds HIS photo row to A's completion", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "POST", "car_expense_receipts", json={"id": bid, "user_id": B["id"], "expense_id": A["pexp"], "storage_path": f"{B['id']}/receipts/{A['pexp']}/{bid}.jpg"})
+    check("B adds a receipt to A's expense", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(B, "GET", f"maintenance_record_photos?select=*&id=eq.{pid}")
+    check("B reads A's photo row", affected(r) == 0, f"-> {r.status_code} {r.text[:60]}")
+    r = upload(B, a_path, upsert=True)
+    check("B overwrites A's file", r.status_code >= 400, f"-> {r.status_code}")
+    r = upload(B, photo_path(A, A["prec"], str(uuid.uuid4())))
+    check("B uploads a new file into A's folder", r.status_code >= 400, f"-> {r.status_code}")
+    r = upload(B, photo_path(B, B["prec"], str(uuid.uuid4())))
+    check("B uploads into HIS OWN folder with no matching row", r.status_code >= 400, f"-> {r.status_code}")
+    r = st(B, "POST", "object/list/record-photos", json={"prefix": f"{A['id']}/maintenance/{A['prec']}", "limit": 10})
+    check("B lists A's folder -> nothing", r.status_code != 200 or r.json() == [], f"-> {r.status_code} {r.text[:90]}")
+    r = st(B, "POST", f"object/sign/record-photos/{a_path}", json={"expiresIn": 300})
+    check("B gets a signed URL for A's file", r.status_code >= 400, f"-> {r.status_code} {r.text[:90]}")
+    r = st(B, "GET", f"object/authenticated/record-photos/{a_path}")
+    check("B downloads A's file", r.status_code >= 400, f"-> {r.status_code}")
+    r = st(B, "DELETE", "object/record-photos", json={"prefixes": [a_path]})
+    check("B deletes A's file (API answer)", r.status_code >= 400 or r.json() == [], f"-> {r.status_code} {r.text[:90]}")
+    check("A's file is still there after B's attempts (service role)", f"{pid}.jpg" in (objects_in(f"{A['id']}/maintenance/{A['prec']}") or []))
+
+    print("    -- the owner and the bucket's own limits --")
+    r = upload(A, a_path)
+    check("A uploads over HIS existing file (no overwrite)", r.status_code >= 400, f"-> {r.status_code}")
+    r = upload(A, a_path, upsert=True)
+    check("A upserts over HIS existing file (no UPDATE policy)", r.status_code >= 400, f"-> {r.status_code}")
+    lim_rec = new_record(A, A["pitem"])
+    big_id, png_id = str(uuid.uuid4()), str(uuid.uuid4())
+    for slot, xid in ((1, big_id), (2, png_id)):
+        as_(A, "POST", "maintenance_record_photos", json={"id": xid, "user_id": A["id"], "record_id": lim_rec, "slot": slot, "storage_path": photo_path(A, lim_rec, xid)})
+    r = upload(A, photo_path(A, lim_rec, big_id), data=JPEG + b"\0" * (2 * 1024 * 1024))
+    check("the bucket refuses a file over 2 MB", r.status_code >= 400, f"-> {r.status_code} {r.text[:90]}")
+    r = upload(A, photo_path(A, lim_rec, png_id), content_type="image/png")
+    check("the bucket refuses a non-JPEG file", r.status_code >= 400, f"-> {r.status_code} {r.text[:90]}")
+    r = httpx.get(f"{URL}/storage/v1/object/public/record-photos/{a_path}", timeout=60)
+    check("the bucket's public URL serves nothing (private bucket)", r.status_code >= 400, f"-> {r.status_code}")
+
+    print("    -- anonymous visitors --")
+    r = st(None, "POST", "object/list/record-photos", json={"prefix": A["id"], "limit": 10})
+    check("anon lists the bucket", r.status_code != 200 or r.json() == [], f"-> {r.status_code} {r.text[:60]}")
+    r = st(None, "GET", f"object/authenticated/record-photos/{a_path}")
+    check("anon reads A's file", r.status_code >= 400, f"-> {r.status_code}")
+    r = upload(None, photo_path(A, A["prec"], str(uuid.uuid4())))
+    check("anon uploads a file", r.status_code >= 400, f"-> {r.status_code}")
+    r = st(None, "DELETE", "object/record-photos", json={"prefixes": [a_path]})
+    check("anon deletes A's file", r.status_code >= 400 or r.json() == [], f"-> {r.status_code}")
+    r = as_(None, "POST", "maintenance_record_photos", json={"user_id": A["id"], "record_id": A["prec"], "slot": 2, "storage_path": "x"})
+    check("anon inserts a photo row", r.status_code >= 400, f"-> {r.status_code}")
+    r = as_(None, "GET", "car_expense_receipts?select=*")
+    check("anon reads receipt rows", affected(r) in (0, None), f"-> {r.status_code}")
+
+    print("    -- the 100-photo cap (photos + receipts, per user) --")
+    C = make_user("c")
+    extra_users.append(C)
+    C["car"] = svc("POST", "cars", json={"user_id": C["id"], "make": "Kia", "model": "Rio", "year": 2015, "fuel_type": "Gasoline"}).json()[0]["id"]
+    c_item = svc("POST", "maintenance_items", json={"user_id": C["id"], "car_id": C["car"], **photo_item}).json()[0]["id"]
+    c_records = svc("POST", "maintenance_records", json=[{"user_id": C["id"], "item_id": c_item, "done_on": "2026-10-10"} for _ in range(34)]).json()
+    seed = []
+    for n in range(99):
+        record = c_records[n // 3]["id"]
+        cid = str(uuid.uuid4())
+        seed.append({"id": cid, "user_id": C["id"], "record_id": record, "slot": n % 3 + 1, "storage_path": photo_path(C, record, cid)})
+    r = svc("POST", "maintenance_record_photos", json=seed)
+    works("(service role) C is seeded with 99 photo rows", r.status_code == 201, f"-> {r.status_code} {r.text[:90]}")
+    last_record = c_records[33]["id"]
+    for label, slot, ok in (("the 100th photo is accepted", 1, True), ("the 101st photo is refused (soft cap)", 2, False)):
+        cid = str(uuid.uuid4())
+        r = as_(C, "POST", "maintenance_record_photos", json={"id": cid, "user_id": C["id"], "record_id": last_record, "slot": slot, "storage_path": photo_path(C, last_record, cid)})
+        (works if ok else check)(label, (r.status_code == 201) if ok else (r.status_code >= 400), f"-> {r.status_code} {r.text[:90]}")
+
+    print("    -- Undo: undoing a completion queues its files, the drainer removes them --")
+    uid_ = str(uuid.uuid4())
+    b_path = photo_path(B, B["prec"], uid_)
+    as_(B, "POST", "maintenance_record_photos", json={"id": uid_, "user_id": B["id"], "record_id": B["prec"], "slot": 1, "storage_path": b_path})
+    works("B uploads a photo for HIS completion", upload(B, b_path).status_code == 200)
+    r = as_(B, "DELETE", f"maintenance_records?id=eq.{B['prec']}")
+    works("B undoes (deletes) the completion", affected(r) == 1, f"-> {r.status_code}")
+    works("the photo row went with it (cascade) and its path is queued", b_path in queued(B["id"]), str(queued(B["id"])))
+    works("the drainer empties B's queue", drain_until_empty(B["id"]), str(queued(B["id"])))
+    works("B's file is gone from the bucket (service role)", objects_in(f"{B['id']}/maintenance/{B['prec']}") == [], str(objects_in(f"{B['id']}/maintenance/{B['prec']}")))
+
+    print("    -- deleting a car cascades items -> completions -> photos and queues every path --")
+    a_paths = sorted(row["storage_path"] for row in svc("GET", f"maintenance_record_photos?select=storage_path&user_id=eq.{A['id']}").json())
+    a_paths += [row["storage_path"] for row in svc("GET", f"car_expense_receipts?select=storage_path&user_id=eq.{A['id']}").json()]
+    r = as_(A, "DELETE", f"cars?id=eq.{A['car']}")
+    works("A deletes HIS car", affected(r) == 1, f"-> {r.status_code}")
+    left_rows = svc("GET", f"maintenance_record_photos?select=id&user_id=eq.{A['id']}").json() + svc("GET", f"car_expense_receipts?select=id&user_id=eq.{A['id']}").json()
+    works("no photo or receipt rows are left for A", left_rows == [], str(left_rows))
+    works(f"every one of A's {len(a_paths)} paths is queued", sorted(a_paths) == sorted(queued(A["id"])), f"{len(queued(A['id']))} queued")
+    works("the drainer empties A's queue", drain_until_empty(A["id"]), f"{len(queued(A['id']))} still queued")
+    works("A's files are gone from the bucket (service role)", objects_in(f"{A['id']}/maintenance/{A['prec']}") == [] and objects_in(f"{A['id']}/receipts/{A['pexp']}") == [])
+
+finally:
+    for u in (A, B, *extra_users):
         if not u:
             continue
-        for table in ("fuel_logs", "advisor_conversations", "trips", "cars"):
+        for table in ("car_expense_receipts", "maintenance_record_photos", "car_expenses", "maintenance_records", "maintenance_items", "fuel_logs", "advisor_conversations", "trips", "cars"):
             svc("DELETE", f"{table}?user_id=eq.{u['id']}")
         svc("DELETE", f"profiles?id=eq.{u['id']}")
         httpx.delete(f"{URL}/auth/v1/admin/users/{u['id']}", headers=ADMIN, timeout=30)
+    # section 13's inserts should all have been refused, but clean up defensively anyway
+    for table in ("api_usage", "api_usage_global", "api_limits"):
+        svc("DELETE", f"{table}?feature=like.rls_probe_*")
+    # section 14: any file still in record-photos, then every queued path for these users
+    if uploaded_paths:
+        httpx.request("DELETE", f"{URL}/storage/v1/object/record-photos", headers=ADMIN, json={"prefixes": uploaded_paths}, timeout=60)
+    for u in (A, B, *extra_users):
+        if u:
+            svc("DELETE", f"storage_cleanup_queue?object_path=like.{u['id']}*")
     # also remove rows created by gap probes that reference the users' cars (cascade handles most)
     print(f"\ncleanup done. RESULT: {passes} blocked as required, {len(gaps)} GAP(S)")
     for g in gaps:

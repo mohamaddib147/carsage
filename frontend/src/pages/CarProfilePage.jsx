@@ -11,7 +11,7 @@
 // `car-photos` Storage bucket, via lib/carPhoto.js — the bucket has no
 // permanent public URL) fills the round identity icon beside the car's
 // name when one is set; with none, that same circle just shows the usual
-// `BrandBadge`/🚗 fallback, same as before this feature existed — no
+// `BrandBadge`/car-icon fallback, same as before this feature existed — no
 // separate photo box is shown at all with no photo. A small camera-icon
 // button on the circle (always present) adds/changes it; a trash-icon
 // button (once a photo exists) removes it. Replacing a photo uploads the
@@ -34,24 +34,17 @@ import { deleteCarPhoto, getCarPhotoError, getCarPhotoUrl, uploadCarPhoto } from
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 import BrandBadge, { hasBrandBadge } from "../theme/BrandBadge.jsx";
+import { Check } from "../components/icons.jsx";
+import { CalendarDays, Camera, Car, Cog, Cylinder, Fuel, Gauge, Hash, IdCard, Repeat, Settings2, Tag, Trash2, Wrench } from "../components/iconsMore.jsx";
 
 /** Small camera icon for the photo overlay's "add/change" button. */
 function CameraIcon({ size = 16 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path d="M4 8h3l2-2h6l2 2h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="12" cy="14" r="3.5" />
-    </svg>
-  );
+  return <Camera size={size} />;
 }
 
 /** Small trash icon for the photo overlay's "remove" button. */
 function TrashIcon({ size = 16 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <Trash2 size={size} />;
 }
 
 const FUEL_TYPE_OPTIONS = [
@@ -81,18 +74,18 @@ const FIELD_LABELS = {
 // never part of the field's text content, so they can't affect the
 // isolated per-field text nodes tests rely on.
 const FIELD_ICONS = {
-  make: "🚗",
-  model: "🏷️",
-  year: "📅",
-  engine_type: "🔧",
-  fuel_type: "⛽",
-  fuel_efficiency: "📊",
-  cylinders: "🛠️",
-  fuel_tank_capacity_liters: "🛢️",
-  drivetrain: "⚙️",
-  transmission: "🔁",
-  license_plate: "🪪",
-  vin: "🔢",
+  make: Car,
+  model: Tag,
+  year: CalendarDays,
+  engine_type: Wrench,
+  fuel_type: Fuel,
+  fuel_efficiency: Gauge,
+  cylinders: Cog,
+  fuel_tank_capacity_liters: Cylinder,
+  drivetrain: Settings2,
+  transmission: Repeat,
+  license_plate: IdCard,
+  vin: Hash,
 };
 
 /** Converts a car row into edit-form string values (never null, for controlled inputs). */
@@ -283,7 +276,7 @@ function CarProfilePage() {
   // CAR-55: viewing a car's profile makes it the active car for site-wide
   // brand theming, same as picking it in a car selector elsewhere.
   useEffect(() => {
-    if (car) setActiveCarId(car.id);
+    if (car) setActiveCarId(car.id, car.make);
   }, [car, setActiveCarId]);
 
   // CAR-58: (re)loads the signed URL whenever the car's stored photo path
@@ -405,10 +398,12 @@ function CarProfilePage() {
     setIsEditing(false);
   }
 
-  /** Deletes the current car (CAR-38). The `trips_car_id_fkey` and
-   * `advisor_conversations_car_id_fkey` foreign keys are CASCADE / SET
-   * NULL respectively, so this car's trip history goes with it — the
-   * confirmation copy below says so. */
+  /** Deletes the current car (CAR-38). Its trips, fuel log entries,
+   * maintenance items (and their history) and expenses go with it through
+   * ON DELETE CASCADE; Advisor conversations are kept (SET NULL). The
+   * confirmation copy below lists all of it, since fuel log entries can't be
+   * deleted any other way. The car's photo file is not covered by any
+   * cascade, so it is removed from Storage once the row is gone. */
   async function handleDelete() {
     setDeleteError("");
     setDeleting(true);
@@ -418,6 +413,7 @@ function CarProfilePage() {
         setDeleteError(describeActionError(error, "Could not delete this car. Please try again."));
         return;
       }
+      await deleteCarPhoto(car.photo_path);
       navigate("/dashboard", { replace: true });
     } finally {
       setDeleting(false);
@@ -481,7 +477,21 @@ function CarProfilePage() {
   }
 
   if (loading) {
-    return <PageShell title="Car Profile" description="Loading your car..." />;
+    return (
+      <PageShell title="Car Profile" description="">
+        <p role="status" className="sr-only">Loading your car...</p>
+        <div className="profile-header" aria-hidden="true">
+          <span className="skeleton-bar skeleton-bar--avatar" />
+          <div className="profile-header__info skeleton-stack">
+            <div className="skeleton-bar skeleton-bar--w-40 skeleton-bar--h-lg" />
+            <div className="skeleton-bar skeleton-bar--w-25 skeleton-bar--h-sm" />
+          </div>
+        </div>
+        <div className="skeleton-stack skeleton-stack--section" aria-hidden="true">
+          <div className="skeleton-bar skeleton-bar--card" />
+        </div>
+      </PageShell>
+    );
   }
 
   if (notFound) {
@@ -716,10 +726,10 @@ function CarProfilePage() {
           ) : hasBrandBadge(car.make) ? (
             <BrandBadge make={car.make} size={32} />
           ) : (
-            <span aria-hidden="true">🚗</span>
+            <Car size={28} />
           )}
           <label
-            className="profile-header__photo-btn profile-header__photo-btn--change"
+            className="overlay-icon-btn overlay-icon-btn--sm overlay-icon-btn--change"
             htmlFor="carPhotoFile"
             aria-label={photoUrl ? "Change photo" : "Add photo"}
             title={photoUrl ? "Change photo" : "Add photo"}
@@ -738,7 +748,7 @@ function CarProfilePage() {
           {photoUrl && (
             <button
               type="button"
-              className="profile-header__photo-btn profile-header__photo-btn--remove"
+              className="overlay-icon-btn overlay-icon-btn--sm overlay-icon-btn--remove"
               onClick={handleRemovePhoto}
               disabled={photoLoading}
               aria-label="Remove photo"
@@ -757,7 +767,9 @@ function CarProfilePage() {
         {allCars.length > 1 && (
           <div className="car-profile__default">
             {isDefault ? (
-              <span className="car-profile__default-badge">✓ Default car</span>
+              <span className="car-profile__default-badge">
+                <Check size={16} /> Default car
+              </span>
             ) : (
               <button
                 type="button"
@@ -783,27 +795,34 @@ function CarProfilePage() {
       <div className="profile-specs-card">
         <h2 className="profile-specs-card__title">Vehicle Specifications</h2>
         <dl className="car-profile__fields">
-          {Object.entries(FIELD_LABELS).map(([field, label]) => (
-            <div key={field} className="car-profile__field">
-              <span className="car-profile__field-icon" aria-hidden="true">
-                {FIELD_ICONS[field]}
-              </span>
-              <div>
-                <dt>{label}</dt>
+          {Object.entries(FIELD_LABELS).map(([field, label]) => {
+            const FieldIcon = FIELD_ICONS[field];
+            // CAR-72/76: a <dl> row is a <div> holding only its <dt> and <dd> (so every
+            // term/value pair is valid). The icon sits inside the <dt>, hidden from
+            // assistive tech, and CSS places it beside the row.
+            return (
+              <div key={field} className="car-profile__field">
+                <dt>
+                  <span className="car-profile__field-icon" aria-hidden="true">
+                    <FieldIcon size={20} />
+                  </span>
+                  {label}
+                </dt>
                 <dd>
                   {car[field] == null || car[field] === "" ? "-" : car[field]}
                 </dd>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </dl>
       </div>
 
       {confirmingDelete ? (
         <div className="profile-delete-confirm">
           <p role="alert">
-            Delete this car? Its trip history will be deleted too, and this
-            can't be undone.
+            Delete this car? This also permanently deletes its trips, fuel log
+            entries, maintenance items and their history, expenses, and photos.
+            Your AI Advisor conversations are kept. This can't be undone.
           </p>
           {deleteError && (
             <p role="alert" className="auth-form__error">

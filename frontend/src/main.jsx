@@ -6,11 +6,18 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import "./fonts.css";
 import "./index.css";
+import "./tailwind.css";
 import App from "./App.jsx";
 import { AuthProvider } from "./auth/AuthContext.jsx";
 import { CurrencyProvider } from "./currency/CurrencyContext.jsx";
 import { ActiveCarProvider } from "./theme/ActiveCarContext.jsx";
+import { installChunkReloadGuard } from "./lib/chunkReload.js";
+
+// After a new deploy, a tab opened before it can't download the old hashed
+// chunks; reload once to pick up the new version (see lib/chunkReload.js).
+installChunkReloadGuard();
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>

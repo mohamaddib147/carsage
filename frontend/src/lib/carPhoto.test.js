@@ -1,5 +1,4 @@
-// Tests for CAR-58's car photo helpers: client-side validation boundaries
-// (mirrors limits.test.js's getRegistrationImageError shape), and
+// Tests for CAR-58's car photo helpers: client-side validation boundaries, and
 // upload/read/delete against a mocked supabase.storage.from(...) chain so
 // no real network/Storage calls happen.
 

@@ -10,79 +10,14 @@
 // Copy elsewhere is rewritten to only claim what CarSage actually does
 // (no invented pricing/trial/diagnostics claims).
 
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import Logo from "../components/Logo.jsx";
 import { useAuthStatus } from "../auth/AuthContext.jsx";
+import { ArrowRight, Check, Sparkle } from "../components/icons.jsx";
 
-const FEATURES = [
-  {
-    icon: "🚗",
-    eyebrow: "Digital Garage",
-    title: "Car Profile",
-    description:
-      "Add your car once (make, model, fuel type, and specs), and CarSage remembers it for every trip you plan.",
-    previewLabel: "2020 Toyota Corolla",
-    previewMeta: "Gasoline · 12.4 km/L",
-  },
-  {
-    icon: "🧭",
-    eyebrow: "Live Route Costing",
-    title: "Trip Planner",
-    description:
-      "Enter a destination and get real-world fuel cost and traffic-adjusted travel time, using live Google Maps data and Lebanon's current fuel prices.",
-    previewLabel: "Beirut → Byblos",
-    previewMeta: "$4.10 · 38 min · 42 km",
-  },
-  {
-    icon: "💬",
-    eyebrow: "Smart Advisor",
-    title: "AI Advisor",
-    description:
-      "Describe a car issue in plain language and get clear guidance on whether it's safe to fix yourself or time to see a mechanic.",
-    previewLabel: "“Loose gas cap”",
-    previewMeta: "Advice: safe for DIY inspection",
-  },
-];
-
-const STEPS = [
-  {
-    title: "Add your car",
-    description:
-      "Enter its make, model, year and fuel type, and CarSage fills in specs like fuel efficiency and tank size where it can.",
-  },
-  {
-    title: "Plan a trip",
-    description:
-      "Type a destination and get the estimated fuel cost, distance and traffic-adjusted travel time.",
-  },
-  {
-    title: "Ask the advisor",
-    description:
-      "Describe a car issue in plain language and get a DIY-or-mechanic recommendation with short guidance steps.",
-  },
-];
-
-const PILLARS = [
-  {
-    icon: "🧾",
-    title: "Transparent Estimates",
-    description:
-      "Every fuel cost estimate uses live Google Maps routing and Lebanon's official weekly fuel prices. No guesswork, no hidden markup.",
-  },
-  {
-    icon: "💬",
-    title: "Zero Jargon",
-    description:
-      "Straightforward, plain-language answers. Understand what your car needs without needing an engineering degree.",
-  },
-  {
-    icon: "🔒",
-    title: "Privacy First",
-    description:
-      "Your cars and trips are yours alone. Every record is protected by row-level security scoped to your account.",
-  },
-];
+// Everything below the hero is its own chunk (see LandingSections.jsx).
+const LandingSections = lazy(() => import("./LandingSections.jsx"));
 
 /**
  * Landing screen: hero, feature highlights, a reassurance strip, a
@@ -114,116 +49,54 @@ function LandingPage() {
 
   return (
     <div className="landing-page">
-      {/* Visually hidden — gives the page an accessible top-level heading
-          without duplicating the large hero headline below. */}
-      <h1 className="sr-only">CarSage</h1>
-
       <section className="landing-hero">
         <div className="landing-hero__glow" aria-hidden="true" />
-        <Logo size={104} className="landing-hero__logo" />
-        <div className="landing-eyebrow">
-          <span aria-hidden="true">✦</span>
-          <span>The Mindful Driver&apos;s Co-Pilot</span>
-        </div>
-        <p className="landing-hero__headline">
-          Everything about your car, in one place
+        {/* The brand name is text beside the icon, not pixels inside the
+            artwork, so it is selectable and reads as one word to a screen
+            reader (CAR-80). */}
+        <p className="landing-hero__brand">
+          <Logo size={44} mark />
+          CarSage
         </p>
+        <div className="landing-eyebrow">
+          <Sparkle size={14} />
+          <span>Free car care app for drivers in Lebanon</span>
+        </div>
+        {/* The page's only h1 is the headline a visitor actually reads. */}
+        <h1 className="landing-hero__headline">
+          Know what your car costs, and what it needs next
+        </h1>
         <p className="landing-hero__subtitle">
-          From trip budgets to unexpected engine noises, CarSage simplifies
-          car ownership so you can drive with peace of mind.
+          Plan trips with real fuel costs, log your fill-ups, get service
+          reminders, and ask what that strange noise means. Free, and built
+          around Lebanon&apos;s fuel prices.
         </p>
         <div className="landing-hero__cta-row">
           {primaryCta && (
             <Link className="btn-primary" to={primaryCta.to}>
-              {primaryCta.label} <span aria-hidden="true">→</span>
+              {primaryCta.label} <ArrowRight size={18} />
             </Link>
           )}
           <Link className="btn-secondary" to={{ hash: "#how-it-works" }}>
-            See how it works <span aria-hidden="true">↓</span>
+            See how it works <ArrowRight size={18} className="icon--turn" />
           </Link>
         </div>
         <div className="landing-trust-row">
-          <span>✓ Completely free</span>
-          <span>✓ No credit card required</span>
-          <span>✓ Your data stays private</span>
+          <span>
+            <Check size={14} /> Free to use
+          </span>
+          <span>
+            <Check size={14} /> No credit card
+          </span>
+          <span>
+            <Check size={14} /> We never sell your data
+          </span>
         </div>
       </section>
 
-      <section className="landing-features" id="features">
-        <div className="landing-section-header">
-          <p className="landing-section-header__eyebrow">Designed for clarity</p>
-          <h2>Thoughtful tools for smarter ownership</h2>
-          <p>No technical clutter, just clear answers when you need them.</p>
-        </div>
-        <div className="landing-feature-grid">
-          {FEATURES.map((feature) => (
-            <div key={feature.title} className="landing-feature-card">
-              <div className="landing-feature-card__icon" aria-hidden="true">
-                {feature.icon}
-              </div>
-              <span className="landing-feature-card__eyebrow">
-                {feature.eyebrow}
-              </span>
-              <h3>{feature.title}</h3>
-              <p>{feature.description}</p>
-              <div className="landing-feature-card__preview">
-                <span>{feature.previewLabel}</span>
-                <span className="landing-feature-card__preview-meta">
-                  {feature.previewMeta}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="landing-steps" id="how-it-works">
-        <div className="landing-section-header">
-          <p className="landing-section-header__eyebrow">Three simple steps</p>
-          <h2>How it works</h2>
-        </div>
-        <ol className="landing-steps__list">
-          {STEPS.map((step, index) => (
-            <li key={step.title} className="landing-step">
-              <span className="landing-step__number" aria-hidden="true">
-                {index + 1}
-              </span>
-              <h3>{step.title}</h3>
-              <p>{step.description}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className="landing-pillars">
-        <div className="landing-pillars__grid">
-          {PILLARS.map((pillar) => (
-            <div key={pillar.title} className="landing-pillar">
-              <span className="landing-pillar__icon" aria-hidden="true">
-                {pillar.icon}
-              </span>
-              <div>
-                <h4>{pillar.title}</h4>
-                <p>{pillar.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="landing-closing-cta">
-        <span className="landing-closing-cta__badge">Start your journey today</span>
-        <h2>Ready for a calmer driving experience?</h2>
-        <p>
-          Join drivers who plan trips and manage car issues with total ease,
-          completely free.
-        </p>
-        {primaryCta && (
-          <Link className="btn-accent" to={primaryCta.to}>
-            {primaryCta.label}
-          </Link>
-        )}
-      </section>
+      <Suspense fallback={<div className="landing-sections-placeholder" aria-hidden="true" />}>
+        <LandingSections primaryCta={primaryCta} />
+      </Suspense>
     </div>
   );
 }
