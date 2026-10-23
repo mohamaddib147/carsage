@@ -356,6 +356,10 @@ describe("quick actions and the three lower cards", () => {
     expect(indexCss).toMatch(/\.dashboard-tile__button[^{]*\{[^}]*background-color:\s*transparent[^}]*var\(--color-primary\)/);
   });
 
+  it("keeps the Set up reminders button compact so the Next service tile never grows the hero (CLS)", () => {
+    expect(indexCss).toMatch(/\.dashboard-tile__button \{[^}]*margin-top:[^}]*padding-block:/);
+  });
+
   it("gives each switcher chip a dot in its make's brand accent colour (the default gold for a make with no theme)", async () => {
     mockTables({ cars: [car(1, { make: "Ferrari", model: "488" }), car(2, { make: "Honda", model: "CR-V" }), car(3, { make: "Mazda", model: "MX-5" })] });
     renderAt("/dashboard");

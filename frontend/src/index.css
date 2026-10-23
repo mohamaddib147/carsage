@@ -1647,7 +1647,8 @@ textarea:focus {
 /* The Next service tile's "Set up reminders": a small outline button (btn-secondary--sm, outline look shared with the
    outline quick actions above), quieter than the accent action. */
 .dashboard-tile__button {
-  margin-top: calc(var(--spacing-unit) * 1);
+  margin-top: calc(var(--spacing-unit) * 0.5);
+  padding-block: calc(var(--spacing-unit) * 0.5);
   font-weight: 600;
 }
 
