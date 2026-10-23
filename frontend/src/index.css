@@ -550,15 +550,18 @@ button {
    crop of the source file down to just the gear/tire/wrench circle, no
    baked-in text. Fixed to fill the viewport (inset: 0 + 100vw/100vh) so it
    covers the whole screen on every route; object-fit: cover fills without
-   stretching. Kept at a low opacity since it's now behind every screen's
-   content, not just a slice of empty background. */
+   stretching. Kept at a very low opacity since it's behind every screen's
+   content: 0.035 until the Dashboard fix, when it was still busy behind the
+   heading and body copy there. At 0.02 the Dashboard heading's contrast against
+   the darkest texture pixel behind it went from 8.02:1 to 8.26:1 (7.98 to 8.20
+   at the busiest point of the viewport). */
 .app-background-texture {
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100vh;
   object-fit: cover;
-  opacity: 0.035;
+  opacity: 0.02;
   pointer-events: none;
   z-index: -1;
 }
