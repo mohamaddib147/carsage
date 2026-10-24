@@ -1,5 +1,5 @@
--- NOT YET APPLIED. Proposed on fix/qa-defects; the developer runs it in the Supabase SQL editor, then replaces
--- this line with the date it was run (it will have no migration-history version).
+-- Run by hand by the developer in the Supabase SQL editor on 2026-10-24, so it is NOT in the project's migration
+-- history (there is no version number). Verified afterwards with pg_constraint: cars_vin_format_check exists, NOT VALID.
 -- Apply the files in this folder in filename order — see README.md, "Database setup".
 -- ----------------------------------------------------------------------------------
 -- A VIN is either empty or exactly 17 letters and digits, never I, O or Q, in either case.
