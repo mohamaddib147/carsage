@@ -58,6 +58,37 @@ describe("getOdometerError (hard checks: what the database itself refuses)", () 
   });
 });
 
+describe("getOdometerOrderWarning with allowEqual (Mark as done)", () => {
+  const log = [
+    { id: "a", filled_at: "2026-09-01", created_at: "2026-09-01T09:00:00Z", odometer_km: 84000 },
+    { id: "b", filled_at: "2026-10-10", created_at: "2026-10-10T09:00:00Z", odometer_km: 89100 },
+  ];
+  const lenient = { allowEqual: true };
+
+  it("still warns for a lower reading, with the Fuel Log wording", () => {
+    expect(getOdometerOrderWarning("85000", "2026-10-19", log, lenient)).toBe(
+      "This isn't higher than your previous reading of 89,100 km (10 Oct 2026). Odometers only go up, so check it for a typo.",
+    );
+  });
+
+  it("accepts a reading equal to the previous one (the Fuel Log would warn), and a higher one", () => {
+    expect(getOdometerOrderWarning("89100", "2026-10-19", log)).toMatch(/isn't higher/);
+    expect(getOdometerOrderWarning("89100", "2026-10-19", log, lenient)).toBeUndefined();
+    expect(getOdometerOrderWarning("90000", "2026-10-19", log, lenient)).toBeUndefined();
+  });
+
+  it("accepts a reading equal to a later one, but warns above it", () => {
+    expect(getOdometerOrderWarning("89100", "2026-09-15", log)).toMatch(/isn't lower/);
+    expect(getOdometerOrderWarning("89100", "2026-09-15", log, lenient)).toBeUndefined();
+    expect(getOdometerOrderWarning("89200", "2026-09-15", log, lenient)).toMatch(/isn't lower than your later reading of 89,100 km/);
+  });
+
+  it("says nothing without a reading or without readings to compare with", () => {
+    expect(getOdometerOrderWarning("", "2026-10-19", log, lenient)).toBeUndefined();
+    expect(getOdometerOrderWarning("100", "2026-10-19", [], lenient)).toBeUndefined();
+  });
+});
+
 describe("getOdometerOrderWarning (soft check, overridable with Save anyway)", () => {
   // 750 km on 60 L = 12.5 km/L: a realistic interval, so both readings count.
   const log = [entry("a", 1, 84250), entry("b", 20, 85000, 60)];

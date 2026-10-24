@@ -30,13 +30,12 @@ import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { describeActionError, describeSaveError, LIMITS } from "../lib/limits.js";
 import { formatFillDate } from "../lib/fuelLog.js";
-import { formatKm, latestOdometer } from "../lib/odometer.js";
+import { formatKm, getOdometerOrderWarning, latestOdometer } from "../lib/odometer.js";
 import { addPhoto, MAX_MAINTENANCE_PHOTOS } from "../lib/recordPhotos.js";
 import {
   describeDue,
   describeRemaining,
   getCompletionErrors,
-  getCompletionOdometerWarning,
   getMaintenanceItemErrors,
   itemAnchorId,
   itemFromForm,
@@ -230,6 +229,9 @@ function MaintenancePage() {
   // Photos chosen on the open Mark as done form; attached only after the completion is saved.
   const [pendingPhotos, setPendingPhotos] = useState([]);
   const [actionError, setActionError] = useState("");
+  // The "Mark as done" odometer-order prompt shows while this equals the form's current values (see orderKey), so editing the
+  // date or the reading (or a scan) dismisses it, like the Fuel Log's skipKey.
+  const [orderFor, setOrderFor] = useState(null);
   // QA fix: scrolls the first message into view when a tap on Save stops with one (see lib/scrollToAlert.js).
   const scrollToAlert = useScrollToAlert();
   const [notice, setNotice] = useState("");
@@ -322,6 +324,7 @@ function MaintenancePage() {
     setPanel(null);
     setPanelValues({});
     setPanelErrors({});
+    setOrderFor(null);
     setConfirmUndoId(null);
     setActionError("");
   }
@@ -424,14 +427,33 @@ function MaintenancePage() {
     }
   }
 
-  async function handleMarkDone(event, item) {
+  /** What the "Mark as done" form holds that the odometer-order prompt depends on. */
+  function orderKey(item) {
+    return [item.id, panelValues.doneOn, panelValues.odometer].join("|");
+  }
+
+  /**
+   * Saves a completion. A reading lower than the car's neighbouring Fuel Log readings (the Fuel Log's "Odometers only
+   * go up" check) first shows its warning with a "Save anyway" button, which calls this again with `confirmedOrder`.
+   * @param {Event} event - the form's submit event, or the "Save anyway" click.
+   * @param {object} item - the maintenance item.
+   * @param {{ confirmedOrder?: boolean }} [options]
+   */
+  async function handleMarkDone(event, item, { confirmedOrder = false } = {}) {
     event.preventDefault();
+    const form = event.currentTarget.closest?.("form") ?? event.currentTarget;
     const errors = getCompletionErrors(panelValues, today, item.interval_km != null);
     setPanelErrors(errors);
     if (Object.keys(errors).length > 0) {
-      scrollToAlert(event.currentTarget);
+      scrollToAlert(form);
       return;
     }
+    if (!confirmedOrder && getOdometerOrderWarning(panelValues.odometer, panelValues.doneOn, loaded.readings, { allowEqual: true })) {
+      setOrderFor(orderKey(item));
+      scrollToAlert(form);
+      return;
+    }
+    setOrderFor(null);
     const odometer = String(panelValues.odometer ?? "").trim();
     const note = String(panelValues.note ?? "").trim();
     setBusy(true);
@@ -689,10 +711,18 @@ function MaintenancePage() {
                             onChange={(raw) => setPanelField("odometer", raw)}
                           />
                           {panelErrors.odometer && <p role="alert" className="auth-form__error">{panelErrors.odometer}</p>}
-                          {!panelErrors.odometer && getCompletionOdometerWarning(panelValues.odometer, panelValues.doneOn, reading) && (
-                            <p role="status" className="form-hint form-hint--warning">
-                              {getCompletionOdometerWarning(panelValues.odometer, panelValues.doneOn, reading)}
-                            </p>
+                          {!panelErrors.odometer && orderFor === orderKey(item) && (
+                            <div role="alert" className="fuel-log-order-warning">
+                              <p>{getOdometerOrderWarning(panelValues.odometer, panelValues.doneOn, loaded.readings, { allowEqual: true })}</p>
+                              <button
+                                type="button"
+                                className="fuel-log-order-warning__btn"
+                                disabled={busy}
+                                onClick={(event) => handleMarkDone(event, item, { confirmedOrder: true })}
+                              >
+                                Save anyway
+                              </button>
+                            </div>
                           )}
                           <OdometerScanButton
                             id={`done-km-scan-${item.id}`}
