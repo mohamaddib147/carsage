@@ -191,6 +191,16 @@ describe("LandingPage sections and anchors", () => {
     expect(readFileSync("src/pages/LegalPages.jsx", "utf8")).toMatch(/CarSage does not store: a photo you scan/);
   });
 
+  it("the photo scan card links to the Privacy Policy (the /privacy route), and no other tool card has a link", async () => {
+    renderPage();
+
+    const more = await screen.findByRole("region", { name: "More tools" });
+    const link = within(more).getByRole("link", { name: "See our Privacy Policy" });
+    expect(link).toHaveAttribute("href", "/privacy");
+    expect(link.closest(".landing-pillar")).toHaveTextContent("Photo scans");
+    expect(within(more).getAllByRole("link")).toHaveLength(1);
+  });
+
   it("claims no email or phone reminders (the app has no reminder job) and nothing from the out-of-scope list", async () => {
     renderPage();
 

@@ -85,6 +85,8 @@ const MORE_TOOLS = [
     title: "Photo scans",
     description:
       "Photograph a fuel pump, your odometer or a dashboard warning light and CarSage reads it for you. It is optional; Google's Gemini reads the photo and CarSage does not keep it.",
+    // The Privacy page has the full terms for photo scans (what Google's free tier does with the photo), so the card points to it.
+    link: { to: "/privacy", label: "See our Privacy Policy" },
   },
 ];
 
@@ -217,7 +219,15 @@ function LandingSections({ primaryCta }) {
               </span>
               <div>
                 <h4>{tool.title}</h4>
-                <p>{tool.description}</p>
+                <p>
+                  {tool.description}
+                  {tool.link && (
+                    <>
+                      {" "}
+                      <Link to={tool.link.to}>{tool.link.label}</Link>
+                    </>
+                  )}
+                </p>
               </div>
             </div>
           ))}
