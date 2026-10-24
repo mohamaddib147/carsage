@@ -1618,6 +1618,35 @@ describe("TripPlannerPage — messages scroll into view on a phone", () => {
     delete Element.prototype.scrollIntoView;
   });
 
+  it("with an invalid fuel price: opens the closed Advanced options and scrolls the fuel price alert into view", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+    renderPage();
+
+    await screen.findByLabelText("Destination *");
+    await user.click(screen.getByText("Advanced options"));
+    const price = screen.getByLabelText(/Fuel Price/);
+    await user.clear(price);
+    await user.type(price, "99999999999");
+    await user.click(screen.getByText("Advanced options")); // close it again: the tap on Plan Trip must open it
+    const details = screen.getByText("Advanced options").closest("details");
+    expect(details).not.toHaveAttribute("open");
+
+    await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(await screen.findByLabelText(/Starting Location/), "Beirut, Lebanon");
+    expect(scroll).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    await waitFor(() => expect(details).toHaveAttribute("open"));
+    const alert = screen.getByText(/Fuel price must be between 1 and 10,000,000/);
+    expect(alert).toBeVisible();
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(alert);
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
+    expect(apiFetch).not.toHaveBeenCalledWith("/trip-planner/estimate", expect.anything());
+  });
+
   it("scrolls the first error into view when Plan Trip is tapped without a destination", async () => {
     const user = userEvent.setup();
     mockCarsLookup([{ id: "car-1" }]);
