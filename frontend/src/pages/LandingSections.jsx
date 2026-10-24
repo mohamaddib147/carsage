@@ -1,12 +1,18 @@
 // Landing sections below the hero (CAR-76): features, steps, trust pillars and the closing call to action.
 // Split out of LandingPage.jsx so this part, which holds the Landing feature icons and most of the page's
 // copy, loads as its own chunk after the hero is on screen instead of growing the entry chunk
-// (Landing and Log In are the screens every first visit needs). Copy and layout are unchanged.
+// (Landing and Log In are the screens every first visit needs).
+//
+// Feature copy (features pass): every feature named here exists in the app today and is described from its screen,
+// not from a wish list. The Dashboard is the "Example" card (its description sits under the car's name); the three
+// core tools are the big cards; everything else is the compact grid under "Keep on top of it every day". Nothing from
+// CLAUDE.md's out-of-scope list is mentioned, and there are no email or push reminders: the app has no reminder job,
+// only the due soon and overdue status on the Maintenance and Dashboard screens.
 
 import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ArrowRight } from "../components/icons.jsx";
-import { Car, Fuel, Lock, MessageCircle, ReceiptText, Route, Tag, Wrench } from "../components/iconsMore.jsx";
+import { Camera, Car, Fuel, Lock, MessageCircle, ReceiptText, Route, Tag, Wrench } from "../components/iconsMore.jsx";
 
 const FEATURES = [
   {
@@ -50,23 +56,35 @@ const EXAMPLE_TILES = [
   ["Next service", "Oil change in 1,880 km"],
 ];
 
-// The everyday tools the three cards above do not cover (copy pass): the page used to leave them out entirely.
-// They reuse the trust pillars' icon-and-text layout, so this adds no CSS.
+// What the Example card above says about the Dashboard (the screen's four tiles and its "This month" costs).
+const DASHBOARD_DESCRIPTION = "Your Dashboard shows your active car at a glance, and what you have spent this month.";
+
+// The everyday tools the big cards do not cover. They reuse the trust pillars' icon-and-text layout, so this adds no CSS.
+// Each line is taken from the screen it describes: Fuel Log (cost per fill-up and "Your real average" km/L from odometer
+// readings), Maintenance (items by km and/or months, with Due soon, Overdue and OK), Expenses (the category list and
+// "Total this month", fuel included), and the three photo scans (pump display and odometer on the Fuel Log, a dashboard
+// light or visible problem in the AI Advisor). The photo claim repeats the Privacy page: read once, never stored.
 const MORE_TOOLS = [
   {
     icon: Fuel,
     title: "Fuel Log",
-    description: "Log each fill-up to see what you spend and your real km/L.",
+    description: "Log each fill-up and your odometer to see what you spend and your real km/L.",
   },
   {
     icon: Wrench,
-    title: "Service reminders",
-    description: "Set reminders for oil changes and other service so nothing gets missed.",
+    title: "Maintenance",
+    description: "Add service like oil changes, by distance or time, and see what is due soon or overdue.",
   },
   {
     icon: Tag,
     title: "Expenses",
-    description: "Track repairs, parking, insurance and other costs beyond fuel.",
+    description: "Log repairs, parking, insurance and other costs, and see what your car costs you each month, fuel included.",
+  },
+  {
+    icon: Camera,
+    title: "Photo scans",
+    description:
+      "Photograph a fuel pump, your odometer or a dashboard warning light and CarSage reads it for you. It is optional; Google's Gemini reads the photo and CarSage does not keep it.",
   },
 ];
 
@@ -142,6 +160,7 @@ function LandingSections({ primaryCta }) {
           >
             <span className="landing-feature-card__eyebrow">Example</span>
             <h3>{EXAMPLE_CAR}</h3>
+            <p>{DASHBOARD_DESCRIPTION}</p>
             {/* Each tile reuses the inset panel the feature cards already use for their samples. */}
             <dl className="landing-example__tiles">
               {EXAMPLE_TILES.map(([label, value]) => (
@@ -185,7 +204,12 @@ function LandingSections({ primaryCta }) {
       </section>
 
       <section className="landing-pillars" aria-label="More tools">
-        <div className="landing-pillars__grid">
+        <div className="landing-section-header">
+          <p className="landing-section-header__eyebrow">Every day</p>
+          <h2>Keep on top of it every day</h2>
+          <p>Fill-ups, service, costs and photos, all in one place.</p>
+        </div>
+        <div className="landing-pillars__grid landing-pillars__grid--pairs">
           {MORE_TOOLS.map((tool) => (
             <div key={tool.title} className="landing-pillar">
               <span className="landing-pillar__icon" aria-hidden="true">

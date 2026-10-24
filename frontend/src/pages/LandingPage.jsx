@@ -70,9 +70,9 @@ function LandingPage() {
           Know what your car costs, and what it needs next
         </h1>
         <p className="landing-hero__subtitle">
-          Plan trips with real fuel costs, log your fill-ups, get service
-          reminders, and ask what that strange noise means. Free, and built
-          around Lebanon&apos;s fuel prices.
+          Plan trips with real fuel costs, log your fill-ups, keep track of
+          service and what you spend, and ask what that strange noise means.
+          Free, and built around Lebanon&apos;s fuel prices.
         </p>
         <div className="landing-hero__cta-row">
           {primaryCta && (
