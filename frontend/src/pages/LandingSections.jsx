@@ -113,7 +113,8 @@ const PILLARS = [
  * The Landing page below the hero. When the visit started on a #hash (the header's "Features" and
  * "How it works" links), the matching section did not exist until this chunk arrived, so it scrolls
  * there once it has mounted.
- * @param {{ primaryCta: { to: string, label: string } | null }} props - the same call to action as the hero.
+ * @param {{ primaryCta: { to: string, label: string, closingLabel: string } | null }} props - the hero's call to action;
+ *   the closing banner uses the same link with its own `closingLabel`.
  * @returns {JSX.Element}
  */
 function LandingSections({ primaryCta }) {
@@ -241,7 +242,7 @@ function LandingSections({ primaryCta }) {
         </p>
         {primaryCta && (
           <Link className="btn-accent" to={primaryCta.to}>
-            {primaryCta.label}
+            {primaryCta.closingLabel}
           </Link>
         )}
       </section>

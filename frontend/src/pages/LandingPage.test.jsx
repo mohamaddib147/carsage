@@ -1,7 +1,8 @@
 // Tests for the Landing screen: the accessible page heading, the three
-// feature cards, and that the primary CTAs read "Get Started Free" (-> Sign
-// Up) when logged out, "Go to Dashboard" (-> Dashboard) when logged in, and
-// are absent while the session is still loading. The Supabase client is
+// feature cards, and that the primary CTAs read "Add your car" (hero) and
+// "Create your free account" (closing banner), both -> Sign Up, when logged
+// out, "Go to Dashboard" (-> Dashboard) when logged in, and are absent while
+// the session is still loading. The Supabase client is
 // mocked so no real network calls happen.
 
 import { readFileSync } from "node:fs";
@@ -85,15 +86,19 @@ describe("LandingPage", () => {
     expect(screen.queryByText(/Squeaking brake/)).not.toBeInTheDocument();
   });
 
-  it("logged out: every primary CTA says 'Get Started Free' and links to Sign Up (normal case)", async () => {
+  it("logged out: the hero says 'Add your car' and the closing banner 'Create your free account', both linking to Sign Up (normal case)", async () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
     renderPage();
 
-    const ctas = await screen.findAllByRole("link", { name: /Get Started Free/ });
-    expect(ctas).toHaveLength(2);
-    for (const cta of ctas) {
-      expect(cta).toHaveAttribute("href", "/signup");
-    }
+    const hero = await screen.findByRole("link", { name: /Add your car/ });
+    const banner = await screen.findByRole("link", { name: "Create your free account" });
+    expect(hero).toHaveAttribute("href", "/signup");
+    expect(banner).toHaveAttribute("href", "/signup");
+    expect(hero.closest(".landing-hero")).not.toBeNull();
+    expect(banner.closest(".landing-closing-cta")).not.toBeNull();
+    // The old wording is gone everywhere, and no third sign-up button appeared.
+    expect(screen.queryByText(/Get Started/)).not.toBeInTheDocument();
+    expect(document.querySelectorAll('a[href="/signup"].btn-primary, a[href="/signup"].btn-accent')).toHaveLength(2);
     expect(screen.queryByRole("link", { name: /Go to Dashboard/ })).not.toBeInTheDocument();
   });
 
@@ -108,14 +113,14 @@ describe("LandingPage", () => {
     for (const cta of ctas) {
       expect(cta).toHaveAttribute("href", "/dashboard");
     }
-    expect(screen.queryByRole("link", { name: /Get Started/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Add your car|Create your free account|Get Started/ })).not.toBeInTheDocument();
   });
 
   it("shows no CTA while the session is loading (no wrong-state flash)", () => {
     supabase.auth.getSession.mockReturnValue(new Promise(() => {}));
     renderPage();
 
-    expect(screen.queryByRole("link", { name: /Get Started/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Add your car|Create your free account/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Go to Dashboard/ })).not.toBeInTheDocument();
   });
 });

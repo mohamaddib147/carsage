@@ -23,9 +23,11 @@ const LandingSections = lazy(() => import("./LandingSections.jsx"));
  * Landing screen: hero, feature highlights, a reassurance strip, a
  * closing call-to-action, and a footer. The primary CTA adapts to
  * whether a visitor is signed in, using the same useAuthStatus() check as
- * the header: "Get Started Free" -> Sign Up when signed out, "Go to
- * Dashboard" -> Dashboard when signed in, and no CTA while the session is
- * still loading (so a signed-in visitor never sees a sign-up button flash).
+ * the header. Signed out, both buttons go to Sign Up: "Add your car" in the
+ * hero and "Create your free account" in the closing banner. Signed in, both
+ * say "Go to Dashboard" and go to the Dashboard. While the session is still
+ * loading there is no CTA (so a signed-in visitor never sees a sign-up
+ * button flash).
  * @returns {JSX.Element}
  */
 function LandingPage() {
@@ -41,9 +43,10 @@ function LandingPage() {
     document.getElementById(hash.slice(1))?.scrollIntoView?.({ behavior: "smooth" });
   }, [hash]);
 
+  // `label` is the hero button, `closingLabel` the banner at the bottom (LandingSections).
   const primaryCta = {
-    signedIn: { to: "/dashboard", label: "Go to Dashboard" },
-    signedOut: { to: "/signup", label: "Get Started Free" },
+    signedIn: { to: "/dashboard", label: "Go to Dashboard", closingLabel: "Go to Dashboard" },
+    signedOut: { to: "/signup", label: "Add your car", closingLabel: "Create your free account" },
     loading: null,
   }[status];
 
