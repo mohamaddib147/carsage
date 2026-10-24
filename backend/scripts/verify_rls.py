@@ -28,7 +28,7 @@ uses — that:
      Only the backend's service-role key, which bypasses RLS, can read or write them.
  14. record-photos (Step 3): maintenance photos and expense receipts. The owner adds a row
      (exact canonical path only), uploads, reads through a 5-minute signed URL, and can
-     remove a file after its row is gone; odd paths, a 4th photo, a 2nd receipt, edits,
+     remove a file after its row is gone; up to 3 receipts per expense are accepted; odd paths, a 4th photo, a 4th receipt, edits,
      overwrites, over-2-MB and non-JPEG files, the public URL, the 101st photo, user B and
      anonymous visitors are all refused; undoing a completion and deleting a car queue
      every path, and the drainer removes the files and empties the queue.
@@ -608,9 +608,15 @@ try:
         sid = str(uuid.uuid4())
         r = as_(A, "POST", "maintenance_record_photos", json={"id": sid, "user_id": A["id"], "record_id": A["prec"], "slot": slot, "storage_path": photo_path(A, A["prec"], sid)})
         check(f"A adds {label} to one completion", r.status_code >= 400, f"-> {r.status_code}")
-    rid2 = str(uuid.uuid4())
-    r = as_(A, "POST", "car_expense_receipts", json={"id": rid2, "user_id": A["id"], "expense_id": A["pexp"], "storage_path": f"{A['id']}/receipts/{A['pexp']}/{rid2}.jpg"})
-    check("A adds a second receipt to one expense", r.status_code >= 400, f"-> {r.status_code}")
+    # An expense takes up to 3 receipts (2026-10-24_expense_receipts_up_to_three.sql): the first was added
+    # above, so the 2nd and 3rd are accepted and a 4th is refused by the insert policy.
+    for number in (2, 3):
+        rid_n = str(uuid.uuid4())
+        r = as_(A, "POST", "car_expense_receipts", json={"id": rid_n, "user_id": A["id"], "expense_id": A["pexp"], "storage_path": f"{A['id']}/receipts/{A['pexp']}/{rid_n}.jpg"})
+        works(f"A adds receipt {number} of 3 to one expense", r.status_code == 201, f"-> {r.status_code} {r.text[:90]}")
+    rid4 = str(uuid.uuid4())
+    r = as_(A, "POST", "car_expense_receipts", json={"id": rid4, "user_id": A["id"], "expense_id": A["pexp"], "storage_path": f"{A['id']}/receipts/{A['pexp']}/{rid4}.jpg"})
+    check("A adds a 4th receipt to one expense", r.status_code >= 400, f"-> {r.status_code}")
     r = as_(A, "PATCH", f"maintenance_record_photos?id=eq.{pid}", json={"slot": 3})
     check("even the OWNER cannot edit a photo row", affected(r) in (0, None), f"-> {r.status_code}")
     r = as_(A, "PATCH", f"car_expense_receipts?id=eq.{rid}", json={"storage_path": "x"})

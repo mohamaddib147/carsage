@@ -202,6 +202,14 @@ describe("ExpensesPage — adding an expense", () => {
   });
 
   describe("receipt photos on the Add form", () => {
+    // clearAllMocks (above) keeps implementations, so reset the ones these tests set: addPhoto and storage.
+    beforeEach(() => {
+      addPhoto.mockReset();
+    });
+    afterEach(() => {
+      delete supabase.storage;
+    });
+
     const receipt = (name = "r.jpg") => new File([new Uint8Array(10)], name, { type: "image/jpeg" });
     const fill = async (user) => {
       await user.selectOptions(await screen.findByLabelText("Category *"), "parking");
@@ -246,6 +254,78 @@ describe("ExpensesPage — adding an expense", () => {
       await user.click(screen.getByRole("button", { name: "Add Expense" }));
 
       expect(await screen.findByRole("status")).toHaveTextContent("Saved, but 1 photo couldn't be attached. You can add it from the list below.");
+    });
+
+    it.each([1, 2, 3])("attaches %i receipt photo(s), one addPhoto call each, to the saved expense", async (count) => {
+      const user = userEvent.setup();
+      addPhoto.mockResolvedValue({ id: "r", storage_path: "p.jpg" });
+      mockDatabase();
+      renderPage();
+
+      await fill(user);
+      for (let index = 0; index < count; index += 1) {
+        await user.upload(screen.getByLabelText(/Add a photo/i, { selector: "input" }), receipt(`${index}.jpg`));
+      }
+      await user.click(screen.getByRole("button", { name: "Add Expense" }));
+
+      await waitFor(() => expect(addPhoto).toHaveBeenCalledTimes(count));
+      expect(addPhoto.mock.calls.every(([kind, args]) => kind === "receipt" && args.parentId === "exp-new")).toBe(true);
+      expect(await screen.findByRole("status")).toHaveTextContent("Parking expense added.");
+    });
+
+    it("stops offering photos after the third, so a fourth is never attempted", async () => {
+      const user = userEvent.setup();
+      mockDatabase();
+      renderPage();
+
+      await fill(user);
+      for (let index = 0; index < 3; index += 1) {
+        await user.upload(screen.getByLabelText(/Add a photo/i, { selector: "input" }), receipt(`${index}.jpg`));
+      }
+      expect(screen.queryByLabelText(/Add a photo/i, { selector: "input" })).not.toBeInTheDocument();
+    });
+
+    it("says how many photos failed when only some are saved", async () => {
+      const user = userEvent.setup();
+      addPhoto.mockResolvedValueOnce({ id: "r1", storage_path: "1.jpg" }).mockRejectedValueOnce(new Error("x")).mockRejectedValueOnce(new Error("x"));
+      mockDatabase();
+      renderPage();
+
+      await fill(user);
+      for (let index = 0; index < 3; index += 1) {
+        await user.upload(screen.getByLabelText(/Add a photo/i, { selector: "input" }), receipt(`${index}.jpg`));
+      }
+      await user.click(screen.getByRole("button", { name: "Add Expense" }));
+
+      expect(await screen.findByRole("status")).toHaveTextContent("Saved, but 2 photos couldn't be attached. You can add them from the list below.");
+    });
+
+    // The failure QA saw before the 3-receipt migration: the database refused receipt rows 2 and 3 (unique
+    // violation, 23505). This runs the REAL addPhoto against a mocked database, so it proves the message
+    // appears for a genuine refused insert, and that a photo whose row was refused never reaches storage.
+    it("shows the 'Saved, but 2 photos couldn't be attached' message when the database refuses rows 2 and 3", async () => {
+      const user = userEvent.setup();
+      const { addPhoto: realAddPhoto } = await vi.importActual("../lib/recordPhotos.js");
+      addPhoto.mockImplementation((kind, args) => realAddPhoto(kind, { ...args, encode: async (file) => file }));
+      const insert = vi.fn()
+        .mockResolvedValueOnce({ error: null })
+        .mockResolvedValue({ error: { code: "23505", message: "duplicate key value violates unique constraint" } });
+      const upload = vi.fn().mockResolvedValue({ error: null });
+      supabase.storage = { from: vi.fn(() => ({ upload })) };
+      mockDatabase();
+      const forTables = supabase.from.getMockImplementation();
+      supabase.from.mockImplementation((table) => (table === "car_expense_receipts" ? { insert, delete: vi.fn() } : forTables(table)));
+      renderPage();
+
+      await fill(user);
+      for (let index = 0; index < 3; index += 1) {
+        await user.upload(screen.getByLabelText(/Add a photo/i, { selector: "input" }), receipt(`${index}.jpg`));
+      }
+      await user.click(screen.getByRole("button", { name: "Add Expense" }));
+
+      expect(await screen.findByRole("status")).toHaveTextContent("Saved, but 2 photos couldn't be attached. You can add them from the list below.");
+      expect(insert).toHaveBeenCalledTimes(3);
+      expect(upload).toHaveBeenCalledTimes(1);
     });
   });
 

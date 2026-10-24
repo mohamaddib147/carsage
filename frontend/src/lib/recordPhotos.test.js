@@ -10,6 +10,7 @@ import {
   deletePhoto,
   firstFreeSlot,
   getPhotoUrl,
+  listPhotos,
   PHOTO_ERRORS,
   photoPath,
   SIGNED_URL_TTL_SECONDS,
@@ -56,6 +57,32 @@ describe("photoPath", () => {
   it("builds the exact path the database accepts", () => {
     expect(photoPath("maintenance", USER, RECORD, PHOTO_ID)).toBe(`${USER}/maintenance/${RECORD}/${PHOTO_ID}.jpg`);
     expect(photoPath("receipt", USER, RECORD, PHOTO_ID)).toBe(`${USER}/receipts/${RECORD}/${PHOTO_ID}.jpg`);
+  });
+});
+
+describe("listPhotos", () => {
+  function mockSelect(rows) {
+    const eq = vi.fn().mockResolvedValue({ data: rows, error: null });
+    const select = vi.fn(() => ({ eq }));
+    supabase.from.mockReturnValue({ select });
+    return { select, eq };
+  }
+
+  it("lists a completion's photos by slot", async () => {
+    const { select } = mockSelect([{ id: "b", slot: 2 }, { id: "a", slot: 1 }]);
+    expect((await listPhotos("maintenance", RECORD)).map((row) => row.id)).toEqual(["a", "b"]);
+    expect(select).toHaveBeenCalledWith("id, storage_path, slot");
+  });
+
+  it("lists an expense's receipts (up to 3) oldest first, since receipts have no slot", async () => {
+    const { select, eq } = mockSelect([
+      { id: "c", created_at: "2026-10-24T10:00:03Z" },
+      { id: "a", created_at: "2026-10-24T10:00:01Z" },
+      { id: "b", created_at: "2026-10-24T10:00:02Z" },
+    ]);
+    expect((await listPhotos("receipt", RECORD)).map((row) => row.id)).toEqual(["a", "b", "c"]);
+    expect(select).toHaveBeenCalledWith("id, storage_path, created_at");
+    expect(eq).toHaveBeenCalledWith("expense_id", RECORD);
   });
 });
 

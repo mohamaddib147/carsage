@@ -1,5 +1,5 @@
-// Step 3: photos attached to a maintenance completion (up to 3) or an expense
-// (one receipt). STORED ONLY: they go to the private `record-photos` bucket and
+// Step 3: photos attached to a maintenance completion or receipts attached to an expense
+// (up to 3 of either). STORED ONLY: they go to the private `record-photos` bucket and
 // are never sent to the backend, Gemini or any other service — this module only
 // talks to Supabase Storage and the two photo tables, and a source-scan test
 // (recordPhotos.test.js) fails if it ever imports the API client or calls fetch.
@@ -46,15 +46,16 @@ export function photoPath(kind, userId, parentId, photoId) {
 }
 
 /**
- * The photo rows of one completion or expense, oldest slot first.
- * @returns {Promise<{ id: string, storage_path: string, slot?: number }[]>}
+ * The photo rows of one completion (by slot) or the receipts of one expense (oldest first).
+ * @returns {Promise<{ id: string, storage_path: string, slot?: number, created_at?: string }[]>}
  */
 export async function listPhotos(kind, parentId) {
   const { parentColumn } = KINDS[kind];
-  const columns = kind === "maintenance" ? "id, storage_path, slot" : "id, storage_path";
+  const columns = kind === "maintenance" ? "id, storage_path, slot" : "id, storage_path, created_at";
   const { data, error } = await photoTable(kind).select(columns).eq(parentColumn, parentId);
   if (error) throw error;
-  return [...(data ?? [])].sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0));
+  const rows = [...(data ?? [])];
+  return kind === "maintenance" ? rows.sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0)) : rows.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
 }
 
 /** The first free slot (1-3) of a completion, or null when it already has 3. */
