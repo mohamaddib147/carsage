@@ -38,6 +38,9 @@ import BrandBadge, { hasBrandBadge } from "../theme/BrandBadge.jsx";
 import { Check } from "../components/icons.jsx";
 import { CalendarDays, Camera, Car, Cog, Cylinder, Fuel, Gauge, Hash, IdCard, Repeat, Settings2, Tag, Trash2, Wrench } from "../components/iconsMore.jsx";
 
+// QA fix: letters, digits, hyphens and underscores only (a real id is a UUID; tests use short ones).
+const CAR_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
 /** Small camera icon for the photo overlay's "add/change" button. */
 function CameraIcon({ size = 16 }) {
   return <Camera size={size} />;
@@ -187,6 +190,9 @@ function CarProfilePage() {
   const [car, setCar] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // QA fix: why a car named in the URL could not be shown: "missing" (not one of this user's cars, or no such car) or
+  // "failed" (the request itself failed). Separate from `notFound`, which is "this user has no car at all".
+  const [problem, setProblem] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -225,13 +231,19 @@ function CarProfilePage() {
 
     let cancelled = false;
 
-    async function loadCar() {
-      setLoading(true);
-      setNotFound(false);
+    // Reads the car(s) and sets what to show. It may throw; loadCar below makes sure the page never stays on "Loading".
+    async function readCar() {
+      // QA fix: an id with characters no car id has (a quote, a space, "=") cannot be a car; say so without asking the
+      // database, which would only answer 400.
+      if (carId && !CAR_ID_PATTERN.test(carId)) {
+        setCar(null);
+        setProblem("missing");
+        return;
+      }
 
       // The switcher's own light-weight list (also used to resolve which
       // car /cars/mine opens on) and the saved default, loaded together.
-      const [{ data: carsData }, { data: profile }] = await Promise.all([
+      const [{ data: carsData, error: carsError }, { data: profile }] = await Promise.all([
         supabase
           .from("cars")
           .select("id, make, model, year")
@@ -241,6 +253,11 @@ function CarProfilePage() {
       ]);
 
       if (cancelled) return;
+      if (carsError) {
+        setCar(null);
+        setProblem("failed");
+        return;
+      }
       const loadedCars = carsData ?? [];
       const loadedDefaultId = profile?.default_car_id ?? null;
       setAllCars(loadedCars);
@@ -254,20 +271,40 @@ function CarProfilePage() {
       if (!targetId) {
         setCar(null);
         setNotFound(true);
-        setLoading(false);
         return;
       }
 
       const { data, error } = await supabase.from("cars").select("*").eq("id", targetId).maybeSingle();
       if (cancelled) return;
 
-      if (error || !data) {
+      if (error) {
+        // Postgres 22P02 = "invalid input syntax for type uuid": the id is not a car id at all.
         setCar(null);
-        setNotFound(true);
-      } else {
+        setProblem(error.code === "22P02" ? "missing" : "failed");
+      } else if (data) {
         setCar(data);
+      } else {
+        // RLS hides other users' cars, so someone else's car looks exactly like one that does not exist.
+        setCar(null);
+        if (carId) setProblem("missing");
+        else setNotFound(true);
       }
-      setLoading(false);
+    }
+
+    async function loadCar() {
+      setLoading(true);
+      setNotFound(false);
+      setProblem("");
+      try {
+        await readCar();
+      } catch {
+        if (!cancelled) {
+          setCar(null);
+          setProblem("failed");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
 
     loadCar();
@@ -495,6 +532,23 @@ function CarProfilePage() {
         <div className="skeleton-stack skeleton-stack--section" aria-hidden="true">
           <div className="skeleton-bar skeleton-bar--card" />
         </div>
+      </PageShell>
+    );
+  }
+
+  if (problem) {
+    const missing = problem === "missing";
+    return (
+      <PageShell
+        title={missing ? "Car not found" : "Couldn't load this car"}
+        description={missing ? "That car doesn't exist, or it isn't one of yours." : "Check your connection and try again."}
+      >
+        <Link className="btn-primary" to="/dashboard">
+          Go to Dashboard
+        </Link>{" "}
+        <Link className="maintenance-link-btn" to="/cars/mine">
+          View your cars
+        </Link>
       </PageShell>
     );
   }

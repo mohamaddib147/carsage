@@ -236,17 +236,73 @@ describe("CarProfilePage — viewing", () => {
     expect(container.querySelector("script")).toBeNull();
   });
 
-  it("shows the same safe not-found state for a car id this user can't see, instead of leaking or crashing (RLS edge case)", async () => {
-    // RLS filters out rows you don't own, so a request for someone else's
-    // car id resolves to no rows — not an error — exactly like "no car".
-    mockCarsTable({ selectResult: { data: null, error: null } });
+  // QA fix: a car in the URL that is not the user's (RLS hides it: no rows, not an error) or does not exist used to say
+  // "You haven't added a car yet." Now it says "Car not found" with a way back, and a failed request never leaves the page on
+  // "Loading your car...".
+  it("says 'Car not found' for a car id this user can't see, shows nothing of it, and offers a way back (RLS edge case)", async () => {
+    mockCarsTable({ selectResult: { data: null, error: null }, carsList: [{ id: "car-mine", make: "Mazda", model: "MX-5", year: 2022 }] });
 
     renderAt("/cars/someone-elses-car-id");
 
-    expect(
-      await screen.findByText("You haven't added a car yet."),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Car not found" })).toBeInTheDocument();
+    expect(screen.getByText("That car doesn't exist, or it isn't one of yours.")).toBeInTheDocument();
+    expect(screen.queryByText("You haven't added a car yet.")).not.toBeInTheDocument();
     expect(screen.queryByText("Toyota")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Loading your car/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Dashboard" })).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByRole("link", { name: "View your cars" })).toHaveAttribute("href", "/cars/mine");
+  });
+
+  it("says 'Car not found' for a car id that does not exist", async () => {
+    mockCarsTable({ selectResult: { data: null, error: null } });
+
+    renderAt("/cars/11111111-2222-3333-4444-555555555555");
+
+    expect(await screen.findByRole("heading", { name: "Car not found" })).toBeInTheDocument();
+  });
+
+  it("says 'Car not found' for an id that is not a UUID at all (the database answers 22P02), not 'no car yet'", async () => {
+    mockCarsTable({ selectResult: { data: null, error: { code: "22P02", message: "invalid input syntax for type uuid" } } });
+
+    renderAt("/cars/not-a-uuid");
+
+    expect(await screen.findByRole("heading", { name: "Car not found" })).toBeInTheDocument();
+  });
+
+  it("says 'Car not found' for an id with quotes or spaces without asking the database for it", async () => {
+    const { eqForDetail } = mockCarsTable({ selectResult: { data: null, error: null } });
+
+    renderAt("/cars/" + encodeURIComponent("1' or 1=1--"));
+
+    expect(await screen.findByRole("heading", { name: "Car not found" })).toBeInTheDocument();
+    expect(eqForDetail).not.toHaveBeenCalled();
+    expect(supabase.from).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Loading your car/)).not.toBeInTheDocument();
+  });
+
+  it("leaves the loading state with a clear message when the car request fails, and when it throws", async () => {
+    mockCarsTable({ selectResult: { data: null, error: { code: "500", message: "boom" } } });
+    const first = renderAt("/cars/car-456");
+    expect(await screen.findByRole("heading", { name: "Couldn't load this car" })).toBeInTheDocument();
+    expect(screen.getByText("Check your connection and try again.")).toBeInTheDocument();
+    expect(screen.queryByText(/Loading your car/)).not.toBeInTheDocument();
+    first.unmount();
+
+    supabase.from.mockImplementation(() => {
+      throw new Error("network down");
+    });
+    renderAt("/cars/car-456");
+    expect(await screen.findByRole("heading", { name: "Couldn't load this car" })).toBeInTheDocument();
+    expect(screen.queryByText(/Loading your car/)).not.toBeInTheDocument();
+  });
+
+  it("still says 'You haven't added a car yet.' for /cars/mine when the user really has no car", async () => {
+    mockCarsTable({ selectResult: { data: null, error: null } });
+
+    renderAt("/cars/mine");
+
+    expect(await screen.findByText("You haven't added a car yet.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Car not found" })).not.toBeInTheDocument();
   });
 });
 
