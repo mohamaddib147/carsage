@@ -990,3 +990,32 @@ describe("CarProfilePage — messages scroll into view on a phone", () => {
     expect(scroll).toHaveBeenCalledWith({ block: "center" });
   });
 });
+
+describe("CarProfilePage — VIN on edit (QA fix: a <script> string was stored as a VIN)", () => {
+  it.each(["<script>alert(1)</script>", "1HGCM82633A00435O", "SHORT"])("refuses %j without saving", async (vin) => {
+    const user = userEvent.setup();
+    const { update } = mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+    renderAt("/cars/mine");
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("VIN"), { target: { value: vin } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("VIN must be 17 letters and digits, with no I, O or Q, or left empty.")).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("lets the VIN be cleared, because it is optional", async () => {
+    const user = userEvent.setup();
+    const { update } = mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      updateResult: { data: { ...SAMPLE_CAR, vin: null }, error: null },
+    });
+    renderAt("/cars/mine");
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.clear(screen.getByLabelText("VIN"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ vin: null })));
+  });
+});

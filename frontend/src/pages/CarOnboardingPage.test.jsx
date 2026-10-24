@@ -189,17 +189,58 @@ describe("CarOnboardingPage", () => {
     const insert = vi.fn(() => ({ select }));
     supabase.from.mockReturnValue({ insert });
 
-    // Kept within the 32-character VIN limit.
-    const trickyVin = "';DROP TABLE cars;--<b>x</b>";
+    // Kept within the 20-character license plate limit (a VIN must now be a real one, so it can't carry this).
+    const trickyPlate = "';DROP TABLE x;--<b>";
 
     renderPage();
     await fillRequiredFields(user);
-    await user.type(screen.getByLabelText("VIN"), trickyVin);
+    await user.type(screen.getByLabelText("License Plate"), trickyPlate);
     await user.click(screen.getByRole("button", { name: "Add Car" }));
 
     expect(insert).toHaveBeenCalledWith(
-      expect.objectContaining({ vin: trickyVin }),
+      expect.objectContaining({ license_plate: trickyPlate }),
     );
+  });
+
+  describe("VIN (QA fix: a <script> string was stored as a VIN)", () => {
+    function mockInsert() {
+      const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+      const insert = vi.fn(() => ({ select: vi.fn(() => ({ single })) }));
+      supabase.from.mockReturnValue({ insert });
+      return insert;
+    }
+
+    it.each(["<script>alert(1)</script>", "1HGCM82633A00435I", "SHORTVIN", "1HGCM82633A0043521"])("refuses %j without saving", async (vin) => {
+      const user = userEvent.setup();
+      const insert = mockInsert();
+      renderPage();
+      await fillRequiredFields(user);
+
+      fireEvent.change(screen.getByLabelText("VIN"), { target: { value: vin } });
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+      expect(await screen.findByText("VIN must be 17 letters and digits, with no I, O or Q, or left empty.")).toBeInTheDocument();
+      expect(insert).not.toHaveBeenCalled();
+    });
+
+    it("saves a real VIN in either case, and no VIN at all", async () => {
+      const user = userEvent.setup();
+      const insert = mockInsert();
+      renderPage();
+      await fillRequiredFields(user);
+      await user.type(screen.getByLabelText("VIN"), "1hgcm82633a004352");
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+      await waitFor(() => expect(insert).toHaveBeenCalledWith(expect.objectContaining({ vin: "1hgcm82633a004352" })));
+    });
+
+    it("keeps the VIN optional", async () => {
+      const user = userEvent.setup();
+      const insert = mockInsert();
+      renderPage();
+      await fillRequiredFields(user);
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+      await waitFor(() => expect(insert).toHaveBeenCalledWith(expect.objectContaining({ vin: null })));
+    });
   });
 
   // CAR-25: the database's own wording (table names, "row-level security policy",
