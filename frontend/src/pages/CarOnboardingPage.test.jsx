@@ -9,7 +9,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 import CarOnboardingPage from "./CarOnboardingPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
@@ -1031,5 +1031,31 @@ describe("CarOnboardingPage — car photo (CAR-58)", () => {
 
     expect(screen.getByText("Add a Photo (optional)")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "Selected car preview" })).not.toBeInTheDocument();
+  });
+});
+
+// QA fix (phone): after a tap on the submit button stops with a message, the first message is scrolled to the middle of
+// the screen once (lib/scrollToAlert.js). jsdom has no scrollIntoView, so give elements one for these tests.
+describe("CarOnboardingPage — messages scroll into view on a phone", () => {
+  const scroll = vi.fn();
+  beforeEach(() => {
+    scroll.mockClear();
+    Element.prototype.scrollIntoView = scroll;
+  });
+  afterEach(() => {
+    delete Element.prototype.scrollIntoView;
+  });
+
+  it("scrolls the first error into view when Add Car is tapped on an empty form", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(scroll).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+    const error = await screen.findByText("Make is required.");
+
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(error);
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
   });
 });

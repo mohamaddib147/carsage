@@ -631,3 +631,44 @@ describe("ExpensesPage — category icons (CAR-83)", () => {
     expect(css).toMatch(/\.category-name \.icon,\s*\.category-select__icon \{[^}]*color: var\(--color-accent-text\);/);
   });
 });
+
+// QA fix (phone): after a tap on the submit button stops with a message, the first message is scrolled to the middle of
+// the screen once (lib/scrollToAlert.js). jsdom has no scrollIntoView, so give elements one for these tests.
+describe("ExpensesPage — messages scroll into view on a phone", () => {
+  const scroll = vi.fn();
+  beforeEach(() => {
+    scroll.mockClear();
+    Element.prototype.scrollIntoView = scroll;
+  });
+  afterEach(() => {
+    delete Element.prototype.scrollIntoView;
+  });
+
+  it("scrolls the first error into view when Add Expense is tapped on an empty form", async () => {
+    const user = userEvent.setup();
+    mockDatabase();
+    renderPage();
+
+    await screen.findByLabelText("Category *");
+    expect(scroll).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Add Expense" }));
+    const error = await screen.findByText("Choose a category.");
+
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(error);
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
+  });
+
+  it("scrolls the failed-save message into view", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ writeError: { message: "boom" } });
+    renderPage();
+
+    await user.selectOptions(await screen.findByLabelText("Category *"), "parking");
+    await user.type(screen.getByLabelText("Amount *"), "5");
+    await user.click(screen.getByRole("button", { name: "Add Expense" }));
+    await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
+
+    expect(scroll.mock.contexts[0]).toHaveAttribute("role", "alert");
+  });
+});

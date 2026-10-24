@@ -1605,3 +1605,31 @@ describe("TripPlannerPage — which km/L the estimate used (CAR-61)", () => {
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
   });
 });
+
+// QA fix (phone): after a tap on the submit button stops with a message, the first message is scrolled to the middle of
+// the screen once (lib/scrollToAlert.js). jsdom has no scrollIntoView, so give elements one for these tests.
+describe("TripPlannerPage — messages scroll into view on a phone", () => {
+  const scroll = vi.fn();
+  beforeEach(() => {
+    scroll.mockClear();
+    Element.prototype.scrollIntoView = scroll;
+  });
+  afterEach(() => {
+    delete Element.prototype.scrollIntoView;
+  });
+
+  it("scrolls the first error into view when Plan Trip is tapped without a destination", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1" }]);
+    renderPage();
+
+    await user.type(await screen.findByLabelText(/Starting Location/), "Beirut, Lebanon");
+    expect(scroll).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole("button", { name: "Plan Trip" }));
+    const error = await screen.findByText("Destination is required.");
+
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(error);
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
+  });
+});

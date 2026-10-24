@@ -20,6 +20,7 @@
 // no photo at all).
 
 import { useEffect, useRef, useState } from "react";
+import { useScrollToAlert } from "../lib/scrollToAlert.js";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
@@ -190,6 +191,8 @@ function CarProfilePage() {
   const [form, setForm] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
   const [saveError, setSaveError] = useState("");
+  // QA fix: scrolls the first message into view when a tap on Save stops with one (see lib/scrollToAlert.js).
+  const scrollToAlert = useScrollToAlert();
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -435,6 +438,7 @@ function CarProfilePage() {
     const errors = validate(form);
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
+      scrollToAlert(event.currentTarget);
       return;
     }
 
@@ -466,6 +470,7 @@ function CarProfilePage() {
 
       if (error) {
         setSaveError(describeSaveError(error));
+        scrollToAlert();
         return;
       }
 

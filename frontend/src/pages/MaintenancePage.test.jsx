@@ -869,3 +869,57 @@ describe("MaintenancePage — photos or a receipt on Mark as done", () => {
     expect(screen.queryByText(/Photos or receipt/)).not.toBeInTheDocument();
   });
 });
+
+// QA fix (phone): after a tap on the submit button stops with a message, the first message is scrolled to the middle of
+// the screen once (lib/scrollToAlert.js). jsdom has no scrollIntoView, so give elements one for these tests.
+describe("MaintenancePage — messages scroll into view on a phone", () => {
+  const scroll = vi.fn();
+  beforeEach(() => {
+    scroll.mockClear();
+    Element.prototype.scrollIntoView = scroll;
+  });
+  afterEach(() => {
+    delete Element.prototype.scrollIntoView;
+  });
+
+  it("scrolls the first error of the add form into view, and not before the tap", async () => {
+    const user = userEvent.setup();
+    mockDatabase();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "+ Custom item" }));
+    expect(scroll).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Save item" }));
+    const error = await screen.findByText("Give the item a name.");
+
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(error);
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
+  });
+
+  it("scrolls the first error of the Mark as done form into view", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ itemsByCar: { "car-1": [item()] }, readingsByCar: { "car-1": [reading("car-1", 89100)] } });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Mark as done" }));
+    await user.clear(screen.getByLabelText("Odometer (km) *"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
+
+    expect(scroll.mock.contexts[0]).toHaveAttribute("role", "alert");
+    expect(cardFor("Oil change").contains(scroll.mock.contexts[0])).toBe(true);
+  });
+
+  it("scrolls the failed-save message to the top of the page into view", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ itemsByCar: { "car-1": [item()] }, readingsByCar: { "car-1": [reading("car-1", 89100)] }, writeError: { message: "boom" } });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Mark as done" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
+
+    expect(scroll.mock.contexts[0]).toHaveAttribute("role", "alert");
+  });
+});

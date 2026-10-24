@@ -19,6 +19,7 @@
 // readings can never show under another, even if a slow reply arrives after a switch.
 
 import { useEffect, useRef, useState } from "react";
+import { useScrollToAlert } from "../lib/scrollToAlert.js";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import FormattedNumberInput from "../components/FormattedNumberInput.jsx";
 import OdometerScanButton from "../components/OdometerScanButton.jsx";
@@ -229,6 +230,8 @@ function MaintenancePage() {
   // Photos chosen on the open Mark as done form; attached only after the completion is saved.
   const [pendingPhotos, setPendingPhotos] = useState([]);
   const [actionError, setActionError] = useState("");
+  // QA fix: scrolls the first message into view when a tap on Save stops with one (see lib/scrollToAlert.js).
+  const scrollToAlert = useScrollToAlert();
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const scrolledTo = useRef("");
@@ -352,7 +355,10 @@ function MaintenancePage() {
     event.preventDefault();
     const errors = getMaintenanceItemErrors(addValues, today);
     setAddErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      scrollToAlert(event.currentTarget);
+      return;
+    }
 
     setBusy(true);
     setActionError("");
@@ -362,6 +368,7 @@ function MaintenancePage() {
         .insert({ user_id: user.id, car_id: selectedCarId, ...itemFromForm(addValues) });
       if (error) {
         setActionError(describeSaveError(error));
+        scrollToAlert();
         return;
       }
       // The message only appears once the list already shows the new item.
@@ -404,6 +411,7 @@ function MaintenancePage() {
       const { error } = await write();
       if (error) {
         setActionError(describeSaveError(error));
+        scrollToAlert();
         return false;
       }
       // The message only appears once the list already reflects the change.
@@ -420,7 +428,10 @@ function MaintenancePage() {
     event.preventDefault();
     const errors = getCompletionErrors(panelValues, today, item.interval_km != null);
     setPanelErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      scrollToAlert(event.currentTarget);
+      return;
+    }
     const odometer = String(panelValues.odometer ?? "").trim();
     const note = String(panelValues.note ?? "").trim();
     setBusy(true);
@@ -440,6 +451,7 @@ function MaintenancePage() {
         .single();
       if (error) {
         setActionError(describeSaveError(error));
+        scrollToAlert();
         return;
       }
 
@@ -470,7 +482,10 @@ function MaintenancePage() {
     event.preventDefault();
     const errors = getMaintenanceItemErrors(panelValues, today);
     setPanelErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      scrollToAlert(event.currentTarget);
+      return;
+    }
     // Only the editable columns are sent (the database allows no others).
     await runWrite(
       () => supabase.from("maintenance_items").update(itemFromForm(panelValues)).eq("id", item.id),

@@ -28,6 +28,7 @@
 // the car itself is already safely saved either way).
 
 import { useEffect, useRef, useState } from "react";
+import { useScrollToAlert } from "../lib/scrollToAlert.js";
 import { Link, useNavigate } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
@@ -179,6 +180,8 @@ function CarOnboardingPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitError, setSubmitError] = useState("");
+  // QA fix: scrolls the first message into view when a tap on Add Car stops with one (see lib/scrollToAlert.js).
+  const scrollToAlert = useScrollToAlert();
   const [submitting, setSubmitting] = useState(false);
   const [specNotice, setSpecNotice] = useState("");
   // True while the spec lookup request is in flight (drives the "Looking up specs" status).
@@ -358,6 +361,7 @@ function CarOnboardingPage() {
     const errors = validate(form);
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
+      scrollToAlert(event.currentTarget);
       return;
     }
 
@@ -389,6 +393,7 @@ function CarOnboardingPage() {
 
       if (error) {
         setSubmitError(describeSaveError(error));
+        scrollToAlert();
         return;
       }
 

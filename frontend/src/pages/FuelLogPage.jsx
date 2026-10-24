@@ -34,6 +34,7 @@
 // the field's hint says why the reading matters.
 
 import { useEffect, useRef, useState } from "react";
+import { useScrollToAlert } from "../lib/scrollToAlert.js";
 import { Link } from "react-router-dom";
 import {
   Bar,
@@ -190,6 +191,9 @@ function FuelLogPage() {
   }, [skipWarning]);
   const [fieldErrors, setFieldErrors] = useState({});
   const [saveError, setSaveError] = useState("");
+  // QA fix: scrolls the first message in the form into view when a tap on Add Fill-Up stops with one (see lib/scrollToAlert.js).
+  const scrollToAlert = useScrollToAlert();
+  const formRef = useRef(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -352,6 +356,7 @@ function FuelLogPage() {
       setOrderWarning("");
       setPriceWarning("");
       setTankWarning("");
+      scrollToAlert(formRef.current);
       return;
     }
 
@@ -359,6 +364,7 @@ function FuelLogPage() {
       const warning = getPricePerLiterWarning(liters, cost, currency, currentFuelPriceLbp);
       if (warning) {
         setPriceWarning(warning);
+        scrollToAlert(formRef.current);
         return;
       }
     }
@@ -368,6 +374,7 @@ function FuelLogPage() {
       const warning = getTankCapacityWarning(liters, selectedCar?.fuel_tank_capacity_liters);
       if (warning) {
         setTankWarning(warning);
+        scrollToAlert(formRef.current);
         return;
       }
     }
@@ -377,6 +384,7 @@ function FuelLogPage() {
       const warning = getOdometerOrderWarning(odometer, date, entries);
       if (warning) {
         setOrderWarning(warning);
+        scrollToAlert(formRef.current);
         return;
       }
     }
@@ -410,6 +418,7 @@ function FuelLogPage() {
 
       if (error) {
         setSaveError(describeSaveError(error));
+        scrollToAlert(formRef.current);
         return;
       }
 
@@ -550,7 +559,7 @@ function FuelLogPage() {
       <div className="route-params-card">
         <p className="form-section-label">Log a fill-up</p>
 
-        <form onSubmit={handleSubmit} noValidate className="car-form">
+        <form ref={formRef} onSubmit={handleSubmit} noValidate className="car-form">
           {cars.length > 1 ? (
             <div className="form-field">
               <label htmlFor="fuelLogCarId">Car</label>
