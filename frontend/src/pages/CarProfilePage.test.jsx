@@ -1061,6 +1061,47 @@ describe("CarProfilePage — VIN on edit (QA fix: a <script> string was stored a
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("does not re-check a VIN that was left as it is: an old short VIN does not block changing another field", async () => {
+    const user = userEvent.setup();
+    const oldCar = { ...SAMPLE_CAR, vin: "OLD123" }; // saved before the rule existed
+    const { update } = mockCarsTable({
+      selectResult: { data: oldCar, error: null },
+      updateResult: { data: { ...oldCar, model: "Camry" }, error: null },
+    });
+    renderAt("/cars/mine");
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    expect(screen.getByLabelText("VIN")).toHaveValue("OLD123");
+    await user.clear(screen.getByLabelText("Model *"));
+    await user.type(screen.getByLabelText("Model *"), "Camry");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ model: "Camry", vin: "OLD123" })));
+    expect(screen.queryByText(/VIN must be 17 letters and digits/)).not.toBeInTheDocument();
+  });
+
+  it("blocks changing an old short VIN to another bad value, but a good one is accepted", async () => {
+    const user = userEvent.setup();
+    const oldCar = { ...SAMPLE_CAR, vin: "OLD123" };
+    const { update } = mockCarsTable({
+      selectResult: { data: oldCar, error: null },
+      updateResult: { data: { ...oldCar, vin: "1HGCM82633A004352" }, error: null },
+    });
+    renderAt("/cars/mine");
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.clear(screen.getByLabelText("VIN"));
+    await user.type(screen.getByLabelText("VIN"), "NEW456");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("VIN must be 17 letters and digits, with no I, O or Q, or left empty.")).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+
+    await user.clear(screen.getByLabelText("VIN"));
+    await user.type(screen.getByLabelText("VIN"), "1HGCM82633A004352");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ vin: "1HGCM82633A004352" })));
+  });
+
   it("lets the VIN be cleared, because it is optional", async () => {
     const user = userEvent.setup();
     const { update } = mockCarsTable({

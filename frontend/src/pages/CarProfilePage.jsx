@@ -116,9 +116,12 @@ function toFormValues(car) {
 /**
  * Validates the required fields (Make, Model, Year, Fuel Type), same
  * rules as Car Onboarding.
+ * @param {object} form - the edit form's values.
+ * @param {string} savedVin - the car's saved VIN. A VIN left as it is is not re-checked, so an older VIN that
+ *   would not pass today's rule does not block changing another field; a changed VIN must pass.
  * @returns {Record<string, string>}
  */
-function validate(form) {
+function validate(form, savedVin) {
   const errors = {};
   if (!form.make.trim()) errors.make = "Make is required.";
   if (!form.model.trim()) errors.model = "Model is required.";
@@ -163,7 +166,7 @@ function validate(form) {
     drivetrain: form.drivetrain,
     transmission: form.transmission,
     licensePlate: form.license_plate,
-    vin: form.vin,
+    vin: form.vin.trim() === savedVin ? "" : form.vin,
     fuelEfficiency: form.fuel_efficiency,
     cylinders: form.cylinders,
   });
@@ -472,7 +475,7 @@ function CarProfilePage() {
     event.preventDefault();
     setSaveError("");
 
-    const errors = validate(form);
+    const errors = validate(form, (car.vin ?? "").trim());
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
       scrollToAlert(event.currentTarget);
