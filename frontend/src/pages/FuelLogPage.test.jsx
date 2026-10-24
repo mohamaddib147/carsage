@@ -1556,6 +1556,35 @@ describe("FuelLogPage — skip-the-odometer prompt (dashboard fix)", () => {
 
       expect(scroll).toHaveBeenCalledTimes(1); // only when it appeared
     });
+
+    it("scrolls the first field error into view when Add Fill-Up is tapped on an empty form", async () => {
+      const user = userEvent.setup();
+      mockDatabase();
+
+      renderPage();
+      await screen.findByText("No fill-ups logged yet");
+      expect(scroll).not.toHaveBeenCalled();
+      await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+      await screen.findByText("Liters are required.");
+
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll.mock.contexts[0]).toBe(screen.getByText("Liters are required."));
+      expect(scroll).toHaveBeenCalledWith({ block: "center" });
+    });
+
+    it("scrolls a 'far from today's fuel price' warning into view when it appears", async () => {
+      const user = userEvent.setup();
+      mockDatabase({ logsByCar: { "car-1": { data: [], error: null } } });
+
+      renderPage();
+      await screen.findByLabelText("Liters *");
+      await fillForm(user, { liters: "20", cost: "300" }); // far above today's mocked price
+      await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+      const warning = await screen.findByText(/far from today's fuel price/);
+
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll.mock.contexts[0]).toBe(warning.closest(".fuel-log-order-warning"));
+    });
   });
 
   it("says in the field's hint that fuel economy and service reminders need the reading", async () => {

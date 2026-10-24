@@ -636,55 +636,130 @@ describe("MaintenancePage — odometer scan", () => {
     expect(scanPhoto).not.toHaveBeenCalled();
   });
 
-  it("Mark as done: warns (without blocking) when the reading is lower than the car's latest and the date is on or after it", async () => {
+  // QA fix: Mark as done uses the Fuel Log's "Odometers only go up" check and wording, as a warning with a
+  // "Save anyway" button (not a block), and nothing is saved until it is confirmed. An EQUAL reading is fine because
+  // the form is pre-filled with the car's latest reading.
+  const ODOMETER_WARNING = "This isn't higher than your previous reading of 89,100 km (10 Oct 2026). Odometers only go up, so check it for a typo.";
+  const typeKm = async (user, value) => {
+    const odometer = screen.getByLabelText("Odometer (km) *");
+    await user.clear(odometer);
+    await user.type(odometer, value);
+  };
+
+  it("Mark as done: a LOWER reading shows the Fuel Log warning, saves nothing, and saves once 'Save anyway' is tapped", async () => {
     const user = userEvent.setup();
     const calls = mockDatabase(ONE_ITEM);
     renderPage();
 
     await openMarkAsDone(user);
-    const odometer = screen.getByLabelText("Odometer (km) *");
-    expect(screen.queryByText(/Lower than your latest reading/)).not.toBeInTheDocument(); // the suggestion itself is fine
-    await user.clear(odometer);
-    await user.type(odometer, "85000");
-
-    expect(await screen.findByText("Lower than your latest reading of 89,100 km (10 Oct 2026). Check the reading.")).toBeInTheDocument();
-
-    // not blocking: it still saves
+    await typeKm(user, "100");
+    expect(screen.queryByText(ODOMETER_WARNING)).not.toBeInTheDocument(); // only when Save is tapped
     await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(ODOMETER_WARNING)).toBeInTheDocument();
+    expect(calls.recordInserts).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Save anyway" }));
+    await waitFor(() => expect(calls.recordInserts).toHaveLength(1));
+    expect(calls.recordInserts[0].odometer_km).toBe(100);
+    expect(await screen.findByRole("status")).toHaveTextContent("Oil change marked as done.");
+  });
+
+  it("Mark as done: an EQUAL reading (the pre-filled latest) saves straight away, with no warning", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase(ONE_ITEM);
+    renderPage();
+
+    await openMarkAsDone(user);
+    expect(screen.getByLabelText("Odometer (km) *")).toHaveValue("89,100");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(calls.recordInserts).toHaveLength(1));
+    expect(calls.recordInserts[0].odometer_km).toBe(89100);
+    expect(screen.queryByText(/Odometers only go up/)).not.toBeInTheDocument();
+  });
+
+  it("Mark as done: a HIGHER reading saves straight away, with no warning", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase(ONE_ITEM);
+    renderPage();
+
+    await openMarkAsDone(user);
+    await typeKm(user, "89500");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(calls.recordInserts).toHaveLength(1));
+    expect(calls.recordInserts[0].odometer_km).toBe(89500);
+    expect(screen.queryByText(/Odometers only go up/)).not.toBeInTheDocument();
+  });
+
+  it("Mark as done: with NO reading entered (an item that is not km-based) it saves, and with no fill-ups to compare with a low reading saves too", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ itemsByCar: { "car-1": [item({ interval_km: null, baseline_km: null })] }, readingsByCar: { "car-1": [reading("car-1", 89100, "2026-10-10")] } });
+    renderPage();
+
+    await openMarkAsDone(user);
+    await user.clear(screen.getByLabelText("Odometer (km)"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls.recordInserts).toHaveLength(1));
+    expect(calls.recordInserts[0].odometer_km).toBeNull();
+    expect(screen.queryByText(/Odometers only go up/)).not.toBeInTheDocument();
+  });
+
+  it("Mark as done: a car with no fill-up readings has nothing to compare with, so a low reading saves", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ itemsByCar: { "car-1": [item()] }, readingsByCar: { "car-1": [] } });
+    renderPage();
+
+    await openMarkAsDone(user);
+    await typeKm(user, "100");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(calls.recordInserts).toHaveLength(1));
+    expect(calls.recordInserts[0].odometer_km).toBe(100);
+  });
+
+  it("Mark as done: a BACKDATED completion lower than the latest reading is fine (it is before it)", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase(ONE_ITEM);
+    renderPage();
+
+    await openMarkAsDone(user);
+    fireEvent.change(screen.getByLabelText("Done on *"), { target: { value: "2026-10-05" } }); // before the 10 Oct reading
+    await typeKm(user, "85000");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
     await waitFor(() => expect(calls.recordInserts).toHaveLength(1));
     expect(calls.recordInserts[0].odometer_km).toBe(85000);
   });
 
-  it("Mark as done: no warning for a BACKDATED completion, or for a reading at or above the latest", async () => {
+  it("Mark as done: editing the reading or the date takes the warning away again", async () => {
     const user = userEvent.setup();
     mockDatabase(ONE_ITEM);
     renderPage();
 
     await openMarkAsDone(user);
-    const odometer = screen.getByLabelText("Odometer (km) *");
-    await user.clear(odometer);
-    await user.type(odometer, "85000");
-    expect(await screen.findByText(/Lower than your latest reading/)).toBeInTheDocument();
+    await typeKm(user, "100");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText(ODOMETER_WARNING);
 
-    fireEvent.change(screen.getByLabelText("Done on *"), { target: { value: "2026-10-05" } }); // before the 10 Oct reading
-    await waitFor(() => expect(screen.queryByText(/Lower than your latest reading/)).not.toBeInTheDocument());
-
-    fireEvent.change(screen.getByLabelText("Done on *"), { target: { value: TODAY } });
-    await user.clear(odometer);
-    await user.type(odometer, "89100"); // equal to the latest
-    expect(screen.queryByText(/Lower than your latest reading/)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Odometer (km) *"), "0");
+    await waitFor(() => expect(screen.queryByText(ODOMETER_WARNING)).not.toBeInTheDocument());
   });
 
-  it("a scanned reading below the latest also gets the warning (it is just a filled field)", async () => {
+  it("a scanned reading below the latest gets the warning when Save is tapped (it is just a filled field)", async () => {
     const user = userEvent.setup();
-    mockDatabase(ONE_ITEM);
+    const calls = mockDatabase(ONE_ITEM);
     scanPhoto.mockResolvedValue({ readable: true, odometer_km: 8910 }); // a dropped digit
     renderPage();
 
     await openMarkAsDone(user);
     await user.upload(document.getElementById("done-km-scan-item-1"), photo());
+    await waitFor(() => expect(screen.getByLabelText("Odometer (km) *")).toHaveValue("8,910"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByText(/Lower than your latest reading of 89,100 km/)).toBeInTheDocument();
+    expect(await screen.findByText(ODOMETER_WARNING)).toBeInTheDocument();
+    expect(calls.recordInserts).toEqual([]);
   });
 
   it("the item form: a scan fills 'Odometer when last done (km)' and there is NO car-reading check there", async () => {
@@ -697,7 +772,7 @@ describe("MaintenancePage — odometer scan", () => {
     await user.upload(document.querySelector('input[id$="baselineKmScan"]'), photo());
 
     await waitFor(() => expect(screen.getByLabelText("Odometer when last done (km)")).toHaveValue("80,000"));
-    expect(screen.queryByText(/Lower than your latest reading/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Odometers only go up/)).not.toBeInTheDocument();
     expect(calls.itemInserts).toEqual([]); // nothing saved
   });
 });
@@ -867,5 +942,59 @@ describe("MaintenancePage — photos or a receipt on Mark as done", () => {
 
     await user.click(await screen.findByRole("button", { name: "+ Custom item" }));
     expect(screen.queryByText(/Photos or receipt/)).not.toBeInTheDocument();
+  });
+});
+
+// QA fix (phone): after a tap on the submit button stops with a message, the first message is scrolled to the middle of
+// the screen once (lib/scrollToAlert.js). jsdom has no scrollIntoView, so give elements one for these tests.
+describe("MaintenancePage — messages scroll into view on a phone", () => {
+  const scroll = vi.fn();
+  beforeEach(() => {
+    scroll.mockClear();
+    Element.prototype.scrollIntoView = scroll;
+  });
+  afterEach(() => {
+    delete Element.prototype.scrollIntoView;
+  });
+
+  it("scrolls the first error of the add form into view, and not before the tap", async () => {
+    const user = userEvent.setup();
+    mockDatabase();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "+ Custom item" }));
+    expect(scroll).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Save item" }));
+    const error = await screen.findByText("Give the item a name.");
+
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(error);
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
+  });
+
+  it("scrolls the first error of the Mark as done form into view", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ itemsByCar: { "car-1": [item()] }, readingsByCar: { "car-1": [reading("car-1", 89100)] } });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Mark as done" }));
+    await user.clear(screen.getByLabelText("Odometer (km) *"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
+
+    expect(scroll.mock.contexts[0]).toHaveAttribute("role", "alert");
+    expect(cardFor("Oil change").contains(scroll.mock.contexts[0])).toBe(true);
+  });
+
+  it("scrolls the failed-save message to the top of the page into view", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ itemsByCar: { "car-1": [item()] }, readingsByCar: { "car-1": [reading("car-1", 89100)] }, writeError: { message: "boom" } });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Mark as done" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
+
+    expect(scroll.mock.contexts[0]).toHaveAttribute("role", "alert");
   });
 });

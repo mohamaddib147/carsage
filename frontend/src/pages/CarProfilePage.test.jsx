@@ -7,7 +7,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 import CarProfilePage from "./CarProfilePage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
@@ -236,17 +236,73 @@ describe("CarProfilePage — viewing", () => {
     expect(container.querySelector("script")).toBeNull();
   });
 
-  it("shows the same safe not-found state for a car id this user can't see, instead of leaking or crashing (RLS edge case)", async () => {
-    // RLS filters out rows you don't own, so a request for someone else's
-    // car id resolves to no rows — not an error — exactly like "no car".
-    mockCarsTable({ selectResult: { data: null, error: null } });
+  // QA fix: a car in the URL that is not the user's (RLS hides it: no rows, not an error) or does not exist used to say
+  // "You haven't added a car yet." Now it says "Car not found" with a way back, and a failed request never leaves the page on
+  // "Loading your car...".
+  it("says 'Car not found' for a car id this user can't see, shows nothing of it, and offers a way back (RLS edge case)", async () => {
+    mockCarsTable({ selectResult: { data: null, error: null }, carsList: [{ id: "car-mine", make: "Mazda", model: "MX-5", year: 2022 }] });
 
     renderAt("/cars/someone-elses-car-id");
 
-    expect(
-      await screen.findByText("You haven't added a car yet."),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Car not found" })).toBeInTheDocument();
+    expect(screen.getByText("That car doesn't exist, or it isn't one of yours.")).toBeInTheDocument();
+    expect(screen.queryByText("You haven't added a car yet.")).not.toBeInTheDocument();
     expect(screen.queryByText("Toyota")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Loading your car/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Dashboard" })).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByRole("link", { name: "View your cars" })).toHaveAttribute("href", "/cars/mine");
+  });
+
+  it("says 'Car not found' for a car id that does not exist", async () => {
+    mockCarsTable({ selectResult: { data: null, error: null } });
+
+    renderAt("/cars/11111111-2222-3333-4444-555555555555");
+
+    expect(await screen.findByRole("heading", { name: "Car not found" })).toBeInTheDocument();
+  });
+
+  it("says 'Car not found' for an id that is not a UUID at all (the database answers 22P02), not 'no car yet'", async () => {
+    mockCarsTable({ selectResult: { data: null, error: { code: "22P02", message: "invalid input syntax for type uuid" } } });
+
+    renderAt("/cars/not-a-uuid");
+
+    expect(await screen.findByRole("heading", { name: "Car not found" })).toBeInTheDocument();
+  });
+
+  it("says 'Car not found' for an id with quotes or spaces without asking the database for it", async () => {
+    const { eqForDetail } = mockCarsTable({ selectResult: { data: null, error: null } });
+
+    renderAt("/cars/" + encodeURIComponent("1' or 1=1--"));
+
+    expect(await screen.findByRole("heading", { name: "Car not found" })).toBeInTheDocument();
+    expect(eqForDetail).not.toHaveBeenCalled();
+    expect(supabase.from).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Loading your car/)).not.toBeInTheDocument();
+  });
+
+  it("leaves the loading state with a clear message when the car request fails, and when it throws", async () => {
+    mockCarsTable({ selectResult: { data: null, error: { code: "500", message: "boom" } } });
+    const first = renderAt("/cars/car-456");
+    expect(await screen.findByRole("heading", { name: "Couldn't load this car" })).toBeInTheDocument();
+    expect(screen.getByText("Check your connection and try again.")).toBeInTheDocument();
+    expect(screen.queryByText(/Loading your car/)).not.toBeInTheDocument();
+    first.unmount();
+
+    supabase.from.mockImplementation(() => {
+      throw new Error("network down");
+    });
+    renderAt("/cars/car-456");
+    expect(await screen.findByRole("heading", { name: "Couldn't load this car" })).toBeInTheDocument();
+    expect(screen.queryByText(/Loading your car/)).not.toBeInTheDocument();
+  });
+
+  it("still says 'You haven't added a car yet.' for /cars/mine when the user really has no car", async () => {
+    mockCarsTable({ selectResult: { data: null, error: null } });
+
+    renderAt("/cars/mine");
+
+    expect(await screen.findByText("You haven't added a car yet.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Car not found" })).not.toBeInTheDocument();
   });
 });
 
@@ -722,7 +778,7 @@ describe("CarProfilePage — input limits (CAR-23)", () => {
     ["License Plate", 20],
     ["Drivetrain", 60],
     ["Transmission", 60],
-    ["VIN", 32],
+    ["VIN", 17],
   ])("caps the %s field at %i characters", async (label, max) => {
     const user = userEvent.setup();
     await openEdit(user);
@@ -959,5 +1015,120 @@ describe("CarProfilePage — car photo (CAR-58)", () => {
       await screen.findByText("Could not reach the server. Check your connection and try again."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove photo" })).toBeInTheDocument();
+  });
+});
+
+// QA fix (phone): after a tap on the submit button stops with a message, the first message is scrolled to the middle of
+// the screen once (lib/scrollToAlert.js). jsdom has no scrollIntoView, so give elements one for these tests.
+describe("CarProfilePage — messages scroll into view on a phone", () => {
+  const scroll = vi.fn();
+  beforeEach(() => {
+    scroll.mockClear();
+    Element.prototype.scrollIntoView = scroll;
+  });
+  afterEach(() => {
+    delete Element.prototype.scrollIntoView;
+  });
+
+  it("scrolls the first error into view when Save is tapped on an invalid edit", async () => {
+    const user = userEvent.setup();
+    mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+    renderAt("/cars/mine");
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.clear(screen.getByLabelText("Model *"));
+    expect(scroll).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    const error = await screen.findByText("Model is required.");
+
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(error);
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
+  });
+});
+
+describe("CarProfilePage — VIN on edit (QA fix: a <script> string was stored as a VIN)", () => {
+  it.each(["<script>alert(1)</script>", "1HGCM82633A00435O", "SHORT"])("refuses %j without saving", async (vin) => {
+    const user = userEvent.setup();
+    const { update } = mockCarsTable({ selectResult: { data: SAMPLE_CAR, error: null } });
+    renderAt("/cars/mine");
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("VIN"), { target: { value: vin } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("VIN must be 17 letters and digits, with no I, O or Q, or left empty.")).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("does not re-check a VIN that was left as it is: an old short VIN does not block changing another field", async () => {
+    const user = userEvent.setup();
+    const oldCar = { ...SAMPLE_CAR, vin: "OLD123" }; // saved before the rule existed
+    const { update } = mockCarsTable({
+      selectResult: { data: oldCar, error: null },
+      updateResult: { data: { ...oldCar, model: "Camry" }, error: null },
+    });
+    renderAt("/cars/mine");
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    expect(screen.getByLabelText("VIN")).toHaveValue("OLD123");
+    await user.clear(screen.getByLabelText("Model *"));
+    await user.type(screen.getByLabelText("Model *"), "Camry");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ model: "Camry", vin: "OLD123" })));
+    expect(screen.queryByText(/VIN must be 17 letters and digits/)).not.toBeInTheDocument();
+  });
+
+  it("blocks changing an old short VIN to another bad value, but a good one is accepted", async () => {
+    const user = userEvent.setup();
+    const oldCar = { ...SAMPLE_CAR, vin: "OLD123" };
+    const { update } = mockCarsTable({
+      selectResult: { data: oldCar, error: null },
+      updateResult: { data: { ...oldCar, vin: "1HGCM82633A004352" }, error: null },
+    });
+    renderAt("/cars/mine");
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.clear(screen.getByLabelText("VIN"));
+    await user.type(screen.getByLabelText("VIN"), "NEW456");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("VIN must be 17 letters and digits, with no I, O or Q, or left empty.")).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+
+    await user.clear(screen.getByLabelText("VIN"));
+    await user.type(screen.getByLabelText("VIN"), "1HGCM82633A004352");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ vin: "1HGCM82633A004352" })));
+  });
+
+  it("accepts a VIN typed in lower case and saves it in upper case", async () => {
+    const user = userEvent.setup();
+    const { update } = mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      updateResult: { data: { ...SAMPLE_CAR, vin: "JH4KA8260MC000000" }, error: null },
+    });
+    renderAt("/cars/mine");
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.clear(screen.getByLabelText("VIN"));
+    await user.type(screen.getByLabelText("VIN"), "jh4ka8260mc000000");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ vin: "JH4KA8260MC000000" })));
+  });
+
+  it("lets the VIN be cleared, because it is optional", async () => {
+    const user = userEvent.setup();
+    const { update } = mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      updateResult: { data: { ...SAMPLE_CAR, vin: null }, error: null },
+    });
+    renderAt("/cars/mine");
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.clear(screen.getByLabelText("VIN"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ vin: null })));
   });
 });

@@ -99,6 +99,25 @@ export function getFuelPriceError(value) {
     : `Fuel price must be between 1 and ${LIMITS.MAX_FUEL_PRICE_LBP.toLocaleString()} LBP per liter.`;
 }
 
+/** A VIN: exactly 17 letters and digits, never I, O or Q (they are left out of real VINs so they cannot be mistaken for 1 and 0). */
+export const VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/i;
+
+/** The length of a VIN; the car forms' VIN input stops at this (the database allows up to 32, LIMITS.VIN). */
+export const VIN_LENGTH = 17;
+
+/**
+ * Optional VIN: blank is fine, otherwise 17 letters and digits with no I, O or Q, in either case. The database only
+ * limits the length (32); this is the real rule, checked in the car forms because the browser writes cars straight
+ * to Supabase (the backend has no car endpoint).
+ * @param {string | null | undefined} value
+ * @returns {string} an error message, or "" when blank or valid.
+ */
+export function getVinError(value) {
+  const vin = (value ?? "").trim();
+  if (vin === "" || VIN_PATTERN.test(vin)) return "";
+  return "VIN must be 17 letters and digits, with no I, O or Q, or left empty.";
+}
+
 /**
  * Length / range errors for a car form's optional fields and its make and
  * model (required-ness is checked by each form itself).
@@ -121,6 +140,11 @@ export function getCarFieldErrors(values) {
   for (const [field, max, label] of lengthChecks) {
     const message = getLengthError(values[field], max, label);
     if (message) errors[field] = message;
+  }
+  // The length message (over 32) wins; the pattern is only checked for a VIN that is not too long.
+  if (!errors.vin) {
+    const vinError = getVinError(values.vin);
+    if (vinError) errors.vin = vinError;
   }
 
   const efficiencyError = getFuelEfficiencyError(values.fuelEfficiency);

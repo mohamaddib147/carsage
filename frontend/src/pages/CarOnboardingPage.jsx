@@ -28,6 +28,7 @@
 // the car itself is already safely saved either way).
 
 import { useEffect, useRef, useState } from "react";
+import { useScrollToAlert } from "../lib/scrollToAlert.js";
 import { Link, useNavigate } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
@@ -37,6 +38,7 @@ import {
   LIMITS,
   describeSaveError,
   getCarFieldErrors,
+  VIN_LENGTH,
 } from "../lib/limits.js";
 import { getCarPhotoError, uploadCarPhoto } from "../lib/carPhoto.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
@@ -179,6 +181,8 @@ function CarOnboardingPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitError, setSubmitError] = useState("");
+  // QA fix: scrolls the first message into view when a tap on Add Car stops with one (see lib/scrollToAlert.js).
+  const scrollToAlert = useScrollToAlert();
   const [submitting, setSubmitting] = useState(false);
   const [specNotice, setSpecNotice] = useState("");
   // True while the spec lookup request is in flight (drives the "Looking up specs" status).
@@ -358,6 +362,7 @@ function CarOnboardingPage() {
     const errors = validate(form);
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
+      scrollToAlert(event.currentTarget);
       return;
     }
 
@@ -373,7 +378,7 @@ function CarOnboardingPage() {
           engine_type: form.engineType.trim() || null,
           fuel_type: form.fuelType,
           license_plate: form.licensePlate.trim() || null,
-          vin: form.vin.trim() || null,
+          vin: form.vin.trim().toUpperCase() || null,
           fuel_efficiency: form.fuelEfficiency.trim()
             ? Number(form.fuelEfficiency)
             : null,
@@ -389,6 +394,7 @@ function CarOnboardingPage() {
 
       if (error) {
         setSubmitError(describeSaveError(error));
+        scrollToAlert();
         return;
       }
 
@@ -658,7 +664,7 @@ function CarOnboardingPage() {
               <input
                 id="vin"
                 name="vin"
-                type="text" maxLength={LIMITS.VIN}
+                type="text" maxLength={VIN_LENGTH}
                 placeholder="e.g. 4S4BSANC8M3801249"
                 aria-invalid={invalid("vin")}
                 aria-describedby="vin-caption"

@@ -17,6 +17,7 @@
 // them all. Loaded data is tagged with its car id, so cars never mix.
 
 import { useEffect, useState } from "react";
+import { useScrollToAlert } from "../lib/scrollToAlert.js";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import PageShell from "../components/PageShell.jsx";
@@ -175,6 +176,8 @@ function ExpensesPage() {
   const [pendingPhotos, setPendingPhotos] = useState([]);
   const [fieldErrors, setFieldErrors] = useState({});
   const [actionError, setActionError] = useState("");
+  // QA fix: scrolls the first message into view when a tap on Add Expense stops with one (see lib/scrollToAlert.js).
+  const scrollToAlert = useScrollToAlert();
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
@@ -247,7 +250,10 @@ function ExpensesPage() {
     setNotice("");
     const errors = getExpenseErrors({ date, category, amount, note }, today);
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      scrollToAlert(event.currentTarget);
+      return;
+    }
 
     const carId = selectedCarId;
     const trimmedNote = note.trim();
@@ -264,6 +270,7 @@ function ExpensesPage() {
       }).select("id").single();
       if (error) {
         setActionError(describeSaveError(error));
+        scrollToAlert();
         return;
       }
       // Receipts attach only AFTER the expense is saved; a photo that fails never undoes it.
@@ -300,6 +307,7 @@ function ExpensesPage() {
       const { error } = await supabase.from("car_expenses").delete().eq("id", expense.id);
       if (error) {
         setActionError(describeSaveError(error));
+        scrollToAlert();
         return;
       }
       await reload(selectedCarId);

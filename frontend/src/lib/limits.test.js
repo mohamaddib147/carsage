@@ -14,6 +14,7 @@ import {
   describeAuthError,
   describeSaveError,
   getCarFieldErrors,
+  getVinError,
   getCylindersError,
   getFuelEfficiencyError,
   getFuelPriceError,
@@ -66,6 +67,38 @@ describe("getFuelPriceError", () => {
   );
 });
 
+describe("getVinError (QA fix: a <script> string was stored as a VIN)", () => {
+  it.each(["1HGCM82633A004352", "1hgcm82633a004352", "  1HGCM82633A004352  ", "JH4KA8260MC000000", "4S4BSANC8M3801249"])("accepts %j", (vin) => {
+    expect(getVinError(vin)).toBe("");
+  });
+
+  it.each([undefined, null, "", "   "])("accepts an empty VIN (%j): it stays optional", (vin) => {
+    expect(getVinError(vin)).toBe("");
+  });
+
+  it.each([
+    ["too short (16)", "1HGCM82633A00435"],
+    ["too long (18)", "1HGCM82633A0043521"],
+    ["an I", "1HGCM82633A00435I"],
+    ["an O", "1HGCM82633A00435O"],
+    ["a Q", "1HGCM82633A00435Q"],
+    ["a lower-case i, o or q", "1hgcm82633a00435o"],
+    ["a space inside", "1HGCM 2633A004352"],
+    ["a dash", "1HGCM-2633A004352"],
+    ["accented letters", "1HGCM82633A00435É"],
+    ["the script string", "<script>alert(1)</script>"],
+    ["an SQL-looking string", "';DROP TABLE cars;--"],
+  ])("refuses a VIN with %s", (_label, vin) => {
+    expect(getVinError(vin)).toBe("VIN must be 17 letters and digits, with no I, O or Q, or left empty.");
+  });
+
+  it("is part of getCarFieldErrors (so both car forms use it), with the length message winning over 32 characters", () => {
+    expect(getCarFieldErrors({ vin: "<script>alert(1)</script>" })).toEqual({ vin: "VIN must be 17 letters and digits, with no I, O or Q, or left empty." });
+    expect(getCarFieldErrors({ vin: "1HGCM82633A004352" })).toEqual({});
+    expect(getCarFieldErrors({ vin: "A".repeat(33) })).toEqual({ vin: "VIN must be 32 characters or fewer." });
+  });
+});
+
 describe("getCarFieldErrors", () => {
   it("returns nothing for a normal car and for an empty optional set", () => {
     expect(
@@ -86,7 +119,12 @@ describe("getCarFieldErrors", () => {
     ["transmission", LIMITS.TRANSMISSION],
     ["licensePlate", LIMITS.LICENSE_PLATE],
     ["vin", LIMITS.VIN],
-  ])("flags %s only when it is over %i characters", (field, max) => {
+  ])("flags %s only when it is over %i characters (the VIN has its own pattern rule below)", (field, max) => {
+    if (field === "vin") {
+      expect(Object.keys(getCarFieldErrors({ vin: "x".repeat(max + 1) }))).toEqual(["vin"]);
+      expect(getCarFieldErrors({ vin: "x".repeat(max + 1) }).vin).toBe(`VIN must be ${max} characters or fewer.`);
+      return;
+    }
     expect(getCarFieldErrors({ [field]: "x".repeat(max) })).toEqual({});
     expect(Object.keys(getCarFieldErrors({ [field]: "x".repeat(max + 1) }))).toEqual([field]);
   });

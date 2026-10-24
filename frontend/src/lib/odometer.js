@@ -129,23 +129,27 @@ export function getOdometerError(text) {
  * would make every correct reading after it impossible to save, and fill-ups
  * can't be edited. This rule lives in the form only; the database does not
  * enforce reading order.
+ * Shared by the Fuel Log and Maintenance's "Mark as done". The Fuel Log treats a reading EQUAL to the previous
+ * one as a typo too; Mark as done passes `allowEqual` because its form is pre-filled with the car's latest
+ * reading, and finishing a service at the reading the car already has is the normal case.
  * @param {string} text - the raw field text.
- * @param {string} date - the fill-up's date (YYYY-MM-DD).
+ * @param {string} date - the fill-up's (or completion's) date (YYYY-MM-DD).
  * @param {object[]} entries - the SAME car's existing fill-ups.
+ * @param {{ allowEqual?: boolean }} [options] - `allowEqual`: a reading equal to a neighbouring one is fine.
  * @returns {string | undefined} a warning, or undefined when blank, invalid
  *   (see getOdometerError) or in order.
  */
-export function getOdometerOrderWarning(text, date, entries) {
+export function getOdometerOrderWarning(text, date, entries, { allowEqual = false } = {}) {
   if (getOdometerError(text)) return undefined;
   const raw = String(text ?? "").replace(/,/g, "").trim();
   if (raw === "") return undefined;
   const km = Number(raw);
 
   const { previous, next } = neighbourReadings(date, entries);
-  if (previous && km <= previous.km) {
+  if (previous && (allowEqual ? km < previous.km : km <= previous.km)) {
     return `This isn't higher than your previous reading of ${formatKm(previous.km)} (${formatFillDate(previous.date)}). Odometers only go up, so check it for a typo.`;
   }
-  if (next && km >= next.km) {
+  if (next && (allowEqual ? km > next.km : km >= next.km)) {
     return `This isn't lower than your later reading of ${formatKm(next.km)} (${formatFillDate(next.date)}). Check the reading and the date.`;
   }
   return undefined;

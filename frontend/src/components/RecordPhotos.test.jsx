@@ -1,7 +1,7 @@
 // Tests components/RecordPhotos.jsx (Step 3): nothing is fetched or shown until the
 // user opens it; photos render as <img> from signed URLs; a missing file shows a
 // "Photo missing" placeholder; adding uses the first free slot and hides the add
-// control at the limit (3 photos, 1 receipt); the 100-photo cap and other errors
+// control at the limit (3 photos, 3 receipts); the 100-photo cap and other errors
 // show plain text; remove takes the photo away. lib/recordPhotos.js is mocked.
 
 import { render, screen, waitFor } from "@testing-library/react";
@@ -82,14 +82,45 @@ describe("RecordPhotos", () => {
     expect(screen.queryByLabelText(`Add a photo for ${LABEL}`)).not.toBeInTheDocument();
   });
 
-  it("allows one receipt only", async () => {
+  it("shows up to 3 receipts, each with its own name, and offers to attach another until 3", async () => {
     const user = userEvent.setup();
-    listPhotos.mockResolvedValue([{ id: "r1", storage_path: "r.jpg" }]);
+    listPhotos.mockResolvedValue([{ id: "r1", storage_path: "r1.jpg" }, { id: "r2", storage_path: "r2.jpg" }]);
     renderPhotos("receipt");
 
     await user.click(screen.getByRole("button", { name: `Show receipt for ${LABEL}` }));
+    expect(await screen.findByRole("img", { name: `Receipt 1 for ${LABEL}` })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: `Receipt 2 for ${LABEL}` })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Remove receipt 2 for ${LABEL}` })).toBeInTheDocument();
+    expect(screen.getByLabelText(`Attach a receipt for ${LABEL}`)).toBeInTheDocument();
+  });
+
+  it("keeps the single-receipt names, and hides the attach control at 3 receipts", async () => {
+    const user = userEvent.setup();
+    listPhotos.mockResolvedValue([{ id: "r1", storage_path: "r.jpg" }]);
+    const { unmount } = renderPhotos("receipt");
+    await user.click(screen.getByRole("button", { name: `Show receipt for ${LABEL}` }));
     expect(await screen.findByRole("img", { name: `Receipt for ${LABEL}` })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Remove the receipt for ${LABEL}` })).toBeInTheDocument();
+    unmount();
+
+    listPhotos.mockResolvedValue(["a", "b", "c"].map((id) => ({ id, storage_path: `${id}.jpg` })));
+    renderPhotos("receipt");
+    await user.click(screen.getByRole("button", { name: `Show receipt for ${LABEL}` }));
+    await screen.findByRole("img", { name: `Receipt 3 for ${LABEL}` });
     expect(screen.queryByLabelText(`Attach a receipt for ${LABEL}`)).not.toBeInTheDocument();
+  });
+
+  it("attaches a second receipt with no slot (receipts have none)", async () => {
+    const user = userEvent.setup();
+    listPhotos.mockResolvedValue([{ id: "r1", storage_path: "r1.jpg" }]);
+    addPhoto.mockResolvedValue({ id: "r2", storage_path: "r2.jpg" });
+    renderPhotos("receipt");
+
+    await user.click(screen.getByRole("button", { name: `Show receipt for ${LABEL}` }));
+    await user.upload(await screen.findByLabelText(`Attach a receipt for ${LABEL}`), photoFile());
+
+    expect(addPhoto).toHaveBeenCalledWith("receipt", expect.objectContaining({ parentId: "rec-1", slot: undefined }));
+    expect(await screen.findByRole("img", { name: `Receipt 2 for ${LABEL}` })).toBeInTheDocument();
   });
 
   it("shows the 100-photo cap in plain words", async () => {

@@ -20,6 +20,7 @@
 // no photo at all).
 
 import { useEffect, useRef, useState } from "react";
+import { useScrollToAlert } from "../lib/scrollToAlert.js";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
@@ -29,6 +30,7 @@ import {
   describeActionError,
   describeSaveError,
   getCarFieldErrors,
+  VIN_LENGTH,
 } from "../lib/limits.js";
 import { deleteCarPhoto, getCarPhotoError, getCarPhotoUrl, uploadCarPhoto } from "../lib/carPhoto.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
@@ -36,6 +38,9 @@ import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 import BrandBadge, { hasBrandBadge } from "../theme/BrandBadge.jsx";
 import { Check } from "../components/icons.jsx";
 import { CalendarDays, Camera, Car, Cog, Cylinder, Fuel, Gauge, Hash, IdCard, Repeat, Settings2, Tag, Trash2, Wrench } from "../components/iconsMore.jsx";
+
+// QA fix: letters, digits, hyphens and underscores only (a real id is a UUID; tests use short ones).
+const CAR_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 /** Small camera icon for the photo overlay's "add/change" button. */
 function CameraIcon({ size = 16 }) {
@@ -112,9 +117,12 @@ function toFormValues(car) {
 /**
  * Validates the required fields (Make, Model, Year, Fuel Type), same
  * rules as Car Onboarding.
+ * @param {object} form - the edit form's values.
+ * @param {string} savedVin - the car's saved VIN. A VIN left as it is is not re-checked, so an older VIN that
+ *   would not pass today's rule does not block changing another field; a changed VIN must pass.
  * @returns {Record<string, string>}
  */
-function validate(form) {
+function validate(form, savedVin) {
   const errors = {};
   if (!form.make.trim()) errors.make = "Make is required.";
   if (!form.model.trim()) errors.model = "Model is required.";
@@ -159,7 +167,7 @@ function validate(form) {
     drivetrain: form.drivetrain,
     transmission: form.transmission,
     licensePlate: form.license_plate,
-    vin: form.vin,
+    vin: form.vin.trim() === savedVin ? "" : form.vin,
     fuelEfficiency: form.fuel_efficiency,
     cylinders: form.cylinders,
   });
@@ -186,10 +194,15 @@ function CarProfilePage() {
   const [car, setCar] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // QA fix: why a car named in the URL could not be shown: "missing" (not one of this user's cars, or no such car) or
+  // "failed" (the request itself failed). Separate from `notFound`, which is "this user has no car at all".
+  const [problem, setProblem] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
   const [saveError, setSaveError] = useState("");
+  // QA fix: scrolls the first message into view when a tap on Save stops with one (see lib/scrollToAlert.js).
+  const scrollToAlert = useScrollToAlert();
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -222,13 +235,19 @@ function CarProfilePage() {
 
     let cancelled = false;
 
-    async function loadCar() {
-      setLoading(true);
-      setNotFound(false);
+    // Reads the car(s) and sets what to show. It may throw; loadCar below makes sure the page never stays on "Loading".
+    async function readCar() {
+      // QA fix: an id with characters no car id has (a quote, a space, "=") cannot be a car; say so without asking the
+      // database, which would only answer 400.
+      if (carId && !CAR_ID_PATTERN.test(carId)) {
+        setCar(null);
+        setProblem("missing");
+        return;
+      }
 
       // The switcher's own light-weight list (also used to resolve which
       // car /cars/mine opens on) and the saved default, loaded together.
-      const [{ data: carsData }, { data: profile }] = await Promise.all([
+      const [{ data: carsData, error: carsError }, { data: profile }] = await Promise.all([
         supabase
           .from("cars")
           .select("id, make, model, year")
@@ -238,6 +257,11 @@ function CarProfilePage() {
       ]);
 
       if (cancelled) return;
+      if (carsError) {
+        setCar(null);
+        setProblem("failed");
+        return;
+      }
       const loadedCars = carsData ?? [];
       const loadedDefaultId = profile?.default_car_id ?? null;
       setAllCars(loadedCars);
@@ -251,20 +275,40 @@ function CarProfilePage() {
       if (!targetId) {
         setCar(null);
         setNotFound(true);
-        setLoading(false);
         return;
       }
 
       const { data, error } = await supabase.from("cars").select("*").eq("id", targetId).maybeSingle();
       if (cancelled) return;
 
-      if (error || !data) {
+      if (error) {
+        // Postgres 22P02 = "invalid input syntax for type uuid": the id is not a car id at all.
         setCar(null);
-        setNotFound(true);
-      } else {
+        setProblem(error.code === "22P02" ? "missing" : "failed");
+      } else if (data) {
         setCar(data);
+      } else {
+        // RLS hides other users' cars, so someone else's car looks exactly like one that does not exist.
+        setCar(null);
+        if (carId) setProblem("missing");
+        else setNotFound(true);
       }
-      setLoading(false);
+    }
+
+    async function loadCar() {
+      setLoading(true);
+      setNotFound(false);
+      setProblem("");
+      try {
+        await readCar();
+      } catch {
+        if (!cancelled) {
+          setCar(null);
+          setProblem("failed");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
 
     loadCar();
@@ -432,9 +476,10 @@ function CarProfilePage() {
     event.preventDefault();
     setSaveError("");
 
-    const errors = validate(form);
+    const errors = validate(form, (car.vin ?? "").trim());
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
+      scrollToAlert(event.currentTarget);
       return;
     }
 
@@ -458,7 +503,7 @@ function CarProfilePage() {
           drivetrain: form.drivetrain.trim() || null,
           transmission: form.transmission.trim() || null,
           license_plate: form.license_plate.trim() || null,
-          vin: form.vin.trim() || null,
+          vin: form.vin.trim().toUpperCase() || null,
         })
         .eq("id", car.id)
         .select()
@@ -466,6 +511,7 @@ function CarProfilePage() {
 
       if (error) {
         setSaveError(describeSaveError(error));
+        scrollToAlert();
         return;
       }
 
@@ -490,6 +536,23 @@ function CarProfilePage() {
         <div className="skeleton-stack skeleton-stack--section" aria-hidden="true">
           <div className="skeleton-bar skeleton-bar--card" />
         </div>
+      </PageShell>
+    );
+  }
+
+  if (problem) {
+    const missing = problem === "missing";
+    return (
+      <PageShell
+        title={missing ? "Car not found" : "Couldn't load this car"}
+        description={missing ? "That car doesn't exist, or it isn't one of yours." : "Check your connection and try again."}
+      >
+        <Link className="btn-primary" to="/dashboard">
+          Go to Dashboard
+        </Link>{" "}
+        <Link className="maintenance-link-btn" to="/cars/mine">
+          View your cars
+        </Link>
       </PageShell>
     );
   }
@@ -668,7 +731,7 @@ function CarProfilePage() {
 
             <div className="form-field">
               <label htmlFor="vin">VIN</label>
-              <input id="vin" placeholder="e.g. 4S4BSANC8M3801249" type="text" maxLength={LIMITS.VIN} value={form.vin} onChange={handleChange("vin")} />
+              <input id="vin" placeholder="e.g. 4S4BSANC8M3801249" type="text" maxLength={VIN_LENGTH} value={form.vin} onChange={handleChange("vin")} />
               {fieldErrors.vin && (
                 <p role="alert" className="auth-form__error">
                   {fieldErrors.vin}

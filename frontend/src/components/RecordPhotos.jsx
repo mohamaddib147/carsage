@@ -1,5 +1,5 @@
-// Step 3: the photos of one maintenance completion (up to 3) or one expense (a
-// receipt). Collapsed by default: nothing is fetched and no image loads until
+// Step 3: the photos of one maintenance completion or the receipts of one expense (up to 3
+// of either). Collapsed by default: nothing is fetched and no image loads until
 // the user opens it, so a long history or expense list never pulls full-size
 // photos. Each photo is shown in an <img> from a signed URL that expires after
 // about 5 minutes (lib/recordPhotos.js); a row whose file is missing shows a
@@ -24,7 +24,7 @@ import { getPhotoFileError } from "../lib/photoReencode.js";
  */
 function RecordPhotos({ kind, parentId, userId, label }) {
   const isReceipt = kind === "receipt";
-  const max = isReceipt ? 1 : MAX_MAINTENANCE_PHOTOS;
+  const max = MAX_MAINTENANCE_PHOTOS;
   const noun = isReceipt ? "Receipt" : "Photos";
 
   const [open, setOpen] = useState(false);
@@ -134,7 +134,7 @@ function RecordPhotos({ kind, parentId, userId, label }) {
                       <img
                         className="attached-photos__img"
                         src={urls[photo.id]}
-                        alt={isReceipt ? `Receipt for ${label}` : `Photo ${index + 1} for ${label}`}
+                        alt={isReceipt ? (count === 1 ? `Receipt for ${label}` : `Receipt ${index + 1} for ${label}`) : `Photo ${index + 1} for ${label}`}
                         onError={() => setUrls((previous) => ({ ...previous, [photo.id]: null }))}
                       />
                     ) : (
@@ -144,7 +144,7 @@ function RecordPhotos({ kind, parentId, userId, label }) {
                       type="button"
                       className="maintenance-link-btn maintenance-link-btn--danger"
                       disabled={busy}
-                      aria-label={isReceipt ? `Remove the receipt for ${label}` : `Remove photo ${index + 1} for ${label}`}
+                      aria-label={isReceipt ? (count === 1 ? `Remove the receipt for ${label}` : `Remove receipt ${index + 1} for ${label}`) : `Remove photo ${index + 1} for ${label}`}
                       onClick={() => handleRemove(photo)}
                     >
                       Remove

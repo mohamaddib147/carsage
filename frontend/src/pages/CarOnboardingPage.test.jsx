@@ -9,7 +9,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 import CarOnboardingPage from "./CarOnboardingPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
@@ -189,17 +189,66 @@ describe("CarOnboardingPage", () => {
     const insert = vi.fn(() => ({ select }));
     supabase.from.mockReturnValue({ insert });
 
-    // Kept within the 32-character VIN limit.
-    const trickyVin = "';DROP TABLE cars;--<b>x</b>";
+    // Kept within the 20-character license plate limit (a VIN must now be a real one, so it can't carry this).
+    const trickyPlate = "';DROP TABLE x;--<b>";
 
     renderPage();
     await fillRequiredFields(user);
-    await user.type(screen.getByLabelText("VIN"), trickyVin);
+    await user.type(screen.getByLabelText("License Plate"), trickyPlate);
     await user.click(screen.getByRole("button", { name: "Add Car" }));
 
     expect(insert).toHaveBeenCalledWith(
-      expect.objectContaining({ vin: trickyVin }),
+      expect.objectContaining({ license_plate: trickyPlate }),
     );
+  });
+
+  describe("VIN (QA fix: a <script> string was stored as a VIN)", () => {
+    function mockInsert() {
+      const single = vi.fn().mockResolvedValue({ data: { id: "car-456" }, error: null });
+      const insert = vi.fn(() => ({ select: vi.fn(() => ({ single })) }));
+      supabase.from.mockReturnValue({ insert });
+      return insert;
+    }
+
+    it.each(["<script>alert(1)</script>", "1HGCM82633A00435I", "SHORTVIN", "1HGCM82633A0043521"])("refuses %j without saving", async (vin) => {
+      const user = userEvent.setup();
+      const insert = mockInsert();
+      renderPage();
+      await fillRequiredFields(user);
+
+      fireEvent.change(screen.getByLabelText("VIN"), { target: { value: vin } });
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+
+      expect(await screen.findByText("VIN must be 17 letters and digits, with no I, O or Q, or left empty.")).toBeInTheDocument();
+      expect(insert).not.toHaveBeenCalled();
+    });
+
+    it("accepts a VIN typed in lower case and stores it in upper case", async () => {
+      const user = userEvent.setup();
+      const insert = mockInsert();
+      renderPage();
+      await fillRequiredFields(user);
+      await user.type(screen.getByLabelText("VIN"), "1hgcm82633a004352");
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+      await waitFor(() => expect(insert).toHaveBeenCalledWith(expect.objectContaining({ vin: "1HGCM82633A004352" })));
+    });
+
+    it("stops the VIN input at 17 characters", async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.type(screen.getByLabelText("VIN"), "1HGCM82633A004352EXTRA");
+      expect(screen.getByLabelText("VIN")).toHaveValue("1HGCM82633A004352");
+    });
+
+    it("keeps the VIN optional", async () => {
+      const user = userEvent.setup();
+      const insert = mockInsert();
+      renderPage();
+      await fillRequiredFields(user);
+      await user.click(screen.getByRole("button", { name: "Add Car" }));
+      await waitFor(() => expect(insert).toHaveBeenCalledWith(expect.objectContaining({ vin: null })));
+    });
   });
 
   // CAR-25: the database's own wording (table names, "row-level security policy",
@@ -523,7 +572,7 @@ describe("CarOnboardingPage — input limits (CAR-23)", () => {
     ["License Plate", 20],
     ["Drivetrain", 60],
     ["Transmission", 60],
-    ["VIN", 32],
+    ["VIN", 17],
   ];
 
   it.each(TEXT_LIMITS)("caps the %s field at %i characters", (label, max) => {
@@ -1031,5 +1080,31 @@ describe("CarOnboardingPage — car photo (CAR-58)", () => {
 
     expect(screen.getByText("Add a Photo (optional)")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "Selected car preview" })).not.toBeInTheDocument();
+  });
+});
+
+// QA fix (phone): after a tap on the submit button stops with a message, the first message is scrolled to the middle of
+// the screen once (lib/scrollToAlert.js). jsdom has no scrollIntoView, so give elements one for these tests.
+describe("CarOnboardingPage — messages scroll into view on a phone", () => {
+  const scroll = vi.fn();
+  beforeEach(() => {
+    scroll.mockClear();
+    Element.prototype.scrollIntoView = scroll;
+  });
+  afterEach(() => {
+    delete Element.prototype.scrollIntoView;
+  });
+
+  it("scrolls the first error into view when Add Car is tapped on an empty form", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(scroll).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Add Car" }));
+    const error = await screen.findByText("Make is required.");
+
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(error);
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
   });
 });

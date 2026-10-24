@@ -67,6 +67,7 @@
 // and the original rated wording.
 
 import { useEffect, useRef, useState } from "react";
+import { useScrollToAlert } from "../lib/scrollToAlert.js";
 import { Link } from "react-router-dom";
 import FormattedNumberInput from "../components/FormattedNumberInput.jsx";
 import InfoTip from "../components/InfoTip.jsx";
@@ -175,6 +176,8 @@ function TripPlannerPage() {
   const [destinationError, setDestinationError] = useState("");
   const [originError, setOriginError] = useState("");
   const [submitError, setSubmitError] = useState("");
+  // QA fix: scrolls the first message into view when a tap on Plan Trip stops with one (see lib/scrollToAlert.js).
+  const scrollToAlert = useScrollToAlert();
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   // The route the current result was actually computed for — captured at
@@ -280,6 +283,7 @@ function TripPlannerPage() {
 
     if (!destination.trim()) {
       setDestinationError("Destination is required.");
+      scrollToAlert(event.currentTarget);
       return;
     }
     setDestinationError("");
@@ -289,6 +293,7 @@ function TripPlannerPage() {
     // origin — validate that here instead of letting the request 400.
     if (!origin.trim()) {
       setOriginError("Starting location is required.");
+      scrollToAlert(event.currentTarget);
       return;
     }
     setOriginError("");
@@ -296,6 +301,7 @@ function TripPlannerPage() {
     // Same 1 - 10,000,000 bound the server enforces; show it instead of sending.
     if (getFuelPriceError(fuelPriceInput)) {
       setAdvancedOpen(true);
+      scrollToAlert(event.currentTarget);
       return;
     }
 
@@ -325,6 +331,7 @@ function TripPlannerPage() {
       });
     } catch (error) {
       setSubmitError(error.message);
+      scrollToAlert();
     } finally {
       setSubmitting(false);
     }
