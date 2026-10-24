@@ -102,6 +102,9 @@ export function getFuelPriceError(value) {
 /** A VIN: exactly 17 letters and digits, never I, O or Q (they are left out of real VINs so they cannot be mistaken for 1 and 0). */
 export const VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/i;
 
+/** The length of a VIN; the car forms' VIN input stops at this (the database allows up to 32, LIMITS.VIN). */
+export const VIN_LENGTH = 17;
+
 /**
  * Optional VIN: blank is fine, otherwise 17 letters and digits with no I, O or Q, in either case. The database only
  * limits the length (32); this is the real rule, checked in the car forms because the browser writes cars straight

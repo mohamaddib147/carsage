@@ -30,6 +30,7 @@ import {
   describeActionError,
   describeSaveError,
   getCarFieldErrors,
+  VIN_LENGTH,
 } from "../lib/limits.js";
 import { deleteCarPhoto, getCarPhotoError, getCarPhotoUrl, uploadCarPhoto } from "../lib/carPhoto.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
@@ -502,7 +503,7 @@ function CarProfilePage() {
           drivetrain: form.drivetrain.trim() || null,
           transmission: form.transmission.trim() || null,
           license_plate: form.license_plate.trim() || null,
-          vin: form.vin.trim() || null,
+          vin: form.vin.trim().toUpperCase() || null,
         })
         .eq("id", car.id)
         .select()
@@ -730,7 +731,7 @@ function CarProfilePage() {
 
             <div className="form-field">
               <label htmlFor="vin">VIN</label>
-              <input id="vin" placeholder="e.g. 4S4BSANC8M3801249" type="text" maxLength={LIMITS.VIN} value={form.vin} onChange={handleChange("vin")} />
+              <input id="vin" placeholder="e.g. 4S4BSANC8M3801249" type="text" maxLength={VIN_LENGTH} value={form.vin} onChange={handleChange("vin")} />
               {fieldErrors.vin && (
                 <p role="alert" className="auth-form__error">
                   {fieldErrors.vin}

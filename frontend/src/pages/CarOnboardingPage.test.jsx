@@ -223,14 +223,22 @@ describe("CarOnboardingPage", () => {
       expect(insert).not.toHaveBeenCalled();
     });
 
-    it("saves a real VIN in either case, and no VIN at all", async () => {
+    it("accepts a VIN typed in lower case and stores it in upper case", async () => {
       const user = userEvent.setup();
       const insert = mockInsert();
       renderPage();
       await fillRequiredFields(user);
       await user.type(screen.getByLabelText("VIN"), "1hgcm82633a004352");
       await user.click(screen.getByRole("button", { name: "Add Car" }));
-      await waitFor(() => expect(insert).toHaveBeenCalledWith(expect.objectContaining({ vin: "1hgcm82633a004352" })));
+      await waitFor(() => expect(insert).toHaveBeenCalledWith(expect.objectContaining({ vin: "1HGCM82633A004352" })));
+    });
+
+    it("stops the VIN input at 17 characters", async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.type(screen.getByLabelText("VIN"), "1HGCM82633A004352EXTRA");
+      expect(screen.getByLabelText("VIN")).toHaveValue("1HGCM82633A004352");
     });
 
     it("keeps the VIN optional", async () => {
@@ -564,7 +572,7 @@ describe("CarOnboardingPage — input limits (CAR-23)", () => {
     ["License Plate", 20],
     ["Drivetrain", 60],
     ["Transmission", 60],
-    ["VIN", 32],
+    ["VIN", 17],
   ];
 
   it.each(TEXT_LIMITS)("caps the %s field at %i characters", (label, max) => {

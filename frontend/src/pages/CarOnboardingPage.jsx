@@ -38,6 +38,7 @@ import {
   LIMITS,
   describeSaveError,
   getCarFieldErrors,
+  VIN_LENGTH,
 } from "../lib/limits.js";
 import { getCarPhotoError, uploadCarPhoto } from "../lib/carPhoto.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
@@ -377,7 +378,7 @@ function CarOnboardingPage() {
           engine_type: form.engineType.trim() || null,
           fuel_type: form.fuelType,
           license_plate: form.licensePlate.trim() || null,
-          vin: form.vin.trim() || null,
+          vin: form.vin.trim().toUpperCase() || null,
           fuel_efficiency: form.fuelEfficiency.trim()
             ? Number(form.fuelEfficiency)
             : null,
@@ -663,7 +664,7 @@ function CarOnboardingPage() {
               <input
                 id="vin"
                 name="vin"
-                type="text" maxLength={LIMITS.VIN}
+                type="text" maxLength={VIN_LENGTH}
                 placeholder="e.g. 4S4BSANC8M3801249"
                 aria-invalid={invalid("vin")}
                 aria-describedby="vin-caption"

@@ -778,7 +778,7 @@ describe("CarProfilePage — input limits (CAR-23)", () => {
     ["License Plate", 20],
     ["Drivetrain", 60],
     ["Transmission", 60],
-    ["VIN", 32],
+    ["VIN", 17],
   ])("caps the %s field at %i characters", async (label, max) => {
     const user = userEvent.setup();
     await openEdit(user);
@@ -1100,6 +1100,22 @@ describe("CarProfilePage — VIN on edit (QA fix: a <script> string was stored a
     await user.type(screen.getByLabelText("VIN"), "1HGCM82633A004352");
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ vin: "1HGCM82633A004352" })));
+  });
+
+  it("accepts a VIN typed in lower case and saves it in upper case", async () => {
+    const user = userEvent.setup();
+    const { update } = mockCarsTable({
+      selectResult: { data: SAMPLE_CAR, error: null },
+      updateResult: { data: { ...SAMPLE_CAR, vin: "JH4KA8260MC000000" }, error: null },
+    });
+    renderAt("/cars/mine");
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.clear(screen.getByLabelText("VIN"));
+    await user.type(screen.getByLabelText("VIN"), "jh4ka8260mc000000");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ vin: "JH4KA8260MC000000" })));
   });
 
   it("lets the VIN be cleared, because it is optional", async () => {
