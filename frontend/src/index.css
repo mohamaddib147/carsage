@@ -3208,6 +3208,7 @@ textarea:focus {
 }
 
 .fuel-log-table-wrap {
+  position: relative;
   margin-top: calc(var(--spacing-unit) * 2);
   overflow-x: auto;
   background-color: var(--color-surface);

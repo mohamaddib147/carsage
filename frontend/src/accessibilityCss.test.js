@@ -58,3 +58,14 @@ describe("Car Profile spec rows (CAR-72)", () => {
     expect(css).not.toContain("content: attr(data-icon)");
   });
 });
+
+describe("table scroll wrappers (QA fix)", () => {
+  // .sr-only is position: absolute. Without a positioned ancestor inside the scrolling wrapper, the Expenses table's
+  // "Actions" header span was placed against the page and widened it by 455 px at 390 px (overflow clipping only
+  // applies to descendants whose containing block is the scroller). jsdom has no layout, so the rule is checked.
+  it("the wrapper is positioned, so its screen-reader-only text is clipped with the table instead of widening the page", () => {
+    expect(rule(".sr-only")).toMatch(/position: absolute/);
+    expect(rule(".fuel-log-table-wrap")).toMatch(/position: relative/);
+    expect(rule(".fuel-log-table-wrap")).toMatch(/overflow-x: auto/);
+  });
+});
