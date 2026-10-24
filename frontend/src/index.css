@@ -2431,6 +2431,11 @@ textarea:focus {
   padding: calc(var(--spacing-unit) * 4);
 }
 
+/* Four items sit two by two, not three and one. */
+.landing-pillars__grid--pairs {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+}
+
 .landing-pillar {
   display: flex;
   gap: calc(var(--spacing-unit) * 2);

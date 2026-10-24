@@ -1,7 +1,8 @@
 // Tests for the Landing screen: the accessible page heading, the three
-// feature cards, and that the primary CTAs read "Get Started Free" (-> Sign
-// Up) when logged out, "Go to Dashboard" (-> Dashboard) when logged in, and
-// are absent while the session is still loading. The Supabase client is
+// feature cards, and that the primary CTAs read "Add your car" (hero) and
+// "Create your free account" (closing banner), both -> Sign Up, when logged
+// out, "Go to Dashboard" (-> Dashboard) when logged in, and are absent while
+// the session is still loading. The Supabase client is
 // mocked so no real network calls happen.
 
 import { readFileSync } from "node:fs";
@@ -85,15 +86,19 @@ describe("LandingPage", () => {
     expect(screen.queryByText(/Squeaking brake/)).not.toBeInTheDocument();
   });
 
-  it("logged out: every primary CTA says 'Get Started Free' and links to Sign Up (normal case)", async () => {
+  it("logged out: the hero says 'Add your car' and the closing banner 'Create your free account', both linking to Sign Up (normal case)", async () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
     renderPage();
 
-    const ctas = await screen.findAllByRole("link", { name: /Get Started Free/ });
-    expect(ctas).toHaveLength(2);
-    for (const cta of ctas) {
-      expect(cta).toHaveAttribute("href", "/signup");
-    }
+    const hero = await screen.findByRole("link", { name: /Add your car/ });
+    const banner = await screen.findByRole("link", { name: "Create your free account" });
+    expect(hero).toHaveAttribute("href", "/signup");
+    expect(banner).toHaveAttribute("href", "/signup");
+    expect(hero.closest(".landing-hero")).not.toBeNull();
+    expect(banner.closest(".landing-closing-cta")).not.toBeNull();
+    // The old wording is gone everywhere, and no third sign-up button appeared.
+    expect(screen.queryByText(/Get Started/)).not.toBeInTheDocument();
+    expect(document.querySelectorAll('a[href="/signup"].btn-primary, a[href="/signup"].btn-accent')).toHaveLength(2);
     expect(screen.queryByRole("link", { name: /Go to Dashboard/ })).not.toBeInTheDocument();
   });
 
@@ -108,14 +113,14 @@ describe("LandingPage", () => {
     for (const cta of ctas) {
       expect(cta).toHaveAttribute("href", "/dashboard");
     }
-    expect(screen.queryByRole("link", { name: /Get Started/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Add your car|Create your free account|Get Started/ })).not.toBeInTheDocument();
   });
 
   it("shows no CTA while the session is loading (no wrong-state flash)", () => {
     supabase.auth.getSession.mockReturnValue(new Promise(() => {}));
     renderPage();
 
-    expect(screen.queryByRole("link", { name: /Get Started/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Add your car|Create your free account/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Go to Dashboard/ })).not.toBeInTheDocument();
   });
 });
@@ -149,19 +154,70 @@ describe("LandingPage sections and anchors", () => {
     expect(preview).not.toHaveTextContent(/tire pressure|battery health|diagnostic/i);
   });
 
-  // Copy pass: the page used to show 3 of the app's 6 tools. The other three sit in a short list under the cards.
-  it("also lists the everyday tools the three feature cards leave out", async () => {
+  // Features pass: the Dashboard is the Example card, the three core tools are the big cards, and the rest sit in a compact
+  // grid. Each line below is described from its screen in the app (see the comment above MORE_TOOLS).
+  it("describes the Dashboard on the Example card", async () => {
+    renderPage();
+
+    const preview = await screen.findByRole("region", { name: "Example of the CarSage dashboard" });
+    expect(within(preview).getByText("Your Dashboard shows your active car at a glance, and what you have spent this month.")).toBeInTheDocument();
+  });
+
+  it("lists the everyday tools in a compact group with its own heading: Fuel Log, Maintenance, Expenses and Photo scans", async () => {
     renderPage();
 
     const more = await screen.findByRole("region", { name: "More tools" });
+    expect(within(more).getByRole("heading", { level: 2, name: "Keep on top of it every day" })).toBeInTheDocument();
     for (const [title, text] of [
-      ["Fuel Log", /real km\/L/],
-      ["Service reminders", /oil changes/],
-      ["Expenses", /repairs, parking, insurance/i],
+      ["Fuel Log", /your odometer .* real km\/L/],
+      ["Maintenance", /by distance or time.* due soon or overdue/],
+      ["Expenses", /repairs, parking, insurance .* each month, fuel included/],
+      ["Photo scans", /fuel pump, your odometer or a dashboard warning light/],
     ]) {
-      expect(within(more).getByRole("heading", { name: title })).toBeInTheDocument();
+      expect(within(more).getByRole("heading", { level: 4, name: title })).toBeInTheDocument();
       expect(within(more).getByText(text)).toBeInTheDocument();
     }
+    expect(within(more).getAllByRole("heading", { level: 4 })).toHaveLength(4);
+    // Four items sit two by two (a plain auto-fit grid would leave the fourth alone on a row).
+    expect(more.querySelector(".landing-pillars__grid")).toHaveClass("landing-pillars__grid--pairs");
+    expect(readFileSync("src/index.css", "utf8")).toMatch(/\.landing-pillars__grid--pairs \{\s*grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 340px\), 1fr\)\);/);
+  });
+
+  it("the photo scan card says what the Privacy page says: Google's Gemini reads it, CarSage does not keep it, and it is optional", async () => {
+    renderPage();
+
+    const more = await screen.findByRole("region", { name: "More tools" });
+    expect(within(more).getByText(/It is optional; Google's Gemini reads the photo and CarSage does not keep it\./)).toBeInTheDocument();
+    expect(readFileSync("src/pages/LegalPages.jsx", "utf8")).toMatch(/CarSage does not store: a photo you scan/);
+  });
+
+  it("the photo scan card links to the Privacy Policy (the /privacy route), and no other tool card has a link", async () => {
+    renderPage();
+
+    const more = await screen.findByRole("region", { name: "More tools" });
+    const link = within(more).getByRole("link", { name: "See our Privacy Policy" });
+    expect(link).toHaveAttribute("href", "/privacy");
+    expect(link.closest(".landing-pillar")).toHaveTextContent("Photo scans");
+    expect(within(more).getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("claims no email or phone reminders (the app has no reminder job) and nothing from the out-of-scope list", async () => {
+    renderPage();
+
+    await screen.findByRole("region", { name: "More tools" });
+    const text = document.body.textContent;
+    expect(text).not.toMatch(/email|e-mail|notification|push|text message|sms/i);
+    expect(text).not.toMatch(/document vault|insurance integration|roadside|booking|marketplace|voice|export|fleet|native app|OBD|live map|GPS/i);
+    expect(text).not.toMatch(/registration/i);
+    expect(text).not.toMatch(/get service reminders/i);
+  });
+
+  it("every icon in the page is one of the existing icon components (decorative, no emoji)", async () => {
+    renderPage();
+
+    const more = await screen.findByRole("region", { name: "More tools" });
+    expect(more.querySelectorAll(".landing-pillar__icon svg")).toHaveLength(4);
+    expect(document.body.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 
   it("explains itself in everyday words: no developer terms, and it says who it is for", async () => {
