@@ -84,6 +84,16 @@ describe("ProtectedRoute", () => {
     expect(screen.queryByText("Login placeholder")).not.toBeInTheDocument();
   });
 
+  it("shows the page-shaped loading skeleton meanwhile, not an empty page (CAR-74: the footer jumped)", () => {
+    supabase.auth.getSession.mockReturnValue(new Promise(() => {}));
+
+    renderProtected();
+
+    expect(screen.getByRole("status")).toHaveTextContent("Loading...");
+    expect(document.querySelector(".route-loading")).toBeInTheDocument();
+    expect(screen.queryByText("Protected dashboard content")).not.toBeInTheDocument();
+  });
+
   it("redirects to /login the moment the session ends while the protected page is open (expiry / sign-out elsewhere)", async () => {
     supabase.auth.getSession.mockResolvedValue({
       data: { session: { user: { email: "driver@example.com" } } },

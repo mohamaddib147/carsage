@@ -6,9 +6,10 @@
 // the default theme for an unmapped make or no cars, and useActiveCar()
 // works safely without a surrounding provider.
 
+import { useLayoutEffect } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { ActiveCarProvider, useActiveCar } from "./ActiveCarContext.jsx";
@@ -137,7 +138,8 @@ describe("ActiveCarProvider", () => {
 });
 
 describe("ActiveCarProvider — public/marketing pages keep the default look", () => {
-  it.each(["/", "/login", "/signup", "/terms", "/privacy"])(
+  // CAR-70: /reset-password (a recovery link signs the visitor in) and /cars/new (a new car has no brand yet) join the list.
+  it.each(["/", "/login", "/signup", "/reset-password", "/cars/new", "/terms", "/privacy"])(
     "does not apply the active car's brand theme on %s, even with a mapped active car",
     async (path) => {
       mockCars([{ id: "car-1", make: "Ferrari" }]);
@@ -173,5 +175,403 @@ describe("useActiveCar without a provider", () => {
     expect(result.current.activeCar).toBeNull();
     expect(result.current.theme).toEqual(DEFAULT_THEME);
     expect(() => result.current.setActiveCarId("car-1")).not.toThrow();
+  });
+});
+
+// ---- CAR-70 ---------------------------------------------------------------------------------------------------
+// The theme follows the car on screen: no green flash on a reload, a failed lookup is not swallowed, and the
+// lookup is keyed on the user's id.
+
+const BMW_PRIMARY = "#0066b2";
+const FERRARI_PRIMARY = "#d40000";
+const rootPrimary = () => document.documentElement.style.getPropertyValue("--color-primary");
+
+/** What a previous visit left behind: this user's active car with its brand, and "this was the last user". */
+function storeActive(userId, carId, make) {
+  window.localStorage.setItem(`carsage.activeCar.${userId}`, JSON.stringify({ carId, make }));
+  window.localStorage.setItem("carsage.activeCarUser", userId);
+}
+
+/** Calls the callback AuthProvider registered with supabase.auth.onAuthStateChange, like Supabase does on sign-in or token refresh. */
+function fireAuthEvent(event, session) {
+  const callback = supabase.auth.onAuthStateChange.mock.calls[0][0];
+  act(() => callback(event, session));
+}
+
+describe("ActiveCarProvider: no flash on load (CAR-70)", () => {
+  it("applies the stored brand before the first paint, without waiting for the login state or the cars lookup", () => {
+    storeActive(USER.id, "car-2", "BMW");
+    supabase.auth.getSession.mockReturnValue(new Promise(() => {}));   // login state never resolves
+    supabase.from.mockImplementation(() => ({ select: () => ({ eq: () => ({ order: () => new Promise(() => {}) }) }) }));
+
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    // Checked right after the first render, with nothing awaited: this is what the first paint would show.
+    expect(rootPrimary()).toBe(BMW_PRIMARY);
+    expect(result.current.activeCarId).toBe("car-2");
+    expect(result.current.theme["--color-primary"]).toBe(BMW_PRIMARY);
+  });
+
+  it("still keeps the stored brand once the login state arrives and the lookup confirms the car (no switch in between)", async () => {
+    storeActive(USER.id, "car-2", "BMW");
+    mockCars([{ id: "car-1", make: "Ferrari" }, { id: "car-2", make: "BMW" }]);
+    const seen = [];
+    const { result } = renderHook(
+      () => {
+        const value = useActiveCar();
+        seen.push(rootPrimary());
+        return value;
+      },
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.cars).toHaveLength(2));
+    expect(result.current.activeCarId).toBe("car-2");
+    expect(rootPrimary()).toBe(BMW_PRIMARY);
+    expect(new Set(seen.filter(Boolean))).toEqual(new Set([BMW_PRIMARY]));   // never green, never Ferrari
+  });
+
+  it("does not show another user's brand: a different signed-in user starts from their own stored car, not the last user's", async () => {
+    storeActive("someone-else", "car-9", "BMW");
+    mockCars([{ id: "car-1", make: "Ferrari" }]);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    await waitFor(() => expect(result.current.activeCarId).toBe("car-1"));
+    expect(rootPrimary()).toBe(FERRARI_PRIMARY);
+    // The other user's remembered car is untouched.
+    expect(JSON.parse(window.localStorage.getItem("carsage.activeCar.someone-else"))).toEqual({ carId: "car-9", make: "BMW" });
+  });
+
+  it("signed out: the stored hint is dropped and the next visitor's first paint is not branded", async () => {
+    storeActive(USER.id, "car-2", "BMW");
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    mockCars([]);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    await waitFor(() => expect(result.current.activeCarId).toBeNull());
+    expect(rootPrimary()).toBe(DEFAULT_THEME["--color-primary"]);
+    expect(window.localStorage.getItem("carsage.activeCarUser")).toBeNull();
+    // This user's own entry stays for their next sign-in.
+    expect(window.localStorage.getItem(`carsage.activeCar.${USER.id}`)).not.toBeNull();
+  });
+});
+
+describe("ActiveCarProvider: applied in the layout phase, i.e. before paint (CAR-70)", () => {
+  it("the stored brand is on the document by the time the layout effects have run (an ordinary effect would come after the paint)", () => {
+    storeActive(USER.id, "car-2", "BMW");
+    supabase.auth.getSession.mockReturnValue(new Promise(() => {}));
+    supabase.from.mockImplementation(() => ({ select: () => ({ eq: () => ({ order: () => new Promise(() => {}) }) }) }));
+    let seenInLayoutPhase = null;
+    // An ANCESTOR of the provider: its layout effect runs after the provider's layout effect but before every ordinary effect.
+    function Probe({ children }) {
+      useLayoutEffect(() => {
+        seenInLayoutPhase = rootPrimary();
+      }, []);
+      return children;
+    }
+
+    renderHook(() => useActiveCar(), {
+      wrapper: ({ children }) => (
+        <MemoryRouter initialEntries={["/dashboard"]}>
+          <Probe>
+            <AuthProvider>
+              <ActiveCarProvider>{children}</ActiveCarProvider>
+            </AuthProvider>
+          </Probe>
+        </MemoryRouter>
+      ),
+    });
+
+    expect(seenInLayoutPhase).toBe(BMW_PRIMARY);
+  });
+});
+
+describe("ActiveCarProvider: remembering the car (CAR-70)", () => {
+  it("stores the car with its brand per user, as JSON, and who the last user was", async () => {
+    mockCars([{ id: "car-1", make: "Ferrari" }, { id: "car-2", make: "BMW" }]);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+    await waitFor(() => expect(result.current.activeCarId).toBe("car-1"));
+
+    act(() => result.current.setActiveCarId("car-2"));
+
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(`carsage.activeCar.${USER.id}`))).toEqual({ carId: "car-2", make: "BMW" }));
+    expect(window.localStorage.getItem("carsage.activeCarUser")).toBe(USER.id);
+  });
+
+  it("still honours a car id stored by the version before CAR-70 (edge case: nobody loses their choice)", async () => {
+    window.localStorage.setItem(`carsage.activeCarId.${USER.id}`, "car-2");
+    mockCars([{ id: "car-1", make: "Ferrari" }, { id: "car-2", make: "BMW" }]);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    await waitFor(() => expect(result.current.cars).toHaveLength(2));
+    expect(result.current.activeCarId).toBe("car-2");
+    expect(rootPrimary()).toBe(BMW_PRIMARY);
+  });
+
+  it("falls back to the first car when the stored one no longer exists (it was deleted)", async () => {
+    storeActive(USER.id, "car-gone", "Toyota");
+    mockCars([{ id: "car-1", make: "Ferrari" }]);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    await waitFor(() => expect(result.current.activeCarId).toBe("car-1"));
+    expect(rootPrimary()).toBe(FERRARI_PRIMARY);
+  });
+
+  it("a car reported with its make themes at once, before the cars lookup has answered", () => {
+    supabase.from.mockImplementation(() => ({ select: () => ({ eq: () => ({ order: () => new Promise(() => {}) }) }) }));
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    act(() => result.current.setActiveCarId("car-2", "BMW"));
+
+    expect(rootPrimary()).toBe(BMW_PRIMARY);
+    expect(result.current.activeCarId).toBe("car-2");
+  });
+});
+
+describe("ActiveCarProvider: selectInitialCar (CAR-70)", () => {
+  const LIST = [{ id: "car-1", make: "Ferrari" }, { id: "car-2", make: "BMW" }];
+
+  it("returns the active car when the screen's list has it, and the theme stays on it", async () => {
+    storeActive(USER.id, "car-2", "BMW");
+    mockCars(LIST);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+    await waitFor(() => expect(result.current.cars).toHaveLength(2));
+
+    let picked;
+    act(() => { picked = result.current.selectInitialCar(LIST); });
+
+    expect(picked).toBe("car-2");
+    expect(rootPrimary()).toBe(BMW_PRIMARY);
+  });
+
+  it("returns the first car when the active one isn't in the list, and reports it so the theme matches what the screen shows", async () => {
+    storeActive(USER.id, "car-2", "BMW");
+    mockCars(LIST);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+    await waitFor(() => expect(result.current.cars).toHaveLength(2));
+
+    let picked;
+    act(() => { picked = result.current.selectInitialCar([LIST[0]]); });
+
+    expect(picked).toBe("car-1");
+    expect(result.current.activeCarId).toBe("car-1");
+    expect(rootPrimary()).toBe(FERRARI_PRIMARY);
+  });
+
+  it("returns an empty id for an empty list, and changes nothing (edge case)", async () => {
+    storeActive(USER.id, "car-2", "BMW");
+    mockCars(LIST);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+    await waitFor(() => expect(result.current.cars).toHaveLength(2));
+
+    let picked;
+    act(() => { picked = result.current.selectInitialCar([]); });
+
+    expect(picked).toBe("");
+    expect(result.current.activeCarId).toBe("car-2");
+  });
+
+  it("without a provider it just picks the first car", () => {
+    const { result } = renderHook(() => useActiveCar());
+    expect(result.current.selectInitialCar(LIST)).toBe("car-1");
+    expect(result.current.selectInitialCar([])).toBe("");
+  });
+});
+
+describe("ActiveCarProvider: a failing cars lookup, e.g. a 401 (CAR-70)", () => {
+  // The shape supabase-js returns for a 401: an error object plus the HTTP status (it does not throw).
+  const UNAUTHORIZED = { data: null, error: { code: "PGRST301", message: "JWT expired" }, status: 401 };
+  beforeEach(() => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.mocked(console.warn).mockRestore();
+  });
+  const SESSION_1 = { user: USER, access_token: "token-1" };
+
+  /** A lookup that answers with the first answer, then the second, and so on (the last one repeats). */
+  function mockLookupSequence(...answers) {
+    let call = 0;
+    const order = vi.fn(() => Promise.resolve(answers[Math.min(call++, answers.length - 1)]));
+    supabase.from.mockImplementation(() => ({ select: () => ({ eq: () => ({ order }) }) }));
+    return order;
+  }
+
+  it("is not swallowed: it is reported as failed, and a stored but unconfirmed brand is not trusted (default theme)", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: SESSION_1 } });
+    storeActive(USER.id, "car-2", "BMW");
+    mockLookupSequence(UNAUTHORIZED);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+    expect(rootPrimary()).toBe(DEFAULT_THEME["--color-primary"]);
+    expect(result.current.activeCarId).toBe("car-2");   // still remembered, just not applied
+  });
+
+  it("retries on the next auth event and then shows the right theme", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: SESSION_1 } });
+    storeActive(USER.id, "car-2", "BMW");
+    const order = mockLookupSequence(UNAUTHORIZED, { data: [{ id: "car-1", make: "Ferrari" }, { id: "car-2", make: "BMW" }], error: null });
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+    expect(order).toHaveBeenCalledTimes(1);
+
+    fireAuthEvent("TOKEN_REFRESHED", { user: USER, access_token: "token-2" });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(false));
+    expect(order).toHaveBeenCalledTimes(2);
+    expect(rootPrimary()).toBe(BMW_PRIMARY);
+    expect(result.current.cars).toHaveLength(2);
+  });
+
+  it("a screen's own report still counts while the lookup is failing (it came from a successful query)", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: SESSION_1 } });
+    mockLookupSequence(UNAUTHORIZED);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+
+    act(() => result.current.setActiveCarId("car-2", "BMW"));
+
+    expect(rootPrimary()).toBe(BMW_PRIMARY);
+  });
+
+  it("stays on the default theme, without crashing, when it keeps failing (edge case: no cars and no stored car)", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: SESSION_1 } });
+    mockLookupSequence(UNAUTHORIZED);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+    expect(result.current.activeCarId).toBeNull();
+    expect(result.current.theme).toEqual(DEFAULT_THEME);
+  });
+});
+
+describe("ActiveCarProvider: the lookup is keyed on the user's id, not the user object (CAR-70)", () => {
+  it("a token refresh (a new user object with the same id) does not look the cars up again", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: "token-1" } } });
+    mockCars([{ id: "car-1", make: "Ferrari" }]);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+    await waitFor(() => expect(result.current.activeCarId).toBe("car-1"));
+    expect(supabase.from).toHaveBeenCalledTimes(1);
+
+    fireAuthEvent("TOKEN_REFRESHED", { user: { ...USER }, access_token: "token-2" });
+    fireAuthEvent("TOKEN_REFRESHED", { user: { ...USER }, access_token: "token-3" });
+    await act(async () => {});
+
+    expect(supabase.from).toHaveBeenCalledTimes(1);
+    expect(result.current.activeCarId).toBe("car-1");
+  });
+});
+
+describe("ActiveCarProvider: every kind of failed lookup falls back, never throws, and retries (CAR-70 follow-up)", () => {
+  const CARS_OK = { data: [{ id: "car-1", make: "Ferrari" }, { id: "car-2", make: "BMW" }], error: null, status: 200 };
+  const UNAUTHORIZED = { data: null, error: { code: "PGRST301", message: "JWT expired" }, status: 401 };
+
+  beforeEach(() => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.mocked(console.warn).mockRestore();
+  });
+
+  /** A lookup whose n-th call does answers[n] (the last one repeats): a value resolves, an Error is THROWN (the promise rejects). */
+  function mockLookup(...answers) {
+    let call = 0;
+    const order = vi.fn(() => {
+      const answer = answers[Math.min(call++, answers.length - 1)];
+      return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
+    });
+    supabase.from.mockImplementation(() => ({ select: () => ({ eq: () => ({ order }) }) }));
+    return order;
+  }
+
+  it("a 401 response: default theme, no error thrown, and the next auth event retries and themes correctly", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: "token-1" } } });
+    storeActive(USER.id, "car-2", "BMW");
+    const order = mockLookup(UNAUTHORIZED, CARS_OK);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+    expect(rootPrimary()).toBe(DEFAULT_THEME["--color-primary"]);
+
+    fireAuthEvent("TOKEN_REFRESHED", { user: USER, access_token: "token-2" });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(false));
+    expect(order).toHaveBeenCalledTimes(2);
+    expect(rootPrimary()).toBe(BMW_PRIMARY);
+  });
+
+  it("a network error THROWN by the request: no unhandled rejection, default theme, retried on the next auth event", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: "token-1" } } });
+    storeActive(USER.id, "car-2", "BMW");
+    const order = mockLookup(new TypeError("Failed to fetch"), CARS_OK);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+    expect(rootPrimary()).toBe(DEFAULT_THEME["--color-primary"]);
+
+    fireAuthEvent("TOKEN_REFRESHED", { user: USER, access_token: "token-2" });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(false));
+    expect(order).toHaveBeenCalledTimes(2);
+    expect(rootPrimary()).toBe(BMW_PRIMARY);
+  });
+
+  it("a network error RETURNED as an error with HTTP status 0: same fallback", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: "token-1" } } });
+    storeActive(USER.id, "car-2", "BMW");
+    mockLookup({ data: null, error: { message: "TypeError: Failed to fetch" }, status: 0 });
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+    expect(rootPrimary()).toBe(DEFAULT_THEME["--color-primary"]);
+  });
+
+  it("a session without a token (the request goes out anonymously and gets a 401): default theme, then the sign-in with a token retries", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER } } });   // no access_token yet
+    storeActive(USER.id, "car-2", "BMW");
+    const order = mockLookup(UNAUTHORIZED, CARS_OK);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+    expect(rootPrimary()).toBe(DEFAULT_THEME["--color-primary"]);
+
+    fireAuthEvent("SIGNED_IN", { user: USER, access_token: "token-1" });
+
+    await waitFor(() => expect(result.current.lookupFailed).toBe(false));
+    expect(order).toHaveBeenCalledTimes(2);
+    expect(rootPrimary()).toBe(BMW_PRIMARY);
+  });
+
+  it("in development it warns with the HTTP status only: never a token or user data", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: "secret-token-value" } } });
+    mockLookup(UNAUTHORIZED);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+
+    expect(console.warn).toHaveBeenCalledTimes(1);
+    const logged = vi.mocked(console.warn).mock.calls.flat().map(String).join(" ");
+    expect(logged).toContain("HTTP 401");
+    for (const secret of ["secret-token-value", USER.id, USER.email, "JWT expired", "PGRST301"]) {
+      expect(logged).not.toContain(secret);
+    }
+  });
+
+  it("a thrown error is logged without a status (edge case: there is none)", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: "token-1" } } });
+    mockLookup(new TypeError("Failed to fetch"));
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+    await waitFor(() => expect(result.current.lookupFailed).toBe(true));
+
+    const logged = vi.mocked(console.warn).mock.calls.flat().map(String).join(" ");
+    expect(logged).toContain("no HTTP status, network error");
+    expect(logged).not.toContain("token-1");
+  });
+
+  it("a successful lookup logs nothing", async () => {
+    mockLookup(CARS_OK);
+    const { result } = renderHook(() => useActiveCar(), { wrapper });
+    await waitFor(() => expect(result.current.cars).toHaveLength(2));
+    expect(console.warn).not.toHaveBeenCalled();
   });
 });

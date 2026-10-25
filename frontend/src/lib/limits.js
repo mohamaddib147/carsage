@@ -24,44 +24,26 @@ export const LIMITS = {
   MAX_FILL_LITERS: 200,
   MAX_FILL_COST: 1_000_000_000_000,
   MIN_FILL_DATE: "2000-01-01",
+  // CAR-61: fuel_logs.odometer_km is whole km, 1 to 2,000,000 (the CHECK
+  // fuel_logs_odometer_km_range_check, docs/db_migrations/2026-10-19_car61_*).
+  MAX_ODOMETER_KM: 2_000_000,
+  // CAR-62: maintenance_items / maintenance_records CHECK constraints
+  // (docs/db_migrations/2026-10-19_car62_maintenance_tracking.sql).
+  MAINTENANCE_NAME: 60,
+  MAINTENANCE_NOTES: 500,
+  MIN_INTERVAL_KM: 100,
+  MAX_INTERVAL_KM: 200_000,
+  MIN_INTERVAL_MONTHS: 1,
+  MAX_INTERVAL_MONTHS: 120,
+  MIN_MAINTENANCE_DATE: "2000-01-01",
+  // CAR-64: car_expenses.note (car_expenses_note_length_check). The amount shares
+  // MAX_FILL_COST with fuel_logs (the same 1e12 CHECK).
+  EXPENSE_NOTE: 300,
   // sign up (Supabase Auth enforces 6+; bcrypt only uses the first 72 bytes)
   EMAIL: 254,
   PASSWORD_MIN: 6,
   PASSWORD_MAX: 72,
 };
-
-// CAR-57 registration-card scan: mirrors the backend
-// (backend/app/validation.py's MAX_REGISTRATION_IMAGE_BYTES /
-// ALLOWED_REGISTRATION_IMAGE_TYPES) so an obviously-bad file is rejected
-// before it ever reaches the network.
-export const MAX_REGISTRATION_IMAGE_BYTES = 8 * 1024 * 1024;
-export const ALLOWED_REGISTRATION_IMAGE_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/heic",
-  "image/heif",
-]);
-
-/**
- * Client-side pre-check for a registration-card photo, before it's
- * uploaded. Mirrors the backend's own check (which still applies
- * regardless — this is just fast, friendly feedback).
- * @param {File} file
- * @returns {string} an error message, or "" if the file looks fine.
- */
-export function getRegistrationImageError(file) {
-  if (!ALLOWED_REGISTRATION_IMAGE_TYPES.has(file.type)) {
-    return "Please choose a JPEG, PNG, WEBP or HEIC photo.";
-  }
-  if (file.size > MAX_REGISTRATION_IMAGE_BYTES) {
-    return "That image is too large. Please use a photo under 8 MB.";
-  }
-  if (file.size === 0) {
-    return "That image appears to be empty. Please try again.";
-  }
-  return "";
-}
 
 /**
  * @param {string | null | undefined} value
@@ -117,6 +99,25 @@ export function getFuelPriceError(value) {
     : `Fuel price must be between 1 and ${LIMITS.MAX_FUEL_PRICE_LBP.toLocaleString()} LBP per liter.`;
 }
 
+/** A VIN: exactly 17 letters and digits, never I, O or Q (they are left out of real VINs so they cannot be mistaken for 1 and 0). */
+export const VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/i;
+
+/** The length of a VIN; the car forms' VIN input stops at this (the database allows up to 32, LIMITS.VIN). */
+export const VIN_LENGTH = 17;
+
+/**
+ * Optional VIN: blank is fine, otherwise 17 letters and digits with no I, O or Q, in either case. The database only
+ * limits the length (32); this is the real rule, checked in the car forms because the browser writes cars straight
+ * to Supabase (the backend has no car endpoint).
+ * @param {string | null | undefined} value
+ * @returns {string} an error message, or "" when blank or valid.
+ */
+export function getVinError(value) {
+  const vin = (value ?? "").trim();
+  if (vin === "" || VIN_PATTERN.test(vin)) return "";
+  return "VIN must be 17 letters and digits, with no I, O or Q, or left empty.";
+}
+
 /**
  * Length / range errors for a car form's optional fields and its make and
  * model (required-ness is checked by each form itself).
@@ -139,6 +140,11 @@ export function getCarFieldErrors(values) {
   for (const [field, max, label] of lengthChecks) {
     const message = getLengthError(values[field], max, label);
     if (message) errors[field] = message;
+  }
+  // The length message (over 32) wins; the pattern is only checked for a VIN that is not too long.
+  if (!errors.vin) {
+    const vinError = getVinError(values.vin);
+    if (vinError) errors.vin = vinError;
   }
 
   const efficiencyError = getFuelEfficiencyError(values.fuelEfficiency);

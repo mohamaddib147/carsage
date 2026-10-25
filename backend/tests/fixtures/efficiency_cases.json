@@ -1,0 +1,88 @@
+{
+  "_comment": "Shared fixtures for the real-km/L parity tests (CAR-61). Both backend/tests/test_real_efficiency.py and frontend/src/lib/odometer.parity.test.js read this file and must compute the SAME result. `expected` is null when there is no valid step, else {km_per_liter, interval_count, distance_km}. Keep rows' fields matching both fuel_logs and the frontend entry shape.",
+  "cases": [
+    {
+      "name": "clean run (full-ish fills, 10 km/L throughout)",
+      "rows": [
+        {"id": "c1", "filled_at": "2026-01-01", "created_at": "2026-01-01T09:00:00Z", "odometer_km": 1000, "liters": 30},
+        {"id": "c2", "filled_at": "2026-01-10", "created_at": "2026-01-10T09:00:00Z", "odometer_km": 1400, "liters": 40},
+        {"id": "c3", "filled_at": "2026-01-20", "created_at": "2026-01-20T09:00:00Z", "odometer_km": 1800, "liters": 40},
+        {"id": "c4", "filled_at": "2026-01-30", "created_at": "2026-01-30T09:00:00Z", "odometer_km": 2200, "liters": 40}
+      ],
+      "expected": {"km_per_liter": 10.0, "interval_count": 3, "distance_km": 1200}
+    },
+    {
+      "name": "partial fills: per-row km/L swings 40/2/20 but the average is stable",
+      "rows": [
+        {"id": "p1", "filled_at": "2026-03-01", "created_at": "2026-03-01T09:00:00Z", "odometer_km": 10000, "liters": 20},
+        {"id": "p2", "filled_at": "2026-03-05", "created_at": "2026-03-05T09:00:00Z", "odometer_km": 10400, "liters": 10},
+        {"id": "p3", "filled_at": "2026-03-06", "created_at": "2026-03-06T09:00:00Z", "odometer_km": 10500, "liters": 50},
+        {"id": "p4", "filled_at": "2026-03-20", "created_at": "2026-03-20T09:00:00Z", "odometer_km": 11000, "liters": 25}
+      ],
+      "expected": {"km_per_liter": 11.764705882352942, "interval_count": 3, "distance_km": 1000}
+    },
+    {
+      "name": "partial fill: a small top-up (62 km/L step) merges with the big fill (8.6 km/L step), average 15.2",
+      "rows": [
+        {"id": "m1", "filled_at": "2026-08-01", "created_at": "2026-08-01T09:00:00Z", "odometer_km": 10000, "liters": 30},
+        {"id": "m2", "filled_at": "2026-08-10", "created_at": "2026-08-10T09:00:00Z", "odometer_km": 10500, "liters": 8},
+        {"id": "m3", "filled_at": "2026-08-20", "created_at": "2026-08-20T09:00:00Z", "odometer_km": 11000, "liters": 58}
+      ],
+      "expected": {"km_per_liter": 15.151515151515152, "interval_count": 2, "distance_km": 1000}
+    },
+    {
+      "name": "a typo-high reading is excluded and cannot poison the average",
+      "rows": [
+        {"id": "t1", "filled_at": "2026-04-01", "created_at": "2026-04-01T09:00:00Z", "odometer_km": 84000, "liters": 35},
+        {"id": "t2", "filled_at": "2026-04-08", "created_at": "2026-04-08T09:00:00Z", "odometer_km": 84400, "liters": 40},
+        {"id": "t3", "filled_at": "2026-04-15", "created_at": "2026-04-15T09:00:00Z", "odometer_km": 844500, "liters": 40},
+        {"id": "t4", "filled_at": "2026-04-22", "created_at": "2026-04-22T09:00:00Z", "odometer_km": 84900, "liters": 40},
+        {"id": "t5", "filled_at": "2026-04-29", "created_at": "2026-04-29T09:00:00Z", "odometer_km": 85300, "liters": 40}
+      ],
+      "expected": {"km_per_liter": 10.0, "interval_count": 2, "distance_km": 800}
+    },
+    {
+      "name": "the first reading of a run is a typo (8,461 for 84,610): the bad step is excised, the rest counts",
+      "rows": [
+        {"id": "tf1", "filled_at": "2026-12-01", "created_at": "2026-12-01T09:00:00Z", "odometer_km": 8461, "liters": 40},
+        {"id": "tf2", "filled_at": "2026-12-10", "created_at": "2026-12-10T09:00:00Z", "odometer_km": 85000, "liters": 40},
+        {"id": "tf3", "filled_at": "2026-12-20", "created_at": "2026-12-20T09:00:00Z", "odometer_km": 85400, "liters": 40}
+      ],
+      "expected": {"km_per_liter": 10.0, "interval_count": 1, "distance_km": 400}
+    },
+    {
+      "name": "same-day fill-ups ordered by created_at",
+      "rows": [
+        {"id": "s2", "filled_at": "2026-02-01", "created_at": "2026-02-01T18:00:00Z", "odometer_km": 2300, "liters": 30},
+        {"id": "s1", "filled_at": "2026-02-01", "created_at": "2026-02-01T08:00:00Z", "odometer_km": 2000, "liters": 30},
+        {"id": "s3", "filled_at": "2026-02-05", "created_at": "2026-02-05T09:00:00Z", "odometer_km": 2600, "liters": 20}
+      ],
+      "expected": {"km_per_liter": 12.0, "interval_count": 2, "distance_km": 600}
+    },
+    {
+      "name": "below the Trip Planner floor: one short measured step",
+      "rows": [
+        {"id": "b1", "filled_at": "2026-05-01", "created_at": "2026-05-01T09:00:00Z", "odometer_km": 5000, "liters": 20},
+        {"id": "b2", "filled_at": "2026-05-04", "created_at": "2026-05-04T09:00:00Z", "odometer_km": 5300, "liters": 30}
+      ],
+      "expected": {"km_per_liter": 10.0, "interval_count": 1, "distance_km": 300}
+    },
+    {
+      "name": "a missing reading in the middle breaks the chain (no valid step)",
+      "rows": [
+        {"id": "l1", "filled_at": "2026-06-01", "created_at": "2026-06-01T09:00:00Z", "odometer_km": 1000, "liters": 30},
+        {"id": "l2", "filled_at": "2026-06-10", "created_at": "2026-06-10T09:00:00Z", "odometer_km": null, "liters": 40},
+        {"id": "l3", "filled_at": "2026-06-20", "created_at": "2026-06-20T09:00:00Z", "odometer_km": 1800, "liters": 40}
+      ],
+      "expected": null
+    },
+    {
+      "name": "no odometer readings at all",
+      "rows": [
+        {"id": "n1", "filled_at": "2026-07-01", "created_at": "2026-07-01T09:00:00Z", "odometer_km": null, "liters": 30},
+        {"id": "n2", "filled_at": "2026-07-10", "created_at": "2026-07-10T09:00:00Z", "odometer_km": null, "liters": 40}
+      ],
+      "expected": null
+    }
+  ]
+}

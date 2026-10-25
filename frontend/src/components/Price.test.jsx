@@ -2,6 +2,7 @@
 // both currencies, the chosen primary one first and bold, the other muted, and the
 // conversion always uses the one fixed rate.
 
+import { readFileSync } from "node:fs";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -114,5 +115,20 @@ describe("CurrencyToggle", () => {
     renderWith(<CurrencyToggle />, { stored: "LBP" });
 
     expect(screen.getByRole("button", { name: "LBP" })).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+describe("Price — line wrapping", () => {
+  // jsdom has no layout, so guard the two halves: the stylesheet forbids breaks inside
+  // each figure, and each figure is one element, so only the gap between them can wrap.
+  it("keeps each figure on one line, so only the gap between them can wrap", () => {
+    const css = readFileSync("src/index.css", "utf8");
+    expect(css).toMatch(/\.price > \* \{[^}]*white-space: nowrap/);
+
+    const { container } = renderWith(<Price amount={179_420} currency="LBP" />);
+    expect([...container.querySelector(".price").children].map((el) => el.className)).toEqual([
+      "price__primary",
+      "price__secondary",
+    ]);
   });
 });

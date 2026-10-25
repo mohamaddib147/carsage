@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ResetPasswordPage from "./ResetPasswordPage.jsx";
+import AuthPage from "./AuthPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 
@@ -49,6 +50,66 @@ describe("ResetPasswordPage — no recovery session (expired/reused link, edge c
 
     expect(await screen.findByText(/This reset link has expired or was already used/)).toBeInTheDocument();
     expect(screen.queryByLabelText("New password")).not.toBeInTheDocument();
+  });
+
+  // CAR-73: a way forward instead of a dead end; the wording itself is unchanged.
+  function renderWithLogIn() {
+    render(
+      <MemoryRouter initialEntries={["/reset-password"]}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/login" element={<AuthPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it("keeps its wording and offers 'Back to Log In' (primary) and 'Request a new link' (CAR-73)", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderWithLogIn();
+
+    expect(
+      await screen.findByText("This reset link has expired or was already used. Request a new one from the Log In page."),
+    ).toBeInTheDocument();
+    const back = screen.getByRole("link", { name: "Back to Log In" });
+    expect(back).toHaveAttribute("href", "/login");
+    expect(back).toHaveClass("btn-primary");
+    const again = screen.getByRole("link", { name: "Request a new link" });
+    expect(again).toHaveAttribute("href", "/login");
+    // The primary action comes first in the Tab order.
+    expect(back.compareDocumentPosition(again) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("'Request a new link' opens Log In straight on its 'Forgot password?' form (CAR-73)", async () => {
+    const user = userEvent.setup();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderWithLogIn();
+
+    await user.click(await screen.findByRole("link", { name: "Request a new link" }));
+
+    expect(await screen.findByRole("heading", { name: "Reset your password" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
+  });
+
+  it("'Back to Log In' opens the normal Log In form (CAR-73)", async () => {
+    const user = userEvent.setup();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderWithLogIn();
+
+    await user.click(await screen.findByRole("link", { name: "Back to Log In" }));
+
+    expect(await screen.findByRole("heading", { name: "Log In" })).toBeInTheDocument();
+  });
+
+  it("shows neither action to a signed-in (recovery) session: that user gets the form (CAR-73)", async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: { email: "driver@example.com" } } } });
+    renderWithLogIn();
+
+    expect(await screen.findByLabelText("New password")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Back to Log In" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Request a new link" })).not.toBeInTheDocument();
   });
 });
 

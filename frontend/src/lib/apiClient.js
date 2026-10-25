@@ -14,7 +14,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
  * @throws {Error} with the backend's `detail` message if the response isn't ok.
  */
 export async function apiFetch(path, { method = "GET", body, accessToken } = {}) {
-  // CAR-57 (registration-card scan): a FormData body (a file upload) is
+  // A FormData body (a file upload, e.g. the Fuel Log camera) is
   // sent as-is — the browser sets its own multipart Content-Type with the
   // boundary, which we must not override. Every other call keeps JSON.
   const isFormData = typeof FormData !== "undefined" && body instanceof FormData;

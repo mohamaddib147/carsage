@@ -24,6 +24,13 @@
 // The thumbnail URL is derived from the video id in video_url (YouTube's
 // predictable img.youtube.com pattern) rather than stored, since only
 // video_title/video_url are persisted columns.
+// Find a mechanic (CAR-65): a 'mechanic' reply (live or reloaded from
+// history) ends with a "Find a mechanic near me" link that opens a Google
+// Maps search in a new tab, so the advice has a next step. It is a plain
+// public Maps URL built from one fixed query (no API key, no billing, no
+// location permission asked by CarSage; Maps uses the visitor's own
+// location), never from user or AI text. A search link, not a booking or
+// marketplace feature.
 // Layout matches docs/stitch_carsage_landing_page/carsage_ai_advisor for
 // the in-scope parts (chat bubbles, quick-start prompt chips, badge +
 // numbered steps on a DIY response); its left sidebar nav, "telemetry"
@@ -35,10 +42,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import PageShell from "../components/PageShell.jsx";
+import PhotoScan from "../components/PhotoScan.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
+import { isStillFromPhoto, mergeFlag, toRequestFlag } from "../lib/advisorPhoto.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { useActiveCar } from "../theme/ActiveCarContext.jsx";
+import { Check } from "../components/icons.jsx";
+import { MapPin, Play, TriangleAlert, Wrench } from "../components/iconsMore.jsx";
 
 const EXAMPLE_PROMPTS = [
   "Squeaking brakes at low speed",
@@ -53,6 +64,20 @@ function guidanceSteps(guidance) {
     .split(/(?<=[.!?])\s+/)
     .map((sentence) => sentence.trim())
     .filter(Boolean);
+}
+
+// The whole URL is fixed at build time: nothing the user typed or the AI
+// returned is ever put into it (CAR-65), so it can't be steered elsewhere.
+const FIND_MECHANIC_URL = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+  "car mechanic near me",
+)}`;
+
+/**
+ * Small map-pin icon for the "Find a mechanic near me" link (decorative).
+ * @returns {JSX.Element}
+ */
+function PinIcon() {
+  return <MapPin size={14} />;
 }
 
 const YOUTUBE_HOSTS = new Set(["www.youtube.com", "youtube.com", "m.youtube.com"]);
@@ -86,7 +111,7 @@ function youtubeVideoId(videoUrl) {
  */
 function AIAdvisorPage() {
   const { user, session } = useAuth();
-  const { setActiveCarId } = useActiveCar();
+  const { setActiveCarId, selectInitialCar } = useActiveCar();
 
   const [cars, setCars] = useState([]);
   const [loadingCars, setLoadingCars] = useState(true);
@@ -95,12 +120,31 @@ function AIAdvisorPage() {
   const [messages, setMessages] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [description, setDescription] = useState("");
+  // Set while the input holds text that came from a photo scan: {kind, confidence, sentences}.
+  const [photoFlag, setPhotoFlag] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   const nextMessageId = useRef(0);
   const conversationIdRef = useRef(null);
   const transcriptEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // The photo scan only FILLS the input (after anything already typed); the user edits it and
+  // presses Send. Nothing is sent automatically. The flag marks the text as photo-derived so the
+  // backend can be more cautious about it.
+  function handleFinding(finding) {
+    setDescription((previous) => (previous.trim() ? `${previous.trim()} ${finding.sentence}` : finding.sentence).slice(0, 1000));
+    setPhotoFlag((previous) => mergeFlag(previous, finding));
+    inputRef.current?.focus();
+  }
+
+  // Typing keeps the flag while the scanned sentence is still (mostly) there; emptying the box or
+  // replacing the text entirely clears it.
+  function handleDescriptionChange(value) {
+    setDescription(value);
+    setPhotoFlag((previous) => (previous && isStillFromPhoto(value, previous.sentences) ? previous : null));
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -118,7 +162,8 @@ function AIAdvisorPage() {
       if (cancelled) return;
       const loadedCars = data ?? [];
       setCars(loadedCars);
-      setSelectedCarId(loadedCars[0]?.id ?? "");
+      // CAR-70: start on the active car (else the first) and report it, so the theme matches.
+      setSelectedCarId(selectInitialCar(loadedCars));
       setLoadingCars(false);
     }
 
@@ -126,7 +171,7 @@ function AIAdvisorPage() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, selectInitialCar]);
 
   useEffect(() => {
     if (!user || !selectedCarId) return;
@@ -194,7 +239,7 @@ function AIAdvisorPage() {
   }, [messages, submitting]);
 
   /** @param {string} text */
-  async function sendMessage(text) {
+  async function sendMessage(text, { photo } = {}) {
     const trimmed = text.trim();
     if (!trimmed || submitting) return;
 
@@ -204,6 +249,7 @@ function AIAdvisorPage() {
       { id: nextMessageId.current++, role: "user", text: trimmed },
     ]);
     setDescription("");
+    setPhotoFlag(null);
     setSubmitting(true);
 
     try {
@@ -214,6 +260,7 @@ function AIAdvisorPage() {
           car_id: selectedCarId,
           description: trimmed,
           conversation_id: conversationIdRef.current ?? undefined,
+          photo,
         },
       });
       conversationIdRef.current = result.conversation_id;
@@ -240,7 +287,7 @@ function AIAdvisorPage() {
   /** @param {import('react').FormEvent} event */
   function handleSubmit(event) {
     event.preventDefault();
-    sendMessage(description);
+    sendMessage(description, { photo: toRequestFlag(photoFlag) });
   }
 
   /**
@@ -306,7 +353,15 @@ function AIAdvisorPage() {
   }
 
   if (loadingCars) {
-    return <PageShell title="AI Advisor" description="Loading your car..." />;
+    return (
+      <PageShell title="AI Advisor" description="">
+        <p role="status" className="sr-only">Loading your car...</p>
+        <div className="skeleton-stack" aria-hidden="true">
+          <div className="skeleton-bar skeleton-bar--w-40 skeleton-bar--h-md" />
+          <div className="skeleton-bar skeleton-bar--card" />
+        </div>
+      </PageShell>
+    );
   }
 
   if (cars.length === 0) {
@@ -340,7 +395,7 @@ function AIAdvisorPage() {
                 value={selectedCarId}
                 onChange={(event) => {
                   setSelectedCarId(event.target.value);
-                  setActiveCarId(event.target.value);
+                  setActiveCarId(event.target.value, cars.find((car) => car.id === event.target.value)?.make);
                 }}
               >
                 {cars.map((car) => (
@@ -407,6 +462,7 @@ function AIAdvisorPage() {
               <span
                 className={`advisor-badge advisor-badge--${message.recommendation}`}
               >
+                {message.recommendation === "diy" ? <Wrench size={12} /> : <TriangleAlert size={12} />}
                 {message.recommendation === "diy"
                   ? "DIY Fixable"
                   : "See a Mechanic"}
@@ -418,7 +474,18 @@ function AIAdvisorPage() {
                   ))}
                 </ol>
               ) : (
-                <p className="advisor-guidance-text">{message.guidance}</p>
+                <>
+                  <p className="advisor-guidance-text">{message.guidance}</p>
+                  <a
+                    className="advisor-mechanic-link"
+                    href={FIND_MECHANIC_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <PinIcon />
+                    Find a mechanic near me
+                  </a>
+                </>
               )}
               {youtubeVideoId(message.videoUrl) && (
                 <a
@@ -434,7 +501,7 @@ function AIAdvisorPage() {
                       alt=""
                     />
                     <span className="advisor-video-card__play" aria-hidden="true">
-                      ▶
+                      <Play size={14} />
                     </span>
                   </span>
                   <span className="advisor-video-card__body">
@@ -442,7 +509,8 @@ function AIAdvisorPage() {
                       {message.videoTitle}
                     </span>
                     <span className="advisor-video-card__cta">
-                      ▶ Watch on YouTube
+                      <Play size={12} />
+                      Watch on YouTube
                     </span>
                   </span>
                 </a>
@@ -473,9 +541,13 @@ function AIAdvisorPage() {
                     </>
                   ) : (
                     <span className="advisor-fix-feedback__answered">
-                      {message.markedFixed
-                        ? "✓ You said this fixed it"
-                        : "You said this didn't fix it"}{" "}
+                      {message.markedFixed ? (
+                        <>
+                          <Check size={14} /> You said this fixed it
+                        </>
+                      ) : (
+                        "You said this didn't fix it"
+                      )}{" "}
                       <button
                         type="button"
                         className="advisor-fix-feedback__change"
@@ -516,13 +588,15 @@ function AIAdvisorPage() {
 
       <form onSubmit={handleSubmit} className="advisor-input-row">
         <input
+          ref={inputRef}
           type="text"
           placeholder="Describe your issue, e.g. grinding noise when braking"
           // Same cap as the backend (MAX_DESCRIPTION_CHARS in ai_advisor.py).
           maxLength={1000}
           value={description}
-          onChange={(event) => setDescription(event.target.value)}
+          onChange={(event) => handleDescriptionChange(event.target.value)}
           disabled={submitting}
+          aria-describedby="advisorInputHint"
         />
         <button
           className="btn-primary"
@@ -532,6 +606,10 @@ function AIAdvisorPage() {
           Send
         </button>
       </form>
+      <p id="advisorInputHint" className="form-hint">
+        Don&apos;t include personal details such as names, license plates or phone numbers.
+      </p>
+      <PhotoScan onFinding={handleFinding} disabled={submitting} />
       <p className="advisor-disclaimer">
         AI-generated guidance, not a substitute for a professional
         inspection.

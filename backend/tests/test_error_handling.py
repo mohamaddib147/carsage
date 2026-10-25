@@ -130,7 +130,7 @@ class TestSourceNeverBuildsAnErrorFromInternals:
     an error response. (Scans backend/app; a manual audit found it true today.)"""
 
     # Exceptions whose message is a fixed sentence written in this codebase.
-    SAFE_EXCEPTIONS = {"GoogleMapsError", "FuelPriceError", "LLMError"}
+    SAFE_EXCEPTIONS = {"GoogleMapsError", "FuelPriceError", "LLMError", "UsageLimitExceeded", "InvalidImage"}
 
     @staticmethod
     def _sources():

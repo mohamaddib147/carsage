@@ -47,6 +47,24 @@ describe("Logo", () => {
     expect(smallSrc).toBe(largeSrc);
   });
 
+  // CAR-80: `mark` crops the same file to its icon in CSS (.logo--mark), so there is no second
+  // asset. The name is then carried by text beside it, so the image is decorative.
+  it("mark shows the same artwork, decorative, for a caller that writes the wordmark itself", () => {
+    const { unmount } = render(<Logo size={44} />);
+    const fullSrc = screen.getByRole("img", { name: "CarSage" }).src;
+    unmount();
+
+    const { container } = render(<Logo size={44} mark />);
+
+    const img = container.querySelector("img");
+    expect(img.src).toBe(fullSrc);
+    expect(img.alt).toBe("");
+    expect(img.className).toContain("logo--mark");
+    // The crop is the CSS box (.logo--mark sets the aspect ratio), so the inline sizing is unchanged.
+    expect([img.style.height, img.style.width]).toEqual(["44px", "auto"]);
+    expect(screen.queryByRole("img", { name: "CarSage" })).not.toBeInTheDocument();
+  });
+
   it("swaps in the white on-dark variant when onDark is set, for the dark green header", () => {
     const { unmount } = render(<Logo />);
     const lightSrc = screen.getByRole("img", { name: "CarSage" }).src;

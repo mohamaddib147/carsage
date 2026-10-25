@@ -35,12 +35,12 @@ describe("apiFetch — success", () => {
     expect(fetch.mock.calls[0][1].headers.Authorization).toBe("Bearer tok-123");
   });
 
-  it("CAR-57: sends a FormData body as-is, without JSON-stringifying it or setting Content-Type", async () => {
+  it("sends a FormData body as-is, without JSON-stringifying it or setting Content-Type", async () => {
     fetch.mockResolvedValue(fakeResponse({ ok: true, body: { readable: true } }));
     const formData = new FormData();
-    formData.append("file", new Blob(["fake-image"], { type: "image/jpeg" }), "registration.jpg");
+    formData.append("file", new Blob(["fake-image"], { type: "image/jpeg" }), "pump.jpg");
 
-    const data = await apiFetch("/cars/scan-registration", {
+    const data = await apiFetch("/fuel-log/scan-pump", {
       method: "POST",
       body: formData,
       accessToken: "tok-123",

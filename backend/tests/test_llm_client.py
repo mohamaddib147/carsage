@@ -347,158 +347,152 @@ def test_estimate_tank_capacity_returns_none_and_never_raises_when_the_llm_is_do
         assert estimate_tank_capacity("Toyota", "Camry", 2016) is None
 
 
-# --- CAR-57: extract_registration_fields (Car Onboarding registration scan) --
+# --- Step 2: extract_pump_fields / extract_odometer_fields (fuel-log camera) -
 
 from app.services.llm_client import (  # noqa: E402
-    REGISTRATION_SCAN_FAILURE_MESSAGE,
-    _parse_registration_fields,
-    extract_registration_fields,
+    CAMERA_SCAN_FAILURE_MESSAGE,
+    _parse_odometer_fields,
+    _parse_pump_fields,
+    extract_odometer_fields,
+    extract_pump_fields,
 )
 
 
-def test_extract_registration_fields_returns_gemini_result_on_the_normal_path():
-    reply = json.dumps(
-        {
-            "readable": True,
-            "make": "Toyota",
-            "model": "Corolla",
-            "year": 2019,
-            "vin": "1HGCM82633A004352",
-            "license_plate": "BML 78901",
-        }
-    )
-    with patch(
-        "app.services.llm_client.httpx.post",
-        return_value=_gemini_reply(reply),
-    ) as mock_post:
-        result = extract_registration_fields(b"fake-image-bytes", "image/jpeg")
+def test_extract_pump_fields_returns_gemini_result_on_the_normal_path():
+    reply = json.dumps({"readable": True, "liters": 19.6, "total_price": 2_940_000, "currency": "LBP"})
+    with patch("app.services.llm_client.httpx.post", return_value=_gemini_reply(reply)) as mock_post:
+        result = extract_pump_fields(b"fake-image-bytes", "image/jpeg")
 
-    assert result == {
-        "readable": True,
-        "make": "Toyota",
-        "model": "Corolla",
-        "year": 2019,
-        "vin": "1HGCM82633A004352",
-        "license_plate": "BML 78901",
-    }
-    mock_post.assert_called_once()
-    # The image is sent as inline_data, base64-encoded, alongside the prompt.
+    assert result == {"readable": True, "liters": 19.6, "total_price": 2_940_000.0, "currency": "LBP"}
     sent = mock_post.call_args.kwargs["json"]
-    parts = sent["contents"][0]["parts"]
-    assert any("inline_data" in part for part in parts)
-    image_part = next(part for part in parts if "inline_data" in part)
-    assert image_part["inline_data"]["mime_type"] == "image/jpeg"
+    image_part = next(part for part in sent["contents"][0]["parts"] if "inline_data" in part)
     assert base64.b64decode(image_part["inline_data"]["data"]) == b"fake-image-bytes"
 
 
-def test_extract_registration_fields_never_falls_back_to_groq(monkeypatch):
-    # Unlike classify_issue/estimate_tank_capacity, a Gemini failure here
-    # must raise directly — Groq's configured model has no vision support.
+def test_extract_pump_fields_never_falls_back_to_groq(monkeypatch):
     monkeypatch.setattr("app.services.llm_client.GROQ_API_KEY", "test-groq-key")
-
     with patch(
-        "app.services.llm_client.httpx.post",
-        return_value=MagicMock(status_code=429),
+        "app.services.llm_client.httpx.post", return_value=MagicMock(status_code=429)
     ) as mock_post:
         with pytest.raises(LLMError) as excinfo:
-            extract_registration_fields(b"fake-image-bytes", "image/jpeg")
+            extract_pump_fields(b"fake-image-bytes", "image/jpeg")
 
-    mock_post.assert_called_once()  # never tried a second (Groq) call
-    assert str(excinfo.value) == REGISTRATION_SCAN_FAILURE_MESSAGE
+    mock_post.assert_called_once()
+    assert str(excinfo.value) == CAMERA_SCAN_FAILURE_MESSAGE
 
 
-def test_extract_registration_fields_raises_a_clean_error_on_a_transport_failure():
+def test_a_vision_transport_failure_never_leaks_hostnames_or_secrets():
     with patch(
         "app.services.llm_client.httpx.post",
         side_effect=httpx.ConnectError("connection refused to internal-host:9999 key=SECRET"),
     ):
         with pytest.raises(LLMError) as excinfo:
-            extract_registration_fields(b"fake-image-bytes", "image/jpeg")
+            extract_pump_fields(b"fake-image-bytes", "image/jpeg")
 
-    assert str(excinfo.value) == REGISTRATION_SCAN_FAILURE_MESSAGE
+    assert str(excinfo.value) == CAMERA_SCAN_FAILURE_MESSAGE
     assert "internal-host" not in str(excinfo.value)
     assert "SECRET" not in str(excinfo.value)
 
 
-def test_parse_registration_fields_reports_unreadable_when_the_model_says_so():
-    reply = json.dumps(
-        {"readable": False, "make": None, "model": None, "year": None, "vin": None, "license_plate": None}
-    )
-    assert _parse_registration_fields(reply) == {
-        "readable": False,
-        "make": None,
-        "model": None,
-        "year": None,
-        "vin": None,
-        "license_plate": None,
-    }
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
-        "not json at all",
-        "",
-        json.dumps({"make": "Toyota"}),  # missing "readable" -> not confidently true
-        json.dumps({"readable": "yes", "make": "Toyota"}),  # not a real bool
-        "{",
-    ],
-)
-def test_parse_registration_fields_defaults_to_unreadable_on_malformed_replies(text):
-    assert _parse_registration_fields(text) == {
-        "readable": False,
-        "make": None,
-        "model": None,
-        "year": None,
-        "vin": None,
-        "license_plate": None,
-    }
-
-
-def test_parse_registration_fields_strips_markdown_code_fences():
-    reply = (
-        '```json\n{"readable": true, "make": "Honda", "model": "Civic", '
-        '"year": 2020, "vin": null, "license_plate": null}\n```'
-    )
-    result = _parse_registration_fields(reply)
-    assert result["make"] == "Honda"
-    assert result["model"] == "Civic"
-    assert result["year"] == 2020
-
-
-@pytest.mark.parametrize(
-    "year, expected",
-    [
-        (2020, 2020),
-        (1899, None),  # below MIN_CAR_YEAR
-        (2101, None),  # above MAX_CAR_YEAR
-        (1900, 1900),  # boundary, accepted
-        (2100, 2100),  # boundary, accepted
-        ("2020", None),  # not an int
-        (True, None),  # bool is technically an int in Python — must be rejected
-        (None, None),
-    ],
-)
-def test_parse_registration_fields_range_checks_and_types_the_year(year, expected):
-    reply = json.dumps(
-        {"readable": True, "make": None, "model": None, "year": year, "vin": None, "license_plate": None}
-    )
-    assert _parse_registration_fields(reply)["year"] == expected
-
-
-def test_parse_registration_fields_blanks_out_whitespace_only_strings():
-    reply = json.dumps(
-        {"readable": True, "make": "   ", "model": "Civic", "year": None, "vin": "", "license_plate": None}
-    )
-    result = _parse_registration_fields(reply)
-    assert result["make"] is None
-    assert result["model"] == "Civic"
-    assert result["vin"] is None
-
-
-def test_extract_registration_fields_raises_on_an_unusable_gemini_200():
+def test_a_vision_call_raises_cleanly_on_an_unusable_gemini_200():
     odd = MagicMock(status_code=200)
     odd.json.return_value = {"candidates": []}
     with patch("app.services.llm_client.httpx.post", return_value=odd):
-        with pytest.raises(LLMError):
-            extract_registration_fields(b"fake-image-bytes", "image/jpeg")
+        with pytest.raises(LLMError) as excinfo:
+            extract_odometer_fields(b"fake-image-bytes", "image/jpeg")
+
+    assert str(excinfo.value) == CAMERA_SCAN_FAILURE_MESSAGE
+
+
+def test_parse_pump_fields_reports_unreadable_when_the_model_says_so():
+    reply = json.dumps({"readable": False, "liters": None, "total_price": None, "currency": None})
+    assert _parse_pump_fields(reply) == {
+        "readable": False, "liters": None, "total_price": None, "currency": None,
+    }
+
+
+@pytest.mark.parametrize("text", ["", "not json", "{broken", "null", "[]", '{"readable": false}'])
+def test_parse_pump_fields_defaults_to_unreadable_on_malformed_replies(text):
+    result = _parse_pump_fields(text)
+    assert result["readable"] is False
+
+
+@pytest.mark.parametrize(
+    "liters, expected",
+    [(19.6, 19.6), (0, None), (-5, None), (501, None), (True, None), ("19.6", None)],
+)
+def test_parse_pump_fields_range_checks_liters(liters, expected):
+    reply = json.dumps({"readable": True, "liters": liters, "total_price": 30, "currency": "USD"})
+    assert _parse_pump_fields(reply)["liters"] == expected
+
+
+@pytest.mark.parametrize("currency, expected", [("LBP", "LBP"), ("USD", "USD"), ("EUR", None), (None, None), (5, None)])
+def test_parse_pump_fields_only_accepts_lbp_or_usd_currency(currency, expected):
+    reply = json.dumps({"readable": True, "liters": 20, "total_price": 30, "currency": currency})
+    assert _parse_pump_fields(reply)["currency"] == expected
+
+
+def test_extract_odometer_fields_returns_gemini_result_on_the_normal_path():
+    reply = json.dumps({"readable": True, "odometer_km": 84610})
+    with patch("app.services.llm_client.httpx.post", return_value=_gemini_reply(reply)):
+        result = extract_odometer_fields(b"fake-image-bytes", "image/jpeg")
+
+    assert result == {"readable": True, "odometer_km": 84610}
+
+
+def test_extract_odometer_fields_never_falls_back_to_groq(monkeypatch):
+    monkeypatch.setattr("app.services.llm_client.GROQ_API_KEY", "test-groq-key")
+    with patch(
+        "app.services.llm_client.httpx.post", return_value=MagicMock(status_code=429)
+    ) as mock_post:
+        with pytest.raises(LLMError) as excinfo:
+            extract_odometer_fields(b"fake-image-bytes", "image/jpeg")
+
+    mock_post.assert_called_once()
+    assert str(excinfo.value) == CAMERA_SCAN_FAILURE_MESSAGE
+
+
+def test_parse_odometer_fields_reports_unreadable_when_the_model_says_so():
+    reply = json.dumps({"readable": False, "odometer_km": None})
+    assert _parse_odometer_fields(reply) == {"readable": False, "odometer_km": None}
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [(84610, 84610), (0, None), (-5, None), (2_000_001, None), (2_000_000, 2_000_000), (True, None), ("84610", None)],
+)
+def test_parse_odometer_fields_range_checks_the_reading(value, expected):
+    reply = json.dumps({"readable": True, "odometer_km": value})
+    assert _parse_odometer_fields(reply)["odometer_km"] == expected
+
+
+@pytest.mark.parametrize("text", ["", "not json", "{broken", "null", "[]", '{"readable": false}'])
+def test_parse_odometer_fields_defaults_to_unreadable_on_malformed_replies(text):
+    assert _parse_odometer_fields(text)["readable"] is False
+
+
+def test_pump_and_odometer_scans_use_the_vision_key_when_configured(monkeypatch):
+    monkeypatch.setattr("app.services.llm_client.GEMINI_VISION_API_KEY", "vision-only-key")
+    reply = json.dumps({"readable": True, "liters": 20, "total_price": 30, "currency": "USD"})
+    with patch("app.services.llm_client.httpx.post", return_value=_gemini_reply(reply)) as mock_post:
+        extract_pump_fields(b"fake-image-bytes", "image/jpeg")
+
+    assert mock_post.call_args.kwargs["params"]["key"] == "vision-only-key"
+
+
+# --- Advisor camera: text that came from a photo guess ---------------------------
+
+from app.services.llm_client import PHOTO_CAUTION, SYSTEM_PROMPT  # noqa: E402
+
+
+def test_classify_issue_adds_the_photo_caution_only_when_the_text_came_from_a_photo():
+    reply = json.dumps({"recommendation": "mechanic", "guidance": "See a mechanic."})
+    with patch("app.services.llm_client.httpx.post", return_value=_mock_response(json_body=_gemini_payload(reply))) as plain:
+        classify_issue("A headlight is not working.", {"make": "Toyota"})
+    with patch("app.services.llm_client.httpx.post", return_value=_mock_response(json_body=_gemini_payload(reply))) as photo:
+        classify_issue("A headlight is not working.", {"make": "Toyota"}, from_photo=True)
+
+    assert plain.call_args.kwargs["json"]["systemInstruction"]["parts"][0]["text"] == SYSTEM_PROMPT
+    sent = photo.call_args.kwargs["json"]["systemInstruction"]["parts"][0]["text"]
+    assert sent == SYSTEM_PROMPT + PHOTO_CAUTION
+    assert "automated guess about a photo" in sent and "recommend a mechanic" in sent

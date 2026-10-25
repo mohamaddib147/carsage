@@ -3,7 +3,29 @@
 // confirmed fix, and the relative "how long ago" text.
 
 import { describe, expect, it } from "vitest";
-import { diyFixRate, latestFixedMessage, timeAgo } from "./diySuccess.js";
+import { diyFixCounts, diyFixRate, latestFixedMessage, timeAgo } from "./diySuccess.js";
+
+describe("diyFixCounts", () => {
+  it("counts the answered suggestions and how many of them were fixed, leaving out the unanswered", () => {
+    expect(
+      diyFixCounts([
+        { marked_fixed: true }, { marked_fixed: true }, { marked_fixed: true },
+        { marked_fixed: false }, { marked_fixed: false }, { marked_fixed: null },
+      ]),
+    ).toEqual({ fixed: 3, answered: 5 });
+  });
+
+  it("is 0 of 0 with no feedback, and the rate is then null", () => {
+    expect(diyFixCounts([])).toEqual({ fixed: 0, answered: 0 });
+    expect(diyFixRate([{ marked_fixed: null }])).toBeNull();
+  });
+
+  it("always agrees with diyFixRate (the percentage is these two counts)", () => {
+    const rows = [{ marked_fixed: true }, { marked_fixed: false }, { marked_fixed: false }, { marked_fixed: null }];
+    const { fixed, answered } = diyFixCounts(rows);
+    expect(diyFixRate(rows)).toBe(Math.round((fixed / answered) * 100));
+  });
+});
 
 describe("diyFixRate", () => {
   it("returns null — not 0 or NaN — when nobody has given feedback yet", () => {

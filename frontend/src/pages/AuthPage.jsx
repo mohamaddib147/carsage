@@ -11,7 +11,10 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
+import Logo from "../components/Logo.jsx";
+import { loginDestination } from "../auth/loginDestination.js";
 import { LIMITS, describeAuthError } from "../lib/limits.js";
+import { ArrowRight } from "../components/icons.jsx";
 
 /** The standard multi-color Google "G" mark, per Google's own Sign In
  * branding guidelines (developers.google.com/identity/branding-guidelines)
@@ -61,8 +64,10 @@ function AuthPage() {
   const [submitting, setSubmitting] = useState(false);
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
   // "auth" is the normal Sign Up / Log In form; "forgot" swaps in a
-  // one-field "email a reset link" form (login mode only).
-  const [mode, setMode] = useState("auth");
+  // one-field "email a reset link" form (login mode only). CAR-73: the expired
+  // reset-link page opens Log In straight on it, via router state (not a URL
+  // parameter).
+  const [mode, setMode] = useState(!isSignUp && location.state?.mode === "forgot" ? "forgot" : "auth");
 
   /** Starts the Google redirect. Works the same for both Sign Up and Log
    * In — Supabase creates the account on first sign-in, same as any other
@@ -149,8 +154,7 @@ function AuthPage() {
         return;
       }
 
-      const redirectTo = location.state?.from?.pathname ?? "/dashboard";
-      navigate(redirectTo, { replace: true });
+      navigate(loginDestination(location), { replace: true });
     } finally {
       setSubmitting(false);
     }
@@ -160,10 +164,7 @@ function AuthPage() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-card__badge" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M3 11.5 12 4l9 7.5" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <Logo size={36} />
         </div>
 
         <div className="auth-tabs">
@@ -226,7 +227,7 @@ function AuthPage() {
 
               <button className="btn-primary auth-card__submit" type="submit" disabled={submitting}>
                 Send reset link
-                <span aria-hidden="true">→</span>
+                <ArrowRight size={18} />
               </button>
             </form>
 
@@ -249,8 +250,8 @@ function AuthPage() {
             <h1 className="auth-card__title">{isSignUp ? "Sign Up" : "Log In"}</h1>
             <p className="auth-card__subtitle">
               {isSignUp
-                ? "Create an account to start tracking your cars."
-                : "Log in to access your dashboard."}
+                ? "Create your free account to start tracking your cars."
+                : "Welcome back. Log in to see your cars."}
             </p>
 
             <button
@@ -334,7 +335,7 @@ function AuthPage() {
 
               <button className="btn-primary auth-card__submit" type="submit" disabled={submitting}>
                 {isSignUp ? "Sign Up" : "Log In"}
-                <span aria-hidden="true">→</span>
+                <ArrowRight size={18} />
               </button>
             </form>
 

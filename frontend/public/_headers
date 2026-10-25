@@ -1,0 +1,11 @@
+# Netlify custom headers. Vite copies this file from public/ to the root of the
+# build output, which is the folder Netlify publishes.
+#
+# Only the hashed files Vite writes to assets/ (JS chunks, CSS, fonts, images)
+# are cached for a year and marked immutable. Their names change whenever their
+# content changes, so a cached copy can never be stale. index.html and anything
+# unhashed in public/ (favicon, og-image, robots.txt, sitemap.xml) are left on
+# Netlify's default, which revalidates on every visit, so a new deploy is
+# picked up straight away.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

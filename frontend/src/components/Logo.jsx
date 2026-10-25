@@ -18,15 +18,24 @@ import logoOnDark from "../assets/logo-on-dark.svg";
 /**
  * The full CarSage brand lockup. `size` is the rendered height in px; width
  * follows the image's own aspect ratio, so it never looks stretched.
- * @param {{ size?: number, onDark?: boolean, className?: string }} props
+ *
+ * `mark` (CAR-80) shows the icon alone, for a caller that sets the wordmark
+ * as real text beside it. The artwork is vertical — the icon in the top 344
+ * rows of a 373x480 grid, then "CarSage" and the tagline as <text> baselined
+ * at y=412 and y=448 — so the icon is cropped out of the same file in CSS
+ * (`.logo--mark`, which carries the measurement) rather than imported
+ * separately: no second asset to keep in sync, nothing added to the bundle,
+ * and the on-dark variant still applies. The image is then decorative
+ * (alt=""), since the text beside it carries the name.
+ * @param {{ size?: number, onDark?: boolean, mark?: boolean, className?: string }} props
  * @returns {JSX.Element}
  */
-function Logo({ size = 32, onDark = false, className = "" }) {
+function Logo({ size = 32, onDark = false, mark = false, className = "" }) {
   return (
     <img
       src={onDark ? logoOnDark : logo}
-      alt="CarSage"
-      className={`logo ${className}`}
+      alt={mark ? "" : "CarSage"}
+      className={`logo ${mark ? "logo--mark " : ""}${className}`}
       style={{ height: size, width: "auto" }}
     />
   );

@@ -23,7 +23,7 @@
 // response shape it doesn't recognize); tests that DO care about the
 // prefill/override behavior mock each path distinctly via mockApiFetch.
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1529,5 +1529,136 @@ describe("TripPlannerPage — the switch visibly changes this screen (CAR-54 bug
 
     expect(unconvertedMoney(stray)).toHaveLength(2); // "$5.29" and "474,188 LBP", both outside a .price
     stray.remove();
+  });
+});
+
+describe("TripPlannerPage — which km/L the estimate used (CAR-61)", () => {
+  // The car's own rated figure is 12 km/L; each response below says what the
+  // backend actually used. The page must show the response's figure and
+  // source, never re-derive them from the car.
+  const CAR = { id: "car-1", fuel_efficiency: 12 };
+
+  async function planTrip(estimate) {
+    const user = userEvent.setup();
+    mockCarsLookup([CAR]);
+    mockApiFetch({ estimate });
+    renderPage();
+    await user.type(await screen.findByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(await screen.findByLabelText(/Starting Location/), "Beirut, Lebanon");
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+    await screen.findByRole("button", { name: "About this fuel cost estimate" });
+    return user;
+  }
+
+  function basisLine() {
+    return document.querySelector(".trip-result__basis");
+  }
+
+  it("says the estimate is based on the real average, with the figure from the response", async () => {
+    const user = await planTrip({ ...ESTIMATE_90K, efficiency_source: "real", efficiency_km_per_l: 9, real_interval_count: 4 });
+
+    expect(basisLine()).toHaveTextContent(
+      "Based on your real average of 9.0 km/L, from 4 measured fill-ups in your Fuel Log.",
+    );
+    expect(basisLine()).not.toHaveTextContent("12.0");
+    expect(within(basisLine()).getByRole("link", { name: "Fuel Log" })).toHaveAttribute("href", "/fuel-log");
+
+    await user.hover(screen.getByRole("button", { name: "About this fuel cost estimate" }));
+    expect(screen.getByRole("tooltip")).toHaveTextContent(/real average from your Fuel Log/);
+    expect(screen.getByRole("tooltip")).not.toHaveTextContent(/rated/);
+  });
+
+  it("says the estimate used the rated figure, and how to get a real one, with no fill-ups measured", async () => {
+    await planTrip({ ...ESTIMATE_90K, efficiency_source: "rated", efficiency_km_per_l: 12, real_interval_count: 0 });
+
+    expect(basisLine()).toHaveTextContent("Based on the car's rated 12.0 km/L.");
+    expect(basisLine()).toHaveTextContent("Add odometer readings to your fill-ups in the Fuel Log");
+    expect(basisLine()).not.toHaveTextContent(/real average of/);
+  });
+
+  it("says how many measured fill-ups exist when there aren't enough yet", async () => {
+    await planTrip({ ...ESTIMATE_90K, efficiency_source: "rated", efficiency_km_per_l: 12, real_interval_count: 2 });
+
+    expect(basisLine()).toHaveTextContent(
+      "Based on the car's rated 12.0 km/L. Your Fuel Log has 2 measured fill-ups; estimates switch to your real average once there are 3 over 500 km.",
+    );
+  });
+
+  it("uses the singular for one measured fill-up", async () => {
+    await planTrip({ ...ESTIMATE_90K, efficiency_source: "rated", efficiency_km_per_l: 12, real_interval_count: 1 });
+
+    expect(basisLine()).toHaveTextContent("has 1 measured fill-up;");
+  });
+
+  it("shows no basis line for an older response without a source (and keeps the rated wording)", async () => {
+    const user = await planTrip(ESTIMATE_90K);
+
+    expect(basisLine()).toBeNull();
+    await user.hover(screen.getByRole("button", { name: "About this fuel cost estimate" }));
+    expect(screen.getByRole("tooltip")).toHaveTextContent(/rated fuel efficiency under ideal conditions/);
+  });
+
+  it("shows no basis line rather than NaN when the figure is missing or unusable", async () => {
+    await planTrip({ ...ESTIMATE_90K, efficiency_source: "real", efficiency_km_per_l: null, real_interval_count: 4 });
+
+    expect(basisLine()).toBeNull();
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+  });
+});
+
+// QA fix (phone): after a tap on the submit button stops with a message, the first message is scrolled to the middle of
+// the screen once (lib/scrollToAlert.js). jsdom has no scrollIntoView, so give elements one for these tests.
+describe("TripPlannerPage — messages scroll into view on a phone", () => {
+  const scroll = vi.fn();
+  beforeEach(() => {
+    scroll.mockClear();
+    Element.prototype.scrollIntoView = scroll;
+  });
+  afterEach(() => {
+    delete Element.prototype.scrollIntoView;
+  });
+
+  it("with an invalid fuel price: opens the closed Advanced options and scrolls the fuel price alert into view", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1", fuel_type: "Gasoline" }]);
+    mockApiFetch({ estimate: ESTIMATE_90K });
+    renderPage();
+
+    await screen.findByLabelText("Destination *");
+    await user.click(screen.getByText("Advanced options"));
+    const price = screen.getByLabelText(/Fuel Price/);
+    await user.clear(price);
+    await user.type(price, "99999999999");
+    await user.click(screen.getByText("Advanced options")); // close it again: the tap on Plan Trip must open it
+    const details = screen.getByText("Advanced options").closest("details");
+    expect(details).not.toHaveAttribute("open");
+
+    await user.type(screen.getByLabelText("Destination *"), "Byblos, Lebanon");
+    await user.type(await screen.findByLabelText(/Starting Location/), "Beirut, Lebanon");
+    expect(scroll).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Plan Trip" }));
+
+    await waitFor(() => expect(details).toHaveAttribute("open"));
+    const alert = screen.getByText(/Fuel price must be between 1 and 10,000,000/);
+    expect(alert).toBeVisible();
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(alert);
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
+    expect(apiFetch).not.toHaveBeenCalledWith("/trip-planner/estimate", expect.anything());
+  });
+
+  it("scrolls the first error into view when Plan Trip is tapped without a destination", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1" }]);
+    renderPage();
+
+    await user.type(await screen.findByLabelText(/Starting Location/), "Beirut, Lebanon");
+    expect(scroll).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole("button", { name: "Plan Trip" }));
+    const error = await screen.findByText("Destination is required.");
+
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(error);
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
   });
 });

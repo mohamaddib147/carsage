@@ -18,7 +18,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import AIAdvisorPage from "./AIAdvisorPage.jsx";
 import { AuthProvider } from "../auth/AuthContext.jsx";
 import { apiFetch } from "../lib/apiClient.js";
+import { scanPhoto } from "../lib/scanPhoto.js";
 import { supabase } from "../lib/supabaseClient.js";
+
+// The photo scan sends a photo to the backend: mocked, so no network call happens.
+vi.mock("../lib/scanPhoto.js", () => ({ scanPhoto: vi.fn() }));
 
 const LOGGED_IN_USER = { id: "user-123", email: "driver@example.com" };
 const SESSION = { user: LOGGED_IN_USER, access_token: "test-access-token" };
@@ -220,6 +224,16 @@ describe("AIAdvisorPage — chatting", () => {
     );
     expect(screen.queryByText("DIY Fixable")).not.toBeInTheDocument();
     expect(screen.queryByText("See a Mechanic")).not.toBeInTheDocument();
+  });
+
+  it("shows a hint under the input not to include personal details, tied to the input", async () => {
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking");
+    expect(input).toHaveAccessibleDescription(
+      "Don't include personal details such as names, license plates or phone numbers.",
+    );
   });
 
   it("disables Send when the input is empty", async () => {
@@ -628,7 +642,7 @@ describe("AIAdvisorPage — DIY fix feedback (mentor feedback, no Jira task)", (
 
     await user.click(screen.getByRole("button", { name: "Yes" }));
 
-    expect(await screen.findByText("✓ You said this fixed it")).toBeInTheDocument();
+    expect(await screen.findByText("You said this fixed it")).toBeInTheDocument();
     expect(screen.queryByText("Did this fix it?")).not.toBeInTheDocument();
     expect(updateCalls).toEqual([{ id: "msg-99", marked_fixed: true }]);
   });
@@ -672,7 +686,7 @@ describe("AIAdvisorPage — DIY fix feedback (mentor feedback, no Jira task)", (
     expect(screen.getByText("Did this fix it?")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Yes" }));
 
-    expect(await screen.findByText("✓ You said this fixed it")).toBeInTheDocument();
+    expect(await screen.findByText("You said this fixed it")).toBeInTheDocument();
     expect(updateCalls).toEqual([
       { id: "msg-99", marked_fixed: false },
       { id: "msg-99", marked_fixed: true },
@@ -743,7 +757,7 @@ describe("AIAdvisorPage — DIY fix feedback (mentor feedback, no Jira task)", (
 
     renderPage();
 
-    expect(await screen.findByText("✓ You said this fixed it")).toBeInTheDocument();
+    expect(await screen.findByText("You said this fixed it")).toBeInTheDocument();
     expect(screen.queryByText("Did this fix it?")).not.toBeInTheDocument();
   });
 
@@ -788,5 +802,374 @@ describe("AIAdvisorPage — DIY fix feedback (mentor feedback, no Jira task)", (
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save that, try again.");
     expect(screen.getByText("Did this fix it?")).toBeInTheDocument(); // still unanswered, can retry
+  });
+});
+
+describe("AIAdvisorPage — Find a mechanic near me (CAR-65)", () => {
+  const MECHANIC_LINK = "Find a mechanic near me";
+  const EXPECTED_URL =
+    "https://www.google.com/maps/search/?api=1&query=car%20mechanic%20near%20me";
+
+  it("shows the link under a live mechanic reply, opening Google Maps safely in a new tab (normal case)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      recommendation: "mechanic",
+      guidance: "This needs a professional inspection right away.",
+    });
+
+    renderPage();
+    await user.type(
+      await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"),
+      "Brakes are grinding",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    const link = await screen.findByRole("link", { name: MECHANIC_LINK });
+    expect(link).toHaveAttribute("href", EXPECTED_URL);
+    expect(link).toHaveAttribute("target", "_blank");
+    const rel = link.getAttribute("rel").split(/\s+/);
+    expect(rel).toContain("noopener");
+    expect(rel).toContain("noreferrer");
+  });
+
+  it("does not show the link on a DIY reply (edge case)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      recommendation: "diy",
+      guidance: "Top up the washer fluid. Close the cap firmly.",
+    });
+
+    renderPage();
+    await user.type(
+      await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"),
+      "Washer fluid light is on",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("DIY Fixable")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: MECHANIC_LINK })).not.toBeInTheDocument();
+  });
+
+  it("is present on a mechanic reply reloaded from history, and absent on a reloaded DIY reply", async () => {
+    mockSupabaseTables({
+      cars: [{ id: "car-1" }],
+      conversation: { id: "conv-1" },
+      messages: [
+        { sender: "user", message_text: "Washer fluid light is on", recommendation: null },
+        { sender: "ai", message_text: "Top it up.", recommendation: "diy" },
+        { sender: "user", message_text: "Now the brakes grind", recommendation: null },
+        { sender: "ai", message_text: "Get this checked soon.", recommendation: "mechanic" },
+      ],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Get this checked soon.")).toBeInTheDocument();
+    // Exactly one: the DIY reply above it has none.
+    const links = screen.getAllByRole("link", { name: MECHANIC_LINK });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", EXPECTED_URL);
+  });
+
+  it("shows the link on every mechanic reply, not just the latest one", async () => {
+    mockSupabaseTables({
+      cars: [{ id: "car-1" }],
+      conversation: { id: "conv-1" },
+      messages: [
+        { sender: "user", message_text: "Grinding brakes", recommendation: null },
+        { sender: "ai", message_text: "See a mechanic about the brakes.", recommendation: "mechanic" },
+        { sender: "user", message_text: "Engine knocking", recommendation: null },
+        { sender: "ai", message_text: "See a mechanic about the engine.", recommendation: "mechanic" },
+      ],
+    });
+
+    renderPage();
+
+    await screen.findByText("See a mechanic about the engine.");
+    expect(screen.getAllByRole("link", { name: MECHANIC_LINK })).toHaveLength(2);
+  });
+
+  it("builds the URL from a fixed query only: nothing the user or the AI wrote ends up in it (security)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [{ id: "car-1" }] });
+    apiFetch.mockResolvedValue({
+      recommendation: "mechanic",
+      guidance: "Try https://evil.example/steal?x=1 and javascript:alert(1) instead.",
+    });
+
+    renderPage();
+    await user.type(
+      await screen.findByPlaceholderText("Describe your issue, e.g. grinding noise when braking"),
+      "my Toyota Corolla at 12 Hamra Street leaks oil",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    const link = await screen.findByRole("link", { name: MECHANIC_LINK });
+    const href = link.getAttribute("href");
+    expect(href).toBe(EXPECTED_URL);
+    for (const leaked of ["Toyota", "Corolla", "Hamra", "oil", "evil", "javascript"]) {
+      expect(href).not.toContain(leaked);
+    }
+  });
+});
+
+describe("AIAdvisorPage — Scan a photo", () => {
+  const INPUT = "Describe your issue, e.g. grinding noise when braking";
+  const CAR = { id: "car-1", make: "Toyota", model: "Corolla", year: 2020 };
+  const photo = () => new File([new Uint8Array(10)], "part.jpg", { type: "image/jpeg" });
+  const LISTED = { kind: "listed", key: "headlight_out", sentence: "A headlight is not working.", message: null, confidence: "high" };
+  const OTHER = {
+    kind: "other", key: null, sentence: "From a photo (AI guess, may be wrong): Rust hole in the rear fender",
+    message: null, confidence: "medium",
+  };
+  const classifyCalls = () => apiFetch.mock.calls.filter(([path]) => path === "/ai-advisor/classify");
+
+  async function scan(user, result) {
+    scanPhoto.mockResolvedValue(result);
+    await user.upload(document.getElementById("scanPhotoFile"), photo());
+  }
+
+  it("shows one 'Scan a photo' button with the three notices before any scan", async () => {
+    mockSupabaseTables({ cars: [CAR] });
+    renderPage();
+
+    await screen.findByPlaceholderText(INPUT);
+    expect(screen.getByText("Scan a photo")).toBeInTheDocument();
+    expect(screen.queryByText("Scan a warning light")).not.toBeInTheDocument();
+    expect(screen.getByText("Photograph only the part with the problem: no people, license plates, VINs or documents.")).toBeInTheDocument();
+    expect(screen.getByText(/sent to Google's Gemini API to read it, then discarded; it's never saved by CarSage\. On Google's free tier/)).toBeInTheDocument();
+    expect(screen.getByText(/human reviewers may read it/)).toBeInTheDocument();
+    expect(screen.getByText("The result is a guess. Edit it before you send.")).toBeInTheDocument();
+  });
+
+  it("a listed result FILLS the input with our sentence and sends nothing", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await scan(user, LISTED);
+
+    await waitFor(() => expect(input).toHaveValue("A headlight is not working."));
+    expect(scanPhoto).toHaveBeenCalledWith("/ai-advisor/scan-photo", expect.any(File), "test-access-token");
+    expect(classifyCalls()).toHaveLength(0); // never auto-sent
+  });
+
+  it("an 'other' result fills the 'From a photo (AI guess, may be wrong)' sentence", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await scan(user, OTHER);
+
+    await waitFor(() => expect(input).toHaveValue("From a photo (AI guess, may be wrong): Rust hole in the rear fender"));
+    expect(classifyCalls()).toHaveLength(0);
+  });
+
+  it("appends to what the user already typed", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await user.type(input, "It stopped working yesterday.");
+    await scan(user, LISTED);
+
+    await waitFor(() => expect(input).toHaveValue("It stopped working yesterday. A headlight is not working."));
+  });
+
+  it("a low-confidence result still fills the input but warns to check it carefully", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await scan(user, { ...LISTED, confidence: "low" });
+
+    await waitFor(() => expect(input).toHaveValue("A headlight is not working."));
+    expect(screen.getByText("Low confidence: check this sentence carefully before you send it.")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["not_car", "That doesn't look like a car problem."],
+    ["unknown", "Couldn't tell what that is. Describe it in words instead."],
+    ["sensitive", "This photo shows people, a plate or a document. Retake it with just the car part."],
+  ])("a %s result shows its message and leaves the input untouched", async (kind, message) => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await user.type(input, "Something is wrong");
+    await scan(user, { kind, key: null, sentence: null, message, confidence: null });
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(input).toHaveValue("Something is wrong");
+    // and no flag was set: sending the typed text carries none
+    apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    expect(classifyCalls()[0][1].body.photo).toBeUndefined();
+  });
+
+  it("Send carries the exact photo flag with the scanned text", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
+    renderPage();
+
+    await screen.findByPlaceholderText(INPUT);
+    await scan(user, { ...LISTED, confidence: "medium" });
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    expect(classifyCalls()[0][1].body).toEqual({
+      car_id: "car-1",
+      description: "A headlight is not working.",
+      photo: { source: "photo", confidence: "medium", kind: "listed" },
+    });
+  });
+
+  it("the flag stays attached when the sentence is edited before sending", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await scan(user, OTHER);
+    await waitFor(() => expect(input).toHaveValue(OTHER.sentence));
+    await user.type(input, " It happened after a car wash.");
+    await user.type(input, "{Backspace}{Backspace}"); // fiddling with the end of it
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    const body = classifyCalls()[0][1].body;
+    expect(body.description).toContain("Rust hole in the rear fender");
+    expect(body.photo).toEqual({ source: "photo", confidence: "medium", kind: "other" });
+  });
+
+  it("emptying the box clears the flag", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await scan(user, LISTED);
+    await waitFor(() => expect(input).toHaveValue(LISTED.sentence));
+    await user.clear(input);
+    await user.type(input, "My engine is knocking loudly");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    expect(classifyCalls()[0][1].body.photo).toBeUndefined();
+  });
+
+  it("replacing the text entirely (without emptying the box) clears the flag", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await scan(user, LISTED);
+    await waitFor(() => expect(input).toHaveValue(LISTED.sentence));
+    await user.click(input);
+    input.setSelectionRange(0, input.value.length); // select all, then replace it
+    await user.paste("Steering feels loose on bumps");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    const body = classifyCalls()[0][1].body;
+    expect(body.description).toBe("Steering feels loose on bumps");
+    expect(body.photo).toBeUndefined();
+  });
+
+  it("a second scan keeps the MORE cautious flag (free text and the lower confidence win)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
+    renderPage();
+
+    await screen.findByPlaceholderText(INPUT);
+    await scan(user, LISTED); // listed, high
+    await scan(user, { ...OTHER, confidence: "low" }); // other, low
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    expect(classifyCalls()[0][1].body.photo).toEqual({ source: "photo", confidence: "low", kind: "other" });
+  });
+
+  it("an example prompt chip never carries the flag", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    apiFetch.mockResolvedValue({ recommendation: "diy", guidance: "It's fine." });
+    renderPage();
+
+    await screen.findByPlaceholderText(INPUT);
+    await scan(user, LISTED);
+    await user.click(await screen.findByRole("button", { name: "Squeaking brakes at low speed" }));
+
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    expect(classifyCalls()[0][1].body).toEqual({ car_id: "car-1", description: "Squeaking brakes at low speed" });
+  });
+
+  it("the flag is gone after a message is sent (the next typed message has none)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    apiFetch.mockResolvedValue({ recommendation: "mechanic", guidance: "See a mechanic." });
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await scan(user, LISTED);
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(classifyCalls()).toHaveLength(1));
+    await screen.findByText("See a mechanic.");
+    await user.type(input, "Another problem entirely");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(classifyCalls()).toHaveLength(2));
+    expect(classifyCalls()[1][1].body.photo).toBeUndefined();
+  });
+
+  it("shows the backend's plain message when the scan is refused (e.g. the daily limit)", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    scanPhoto.mockRejectedValue(new Error("You've reached today's limit of 20 for this feature. It resets at midnight Beirut time."));
+    renderPage();
+
+    await screen.findByPlaceholderText(INPUT);
+    await user.upload(document.getElementById("scanPhotoFile"), photo());
+
+    expect(await screen.findByText(/reached today's limit of 20/)).toBeInTheDocument();
+  });
+
+  it("refuses a non-image without sending it", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    mockSupabaseTables({ cars: [CAR] });
+    renderPage();
+
+    await screen.findByPlaceholderText(INPUT);
+    await user.upload(document.getElementById("scanPhotoFile"), new File(["x"], "a.pdf", { type: "application/pdf" }));
+
+    expect(await screen.findByText(/Please choose a photo/)).toBeInTheDocument();
+    expect(scanPhoto).not.toHaveBeenCalled();
+  });
+
+  it("the scan cannot be used while a message is being sent", async () => {
+    const user = userEvent.setup();
+    mockSupabaseTables({ cars: [CAR] });
+    apiFetch.mockReturnValue(new Promise(() => {})); // never answers
+    renderPage();
+
+    const input = await screen.findByPlaceholderText(INPUT);
+    await user.type(input, "Squeaky brakes");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(document.getElementById("scanPhotoFile")).toBeDisabled());
   });
 });

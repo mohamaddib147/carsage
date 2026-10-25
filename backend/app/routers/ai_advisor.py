@@ -39,6 +39,8 @@ from pydantic import BaseModel, Field
 from app.auth import get_current_user_id
 from app.services.llm_client import LLMError, classify_issue
 from app.services.nhtsa_safety import check_safety_data
+from app.services.photo_findings import must_see_a_mechanic, parse_photo_flag
+from app.services.usage_limiter import UsageCheckFailed, UsageLimitExceeded, enforce_usage
 from app.services.youtube_client import search_diy_video
 from app.supabase_client import supabase
 from app.validation import (
@@ -48,6 +50,8 @@ from app.validation import (
 )
 
 logger = logging.getLogger(__name__)
+
+ADVISOR_FEATURE = "advisor"
 
 # CAR-24: authentication is required for EVERY route on this router, declared
 # once at the router level (`dependencies=[...]`) so an endpoint added later is
@@ -75,6 +79,11 @@ class ClassifyIssueRequest(BaseModel):
     # Omit to start a new conversation; pass back a prior response's
     # conversation_id to append to that same conversation instead.
     conversation_id: RecordId | None = None
+    # Set by the page when the text came from a photo scan (POST /ai-advisor/scan-photo):
+    # {"source": "photo", "confidence": "low|medium|high", "kind": "other|listed"}. Typed
+    # loosely on purpose: only EXACT values count (parse_photo_flag), anything else is
+    # simply no flag, never a 422. It can only make the Advisor MORE cautious.
+    photo: object | None = None
 
 
 class ClassifyIssueResponse(BaseModel):
@@ -166,6 +175,20 @@ def post_classify_issue(
     if not car_data:
         raise HTTPException(status_code=404, detail="Car not found.")
 
+    # Shares the same Gemini key (and quota) as the fuel-log camera, so the
+    # same per-user/global daily cap applies here (advisor,
+    # app/services/usage_limiter.py). Unlike the camera, this FAILS OPEN if the usage table/trigger itself
+    # fails for any reason other than the limit genuinely being hit:
+    # blocking car-safety advice over a usage-counter hiccup is worse
+    # than under-counting it for a few requests. A genuine limit hit is
+    # still enforced the same way as everywhere else.
+    try:
+        enforce_usage(user_id, ADVISOR_FEATURE)
+    except UsageLimitExceeded as error:
+        raise HTTPException(status_code=429, detail=str(error)) from error
+    except UsageCheckFailed as error:
+        logger.exception("Advisor usage-limit check failed; continuing without it: %s", error)
+
     conversation_id = _get_or_create_conversation(
         user_id,
         str(payload.car_id),
@@ -209,10 +232,26 @@ def post_classify_issue(
             ),
         }
     else:
-        try:
-            result = classify_issue(description, car_data)
-        except LLMError as error:
-            raise HTTPException(status_code=503, detail=str(error)) from error
+        # The recall check above ran first and keeps priority. For text that came from a
+        # photo guess: free text ("other") or low confidence is never answered DIY, and any
+        # other photo text tells the classifier to prefer a mechanic unless clearly low-risk.
+        photo_flag = parse_photo_flag(payload.photo)
+        if must_see_a_mechanic(photo_flag):
+            result = {
+                "recommendation": "mechanic",
+                "guidance": (
+                    "This started from a photo, and reading a photo is only a guess that may be "
+                    "wrong, so please have a mechanic take a look to be safe."
+                ),
+            }
+        else:
+            try:
+                if photo_flag:
+                    result = classify_issue(description, car_data, from_photo=True)
+                else:
+                    result = classify_issue(description, car_data)
+            except LLMError as error:
+                raise HTTPException(status_code=503, detail=str(error)) from error
 
         if safety["status"] == "not_found":
             result["guidance"] += (

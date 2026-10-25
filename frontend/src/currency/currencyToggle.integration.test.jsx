@@ -90,7 +90,12 @@ beforeEach(() => {
 });
 
 describe("the currency toggle across screens", () => {
-  it("switches the primary currency on the Trip Planner AND the Fuel Log, and back", async () => {
+  // One long test used to walk Trip Planner -> Fuel Log -> Trip Planner. It was the
+  // heaviest test in the suite (two full trip plans plus a chart), so on a loaded
+  // machine it ran closest to the 5 s timeout. It is now two tests that together
+  // cover the same three transitions: Trip Planner -> Fuel Log (and back to USD on
+  // the Fuel Log), and Fuel Log -> Trip Planner.
+  it("switches the primary currency on the Trip Planner, and the Fuel Log opened afterwards follows it (and flips back)", async () => {
     const user = userEvent.setup();
     openApp("/trip-planner");
     await planATrip(user);
@@ -105,6 +110,7 @@ describe("the currency toggle across screens", () => {
     expect(prices()[0]).toBe("897,000 LBP ($10.00)");
 
     // ... and the Fuel Log, opened afterwards, is already pounds-first
+    await user.click(screen.getByRole("button", { name: "Manage car" })); // CAR-62: Fuel Log is in this menu
     await user.click(screen.getByRole("link", { name: "Fuel Log" }));
     const table = await screen.findByRole("table");
     expect(primaries()).toEqual(["LBP"]);
@@ -114,21 +120,37 @@ describe("the currency toggle across screens", () => {
       "2,691,000 LBP ($30.00)",
       "137,296 LBP/L ($1.53/L)",
       "2,745,918 LBP/20 L ($30.61/20 L)",
+      "-", // CAR-61 Odometer: this fill-up has no reading
+      "-", // CAR-61 km/L
     ]);
 
     // switching back to USD on the Fuel Log flips it too
     await user.click(screen.getByRole("button", { name: "USD" }));
     expect(primaries()).toEqual(["USD"]);
-    expect(within(table).getAllByRole("cell").map((cell) => cell.textContent).slice(2)).toEqual([
+    expect(within(table).getAllByRole("cell").map((cell) => cell.textContent).slice(2, 5)).toEqual([
       "$30.00 (2,691,000 LBP)",
       "$1.53/L (137,296 LBP/L)",
       "$30.61/20 L (2,745,918 LBP/20 L)",
     ]);
+  });
 
-    // and the Trip Planner, opened again, follows the same choice
+  it("a choice made on the Fuel Log is already in force when the Trip Planner is opened afterwards", async () => {
+    const user = userEvent.setup();
+    openApp("/fuel-log");
+
+    await user.click(await screen.findByRole("button", { name: "LBP" }));
+    await screen.findByRole("table");
+    expect(primaries()).toEqual(["LBP"]);
+
     await user.click(screen.getByRole("link", { name: "Trip Planner" }));
     await planATrip(user);
+    expect(primaries()).toEqual(["LBP"]);
+    expect(prices()[0]).toBe("897,000 LBP ($10.00)");
+
+    // and flipping it back there is just as immediate
+    await user.click(screen.getByRole("button", { name: "USD" }));
     expect(primaries()).toEqual(["USD"]);
+    expect(prices()[0]).toBe("$10.00 (897,000 LBP)");
   });
 
   it("remembers the choice after a page reload, on both screens", async () => {
