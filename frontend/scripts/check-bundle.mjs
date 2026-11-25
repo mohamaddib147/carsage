@@ -1,8 +1,13 @@
 // Bundle budget guard (CAR-67): after `vite build`, fails (exit 1) if the
 // JS every first visit downloads is over budget, or if Recharts has crept
-// back into it. "Initial JS" is the entry chunk plus the chunks index.html
+// back into it, or if the Supabase client is missing from it. "Initial JS" is the entry chunk plus the chunks index.html
 // preloads with it (<link rel="modulepreload">). Sizes use Vite's units
 // (1 kB = 1000 bytes) so they match the build log.
+//
+// Why the Supabase check: Vite bakes VITE_* variables in at build time. Without
+// VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY the client is left out and the
+// entry chunk drops to about half its size, so every budget passes while
+// measuring a different app. Failing here stops that build being trusted.
 // Run: node scripts/check-bundle.mjs [buildDir]   (buildDir defaults to dist)
 
 import { readFileSync } from "node:fs";
@@ -34,6 +39,10 @@ const BUDGET = {
 // A class name Recharts writes into the DOM; present in any chunk that bundles it.
 const RECHARTS_MARKER = "recharts-wrapper";
 
+// The default auth storage key (`sb-<project>-auth-token`) that only the Supabase client writes; apps read
+// it back, so supabase-js keeps it stable across versions.
+const SUPABASE_MARKER = "-auth-token";
+
 const buildDir = process.argv[2] ?? "dist";
 const html = readFileSync(join(buildDir, "index.html"), "utf8");
 const entryPath = /<script[^>]+type="module"[^>]+src="\/?([^"]+)"/.exec(html)?.[1];
@@ -43,13 +52,14 @@ if (!entryPath) {
 }
 const preloadPaths = [...html.matchAll(/<link[^>]+rel="modulepreload"[^>]+href="\/?([^"]+)"/g)].map((m) => m[1]);
 
-/** Min and gzip size in kB (1000 bytes) of the given build files, and whether any bundles Recharts. */
+/** Min and gzip size in kB (1000 bytes) of the given build files, and whether any bundles Recharts or the Supabase client. */
 function measure(paths) {
   const files = paths.map((path) => readFileSync(join(buildDir, path)));
   const bytes = files.reduce((sum, file) => sum + file.length, 0);
   const gzipBytes = files.reduce((sum, file) => sum + gzipSync(file).length, 0);
   const hasRecharts = files.some((file) => file.toString("utf8").includes(RECHARTS_MARKER));
-  return { minKB: bytes / 1000, gzipKB: gzipBytes / 1000, hasRecharts };
+  const hasSupabase = files.some((file) => file.toString("utf8").includes(SUPABASE_MARKER));
+  return { minKB: bytes / 1000, gzipKB: gzipBytes / 1000, hasRecharts, hasSupabase };
 }
 
 const cssPaths = [...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="\/?([^"]+)"/g)].map((m) => m[1]);
@@ -68,6 +78,9 @@ for (const [name, size] of Object.entries(sizes)) {
   if (size.gzipKB > budget.gzipKB) problems.push(`${name} gzip ${size.gzipKB.toFixed(2)} kB > ${budget.gzipKB} kB`);
 }
 if (sizes.initial.hasRecharts) problems.push("Recharts is in the initial JS");
+if (!sizes.initial.hasSupabase) {
+  problems.push("the Supabase client is missing from the initial JS: this build was made without the Supabase variables, so its sizes mean nothing");
+}
 
 if (problems.length) {
   console.error(`check-bundle FAILED: ${problems.join("; ")}`);
