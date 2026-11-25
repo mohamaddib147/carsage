@@ -1,8 +1,6 @@
-/* Tailwind for the shadcn/Aceternity components only: theme + utilities, NO preflight,
-   so it never resets the existing hand-written styles in index.css. */
-
-/* Automatic class scanning is off (source(none)): the app's styles are hand-written, and scanning
-   turned ordinary words in the source into unused utility CSS in every visitor's download.
+/* Tailwind theme and utilities only, NO preflight, so it never resets the hand-written styles in
+   index.css. Automatic class scanning is off (source(none)): the app's styles are hand-written, and
+   scanning turned ordinary words in the source into unused utility CSS in every visitor's download.
    To use Tailwind on purpose, name the files that use it in an @source line below the imports,
    relative to this file, e.g. @source "./components/Example.jsx"; */
 @layer theme, base, components, utilities;

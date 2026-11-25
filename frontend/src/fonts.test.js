@@ -101,6 +101,14 @@ describe("tokens and where they are used", () => {
     expect(tailwindCss).toMatch(/@theme inline \{[^}]*--font-sans: var\(--font-body\);[^}]*--font-display: var\(--font-heading\);/);
   });
 
+  // check:bundle alone would not notice: with scanning back on, the CSS still fits its budget.
+  it("Tailwind is imported without preflight and with automatic class scanning off", () => {
+    expect(tailwindCss.match(/^@import\s+["']tailwindcss[^;]*;/gm)).toEqual([
+      '@import "tailwindcss/theme.css" layer(theme) source(none);',
+      '@import "tailwindcss/utilities.css" layer(utilities) source(none);',
+    ]);
+  });
+
   it("main.jsx loads fonts.css before index.css", () => {
     expect(mainJsx.indexOf('import "./fonts.css";')).toBeGreaterThan(-1);
     expect(mainJsx.indexOf('import "./fonts.css";')).toBeLessThan(mainJsx.indexOf('import "./index.css";'));
