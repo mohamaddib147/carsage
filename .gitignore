@@ -43,3 +43,10 @@ CLAUDE.local.md
 .mcp.json
 # Graphify output (generated)
 graphify-out/
+# AI agent skills (reinstallable)
+.agent/
+.agents/
+.codex/
+.gemini/
+.impeccable/
+AGENTS.md
