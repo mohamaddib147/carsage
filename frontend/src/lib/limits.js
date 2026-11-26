@@ -179,10 +179,10 @@ export const GENERIC_ERROR_MESSAGE = "Something went wrong. Please try again.";
  * used, and so noRawErrorText.test.js's regression guard (which flags a
  * caught error's raw .message going straight into a setXError call) never
  * has to special-case a page that also has other, unsanitized error
- * sources — TripPlannerPage/AIAdvisorPage get an easier whole-file
- * exemption because apiFetch is their ONLY error source; Car Onboarding
- * also saves via Supabase directly (through describeSaveError), so this
- * documents the same trust boundary at just this one call site instead.
+ * sources — AIAdvisorPage gets an easier whole-file exemption because
+ * apiFetch is its ONLY error source; Car Onboarding, Fuel Log and (since
+ * PLAN-06) Trip Planner also use Supabase directly, so this documents the
+ * same trust boundary at just the apiFetch call sites instead.
  * @param {{ message?: string } | null | undefined} error
  * @returns {string}
  */

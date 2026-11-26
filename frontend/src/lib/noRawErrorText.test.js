@@ -5,10 +5,12 @@
 // describeActionError / describeAuthError (src/lib/limits.js), which replace it
 // with a plain sentence.
 //
-// The two exceptions are the Trip Planner and AI Advisor pages: their errors come
-// only from apiFetch (src/lib/apiClient.js), which itself only ever throws a
-// fixed sentence or a plain-text message the backend wrote — see
-// apiClient.test.js. They read source files, so no browser or network is needed.
+// The one exception is the AI Advisor page: its errors come only from apiFetch
+// (src/lib/apiClient.js), which itself only ever throws a fixed sentence or a
+// plain-text message the backend wrote — see apiClient.test.js. (The Trip
+// Planner was exempt too until PLAN-06 gave it Supabase reads and deletes; it
+// now names its apiFetch error with describeApiFetchError and is checked like
+// every other page.) They read source files, so no browser or network is needed.
 
 import { describe, expect, it } from "vitest";
 
@@ -22,7 +24,7 @@ const pages = Object.entries(modules).filter(([path]) => !/\.test\.jsx$/.test(pa
 // cache quirk, not a real rename), which made an exact-case string list
 // here flaky — this filters by lowercased filename instead, so it holds
 // regardless of which casing Vite happens to report.
-const API_FETCH_ONLY_NAMES = ["tripplannerpage.jsx", "aiadvisorpage.jsx"];
+const API_FETCH_ONLY_NAMES = ["aiadvisorpage.jsx"];
 const isApiFetchOnly = (path) => API_FETCH_ONLY_NAMES.includes(path.split("/").pop().toLowerCase());
 
 // set...Error(<anything>.message) / set...Error(<anything>?.message ...)

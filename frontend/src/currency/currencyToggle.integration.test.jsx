@@ -79,9 +79,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
   supabase.auth.getSession.mockResolvedValue({ data: { session: SESSION } });
+  // PLAN-06: Trip Planner's Recent trips read ends in .limit(); it gets no trips here.
   supabase.from.mockImplementation((table) => ({
     select: () => ({
-      eq: () => ({ order: () => Promise.resolve({ data: table === "cars" ? [CAR] : LOGS, error: null }) }),
+      eq: () => ({
+        order: () =>
+          table === "trips"
+            ? { limit: () => Promise.resolve({ data: [], error: null }) }
+            : Promise.resolve({ data: table === "cars" ? [CAR] : LOGS, error: null }),
+      }),
     }),
   }));
   apiFetch.mockImplementation((path) =>

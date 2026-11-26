@@ -19,9 +19,10 @@ const DEBOUNCE_MS = 300;
 const MIN_CHARS = 3;
 
 /**
+ * A free-text place field with optional Google Places suggestions.
  * @param {{ id: string, value: string, onChange: (text: string) => void,
  *   placeholder?: string, maxLength?: number }} props
- * @returns {JSX.Element}
+ * @returns {JSX.Element} the input, plus the suggestion list while it is open.
  */
 function PlaceAutocompleteInput({ id, value, onChange, placeholder, maxLength }) {
   const listId = useId();
@@ -29,18 +30,16 @@ function PlaceAutocompleteInput({ id, value, onChange, placeholder, maxLength })
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const sessionToken = useRef(newSessionToken());
-  const skipNextLookup = useRef(false);
+  // The last text the user typed into this field (null once an outside value replaced it).
+  const typedRef = useRef("");
 
   useEffect(() => {
     const apiKey = getPlacesApiKey();
 
-    // A value set by picking a suggestion shouldn't trigger a new lookup
-    // for that same text.
-    if (skipNextLookup.current) {
-      skipNextLookup.current = false;
-      return undefined;
-    }
-    if (!apiKey || value.trim().length < MIN_CHARS) {
+    // A value set from outside is never looked up. Forgetting the typed text means a later outside value that
+    // happens to equal it (two recent trips chosen in a row) isn't looked up either.
+    if (value !== typedRef.current) typedRef.current = null;
+    if (typedRef.current === null || !apiKey || value.trim().length < MIN_CHARS) {
       setSuggestions([]);
       return undefined;
     }
@@ -64,9 +63,13 @@ function PlaceAutocompleteInput({ id, value, onChange, placeholder, maxLength })
     };
   }, [value]);
 
-  /** @param {string} text */
+  /**
+   * Fills the field with a picked suggestion, closes the list and starts a new billing session. The picked text
+   * is not looked up again, since it is not typed text (see the lookup effect).
+   * @param {string} text - the suggestion picked.
+   * @returns {void}
+   */
   function choose(text) {
-    skipNextLookup.current = true;
     onChange(text);
     setOpen(false);
     setSuggestions([]);
@@ -111,7 +114,10 @@ function PlaceAutocompleteInput({ id, value, onChange, placeholder, maxLength })
         placeholder={placeholder}
         maxLength={maxLength}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => {
+          typedRef.current = event.target.value;
+          onChange(event.target.value);
+        }}
         onKeyDown={handleKeyDown}
         onBlur={() => setOpen(false)}
         onFocus={() => setOpen(suggestions.length > 0)}

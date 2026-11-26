@@ -2,7 +2,8 @@
 // selectable (mouse and keyboard), a selection fills the full text and
 // doesn't trigger a redundant lookup, free-text entry is always
 // preserved, and no key / too-short input / no results / a failing
-// lookup all degrade to a plain text field. fetch is stubbed.
+// lookup all degrade to a plain text field. PLAN-06: a value set from outside
+// (not typed) is never looked up. fetch is stubbed.
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -144,6 +145,60 @@ describe("PlaceAutocompleteInput", () => {
     await user.type(screen.getByLabelText("Place"), "Tr");
     await new Promise((resolve) => setTimeout(resolve, 450));
 
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not look up a value set from outside the field, such as a chosen recent trip (PLAN-06)", async () => {
+    const user = userEvent.setup();
+    const fetchMock = stubSuggestions(["Tripoli, Lebanon"]);
+    /** Sets the field's value from a button, the way the Trip Planner fills it from a recent trip. */
+    function OutsideHarness() {
+      const [value, setValue] = useState("");
+      return (
+        <div>
+          <label htmlFor="place">Place</label>
+          <PlaceAutocompleteInput id="place" value={value} onChange={setValue} />
+          <button type="button" onClick={() => setValue("Tripoli, Lebanon")}>Fill</button>
+        </div>
+      );
+    }
+    render(<OutsideHarness />);
+
+    await user.click(screen.getByRole("button", { name: "Fill" }));
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    expect(screen.getByLabelText("Place")).toHaveValue("Tripoli, Lebanon");
+    expect(fetchMock).not.toHaveBeenCalled();
+    // Typing afterwards still looks up what was typed.
+    await user.type(screen.getByLabelText("Place"), " North");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  });
+
+  it("does not look up an outside value that happens to equal the last typed text (edge case)", async () => {
+    const user = userEvent.setup();
+    const fetchMock = stubSuggestions([]);
+    /** Two outside fills, like choosing two recent trips one after the other. */
+    function TwoFillHarness() {
+      const [value, setValue] = useState("");
+      return (
+        <div>
+          <label htmlFor="place">Place</label>
+          <PlaceAutocompleteInput id="place" value={value} onChange={setValue} />
+          <button type="button" onClick={() => setValue("Tyre")}>Tyre</button>
+          <button type="button" onClick={() => setValue("Beirut")}>Beirut</button>
+        </div>
+      );
+    }
+    render(<TwoFillHarness />);
+    await user.type(screen.getByLabelText("Place"), "Beirut");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    fetchMock.mockClear();
+
+    await user.click(screen.getByRole("button", { name: "Tyre" }));
+    await user.click(screen.getByRole("button", { name: "Beirut" }));
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    expect(screen.getByLabelText("Place")).toHaveValue("Beirut");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
