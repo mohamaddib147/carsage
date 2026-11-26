@@ -236,6 +236,8 @@ function MaintenancePage() {
   const scrollToAlert = useScrollToAlert();
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  // PLAN-07: `busy` only disables the button after a re-render; this ref stops a second call in the same tick.
+  const addingRef = useRef(false);
   const scrolledTo = useRef("");
 
   const selectedCar = cars.find((car) => car.id === selectedCarId) ?? null;
@@ -354,18 +356,25 @@ function MaintenancePage() {
     });
   }
 
+  /**
+   * Validates the "Add an item" form, saves the item and reloads the car's data.
+   * @param {import('react').FormEvent} event - the form's submit event.
+   * @returns {Promise<void>}
+   */
   async function handleAdd(event) {
     event.preventDefault();
-    const errors = getMaintenanceItemErrors(addValues, today);
-    setAddErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      scrollToAlert(event.currentTarget);
-      return;
-    }
-
-    setBusy(true);
-    setActionError("");
+    if (addingRef.current) return;
+    addingRef.current = true;
     try {
+      const errors = getMaintenanceItemErrors(addValues, today);
+      setAddErrors(errors);
+      if (Object.keys(errors).length > 0) {
+        scrollToAlert(event.currentTarget);
+        return;
+      }
+
+      setBusy(true);
+      setActionError("");
       const { error } = await supabase
         .from("maintenance_items")
         .insert({ user_id: user.id, car_id: selectedCarId, ...itemFromForm(addValues) });
@@ -380,6 +389,7 @@ function MaintenancePage() {
       setAddValues(EMPTY_ITEM_FORM);
       setNotice(`${addValues.name.trim()} added.`);
     } finally {
+      addingRef.current = false;
       setBusy(false);
     }
   }

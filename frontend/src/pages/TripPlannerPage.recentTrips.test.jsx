@@ -4,7 +4,7 @@
 // saved without an origin, a fresh estimate added to the top of the list from its own response, and axe on the list.
 // Mocked data only.
 
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { MemoryRouter } from "react-router-dom";
@@ -256,5 +256,44 @@ describe("TripPlannerPage — recent trips", () => {
     expect(await check()).toEqual([]);
     await user.click(within(section).getByRole("button", { name: "Delete the trip to Byblos on 20 Nov 2026, 12:05" }));
     expect(await check()).toEqual([]);
+  });
+});
+
+describe("TripPlannerPage — recent trips double tap guard (PLAN-07)", () => {
+  it("deletes once for two taps on the confirm in one tick, shows no false refusal, and releases after a refusal and a success", async () => {
+    const { deleteEq } = mockBackend();
+    // 1st request: refused. Later: deleted. A repeat of an already deleted row comes back empty, as the server does.
+    const gone = new Set();
+    let requests = 0;
+    deleteEq.mockImplementation((_column, id) => ({
+      select: () => {
+        if (++requests === 1 || gone.has(id)) return Promise.resolve({ data: [], error: null });
+        gone.add(id);
+        return Promise.resolve({ data: [{ id }], error: null });
+      },
+    }));
+    const user = userEvent.setup();
+    renderPage();
+    const section = await recentSection();
+    const refused = "Could not delete this trip. Please try again.";
+
+    await user.click(within(section).getByRole("button", { name: "Delete the trip to Byblos on 20 Nov 2026, 12:05" }));
+    await user.click(within(section).getByRole("button", { name: "Delete" })); // refused
+    await within(section).findByText(refused);
+
+    const confirm = within(section).getByRole("button", { name: "Delete" });
+    // Both clicks inside one act(), so React cannot re-render (and disable the button) in between.
+    await act(async () => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    expect(deleteEq).toHaveBeenCalledTimes(2);
+    expect(within(section).getByText("Trip to Byblos deleted.")).toBeInTheDocument();
+    expect(within(section).queryByText(refused)).not.toBeInTheDocument();
+
+    await user.click(within(section).getByRole("button", { name: "Delete the trip to Tyre on 18 Nov 2026, 09:30" }));
+    await user.click(within(section).getByRole("button", { name: "Delete" }));
+    await within(section).findByText("Trip to Tyre deleted.");
+    expect(deleteEq).toHaveBeenCalledTimes(3);
   });
 });

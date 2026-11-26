@@ -16,7 +16,7 @@
 // Every amount on screen goes through <Price>, so the header's USD | LBP switch changes
 // them all. Loaded data is tagged with its car id, so cars never mix.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useScrollToAlert } from "../lib/scrollToAlert.js";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -180,6 +180,9 @@ function ExpensesPage() {
   const scrollToAlert = useScrollToAlert();
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  // PLAN-07: `busy` only disables the button after a re-render; this ref stops a second call in the same tick.
+  const addingRef = useRef(false);
+  const deletingRef = useRef(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const selectedCar = cars.find((car) => car.id === selectedCarId) ?? null;
@@ -244,21 +247,28 @@ function ExpensesPage() {
     setConfirmDeleteId(null);
   }
 
+  /**
+   * Validates the form, saves the expense, attaches any receipt photos and reloads the car's costs.
+   * @param {import('react').FormEvent} event - the form's submit event.
+   * @returns {Promise<void>}
+   */
   async function handleAdd(event) {
     event.preventDefault();
-    setActionError("");
-    setNotice("");
-    const errors = getExpenseErrors({ date, category, amount, note }, today);
-    setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      scrollToAlert(event.currentTarget);
-      return;
-    }
-
-    const carId = selectedCarId;
-    const trimmedNote = note.trim();
-    setBusy(true);
+    if (addingRef.current) return;
+    addingRef.current = true;
     try {
+      setActionError("");
+      setNotice("");
+      const errors = getExpenseErrors({ date, category, amount, note }, today);
+      setFieldErrors(errors);
+      if (Object.keys(errors).length > 0) {
+        scrollToAlert(event.currentTarget);
+        return;
+      }
+
+      const carId = selectedCarId;
+      const trimmedNote = note.trim();
+      setBusy(true);
       const { data, error } = await supabase.from("car_expenses").insert({
         user_id: user.id,
         car_id: carId,
@@ -295,11 +305,19 @@ function ExpensesPage() {
           : `Saved, but ${failed === 1 ? "1 photo couldn't be attached. You can add it from the list below." : `${failed} photos couldn't be attached. You can add them from the list below.`}`,
       );
     } finally {
+      addingRef.current = false;
       setBusy(false);
     }
   }
 
+  /**
+   * Deletes one expense the user has confirmed, then reloads the car's costs.
+   * @param {{ id: string, category: string, spent_on: string }} expense - the expense to delete.
+   * @returns {Promise<void>}
+   */
   async function handleDelete(expense) {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
     setActionError("");
     setNotice("");
     setBusy(true);
@@ -314,6 +332,7 @@ function ExpensesPage() {
       setConfirmDeleteId(null);
       setNotice(`${categoryLabel(expense.category)} expense of ${formatFillDate(expense.spent_on)} deleted.`);
     } finally {
+      deletingRef.current = false;
       setBusy(false);
     }
   }

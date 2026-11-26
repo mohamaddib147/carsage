@@ -6,7 +6,7 @@
 // client and the backend apiFetch call are both mocked so no real
 // network calls happen.
 
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
@@ -1106,5 +1106,33 @@ describe("CarOnboardingPage — messages scroll into view on a phone", () => {
     expect(scroll).toHaveBeenCalledTimes(1);
     expect(scroll.mock.contexts[0]).toBe(error);
     expect(scroll).toHaveBeenCalledWith({ block: "center" });
+  });
+});
+
+describe("CarOnboardingPage — double tap guard (PLAN-07)", () => {
+  // No "save again after a success" step: a successful save leaves the page.
+  it("inserts once for two submits in one tick, and saves again after a validation stop and a failure", async () => {
+    const user = userEvent.setup();
+    const single = vi
+      .fn()
+      .mockResolvedValueOnce({ data: null, error: { code: "XX000", message: "boom" } })
+      .mockResolvedValue({ data: { id: "car-456" }, error: null });
+    const insert = vi.fn(() => ({ select: () => ({ single }) }));
+    supabase.from.mockReturnValue({ insert });
+    renderPage();
+
+    const addButton = await screen.findByRole("button", { name: "Add Car" });
+    await user.click(addButton); // validation stop
+    await fillRequiredFields(user);
+    // Both submits inside one act(), so React cannot re-render (and disable the button) in between.
+    await act(async () => {
+      fireEvent.submit(addButton.closest("form")); // the one insert fails
+      fireEvent.submit(addButton.closest("form"));
+    });
+    expect(insert).toHaveBeenCalledTimes(1);
+
+    await user.click(addButton);
+    expect(await screen.findByText("Car profile placeholder")).toBeInTheDocument();
+    expect(insert).toHaveBeenCalledTimes(2);
   });
 });

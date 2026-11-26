@@ -1731,3 +1731,89 @@ describe("FuelLogPage — deleting a fill-up (PLAN-05)", () => {
     expect(screen.queryByRole("button", { name: "Save anyway" })).not.toBeInTheDocument();
   });
 });
+
+describe("FuelLogPage — double tap guard (PLAN-07)", () => {
+  /**
+   * Fires the same event twice inside one act(), so React cannot re-render (and disable the button) in between.
+   * @param {(target: Element) => void} fire - fireEvent.click or fireEvent.submit.
+   * @param {Element} target - the button or form.
+   * @returns {Promise<void>}
+   */
+  const twice = (fire, target) => act(async () => { fire(target); fire(target); });
+
+  it("inserts once for two submits in one tick, and saves again after a validation stop, a failure and a success", async () => {
+    const user = userEvent.setup();
+    let replies = 0;
+    const calls = mockDatabase({
+      insertReply: (row) =>
+        ++replies === 1
+          ? { data: null, error: { code: "XX000", message: "boom" } }
+          : { data: { id: `new-${replies}`, ...row, created_at: "2026-09-21T12:00:00Z" }, error: null },
+    });
+    renderPage();
+    await screen.findByText("No fill-ups logged yet");
+    const addButton = screen.getByRole("button", { name: "Add Fill-Up" });
+
+    await user.click(addButton); // validation stop
+    await fillForm(user, { liters: "20", cost: "30" });
+    await user.type(screen.getByLabelText("Odometer (km)"), "84610");
+    await twice(fireEvent.submit, addButton.closest("form")); // the one insert fails
+    expect(calls.inserts).toHaveLength(1);
+
+    await user.click(addButton);
+    await screen.findByText("Fill-up added.");
+    expect(calls.inserts).toHaveLength(2);
+
+    await fillForm(user, { liters: "20", cost: "30" });
+    await user.type(screen.getByLabelText("Odometer (km)"), "84900");
+    await user.click(addButton);
+    await waitFor(() => expect(calls.inserts).toHaveLength(3));
+  });
+
+  it("inserts once for two taps in one tick on a prompt's own save button", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase();
+    renderPage();
+    await screen.findByText("No fill-ups logged yet");
+    await fillForm(user, { liters: "20", cost: "30" });
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    await twice(fireEvent.click, await screen.findByRole("button", { name: "Save without odometer" }));
+
+    expect(calls.inserts).toHaveLength(1);
+  });
+
+  it("deletes once for two taps on the confirm in one tick, shows no false refusal, and releases after a refusal and a success", async () => {
+    const user = userEvent.setup();
+    // 1st request: refused. Later: deleted. A repeat of an already deleted row comes back empty, as the server does.
+    const gone = new Set();
+    let requests = 0;
+    const calls = mockDatabase({
+      logsByCar: { "car-1": { data: [ROW_B, ROW_A], error: null } },
+      deleteReply: (id) => {
+        if (++requests === 1 || gone.has(id)) return { data: [], error: null };
+        gone.add(id);
+        return { data: [{ id }], error: null };
+      },
+    });
+    renderPage();
+    await screen.findByRole("table");
+    /** The open confirm's Delete button. @returns {HTMLElement} */
+    const confirmButton = () => within(screen.getByText(/Delete this fill-up\?/)).getByRole("button", { name: "Delete" });
+    const refused = "Could not delete this fill-up. Please try again.";
+
+    await user.click(screen.getByRole("button", { name: "Delete the fill-up of 21 Sep 2026" }));
+    await user.click(confirmButton()); // refused
+    await screen.findByText(refused);
+
+    await twice(fireEvent.click, confirmButton());
+    expect(calls.deletes).toHaveLength(2);
+    expect(screen.getByText("Fill-up of 21 Sep 2026 deleted.")).toBeInTheDocument();
+    expect(screen.queryByText(refused)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Delete the fill-up of 1 Sep 2026" }));
+    await user.click(confirmButton());
+    await screen.findByText("Fill-up of 1 Sep 2026 deleted.");
+    expect(calls.deletes).toHaveLength(3);
+  });
+});

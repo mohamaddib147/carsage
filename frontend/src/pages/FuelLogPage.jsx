@@ -203,9 +203,12 @@ function FuelLogPage() {
   const formRef = useRef(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  // PLAN-07: `saving` only disables the button after a re-render; this ref stops a second call in the same tick.
+  const savingRef = useRef(false);
   // PLAN-05: the row whose "Delete this fill-up?" confirm is open, and the outcome shown above the table.
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const deletingRef = useRef(false);
   const [deleteError, setDeleteError] = useState("");
   const [deleteNotice, setDeleteNotice] = useState("");
   const historyRef = useRef(null);
@@ -351,6 +354,8 @@ function FuelLogPage() {
    * @returns {Promise<void>}
    */
   async function handleDelete(entry) {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
     const carId = selectedCarId;
     setDeleteError("");
     setDeleteNotice("");
@@ -373,6 +378,7 @@ function FuelLogPage() {
       });
       deleteNoticeRef.current?.focus();
     } finally {
+      deletingRef.current = false;
       setDeleting(false);
     }
   }
@@ -391,80 +397,83 @@ function FuelLogPage() {
    * confirming one still re-checks (and can still stop on) the next. Last in that order, a fill-up with no odometer
    * reading asks "Skip the odometer?" (`confirmedSkip`); the reading stays optional and nothing is blocked.
    * @param {{ confirmedPrice?: boolean, confirmedTank?: boolean, confirmedOrder?: boolean, confirmedSkip?: boolean }} options
+   * @returns {Promise<void>}
    */
   async function save({ confirmedPrice = false, confirmedTank = false, confirmedOrder = false, confirmedSkip = false } = {}) {
-    setSaveError("");
-    setSaved(false);
-
-    const errors = getFillUpErrors({ date, liters, cost });
-    if (odometer !== "") {
-      // A reading is checked against this car's other readings; until they've
-      // loaded, there is nothing to check it against, so don't save blind.
-      const odometerError =
-        entries === null
-          ? "Still loading this car's fill-ups. Try again in a moment."
-          : getOdometerError(odometer);
-      if (odometerError) errors.odometer = odometerError;
-    }
-    setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      setOrderWarning("");
-      setPriceWarning("");
-      setTankWarning("");
-      scrollToAlert(formRef.current);
-      return;
-    }
-
-    if (!confirmedPrice) {
-      const warning = getPricePerLiterWarning(liters, cost, currency, currentFuelPriceLbp);
-      if (warning) {
-        setPriceWarning(warning);
-        scrollToAlert(formRef.current);
-        return;
-      }
-    }
-    setPriceWarning("");
-
-    if (!confirmedTank) {
-      const warning = getTankCapacityWarning(liters, selectedCar?.fuel_tank_capacity_liters);
-      if (warning) {
-        setTankWarning(warning);
-        scrollToAlert(formRef.current);
-        return;
-      }
-    }
-    setTankWarning("");
-
-    if (odometer !== "" && !confirmedOrder) {
-      const warning = getOdometerOrderWarning(odometer, date, entries);
-      if (warning) {
-        setOrderWarning(warning);
-        scrollToAlert(formRef.current);
-        return;
-      }
-    }
-    setOrderWarning("");
-
-    if (odometer === "" && !confirmedSkip) {
-      setSkipFor(skipKey);
-      return;
-    }
-    setSkipFor(null);
-
-    const carId = selectedCarId;
-    const row = {
-      user_id: user.id,
-      car_id: carId,
-      filled_at: date,
-      liters: Number(liters),
-      cost_amount: Number(cost),
-      cost_currency: currency,
-    };
-    // Only sent when given: a fill-up without a reading is stored exactly as before.
-    if (odometer !== "") row.odometer_km = Number(odometer);
-
-    setSaving(true);
+    if (savingRef.current) return;
+    savingRef.current = true;
     try {
+      setSaveError("");
+      setSaved(false);
+
+      const errors = getFillUpErrors({ date, liters, cost });
+      if (odometer !== "") {
+        // A reading is checked against this car's other readings; until they've
+        // loaded, there is nothing to check it against, so don't save blind.
+        const odometerError =
+          entries === null
+            ? "Still loading this car's fill-ups. Try again in a moment."
+            : getOdometerError(odometer);
+        if (odometerError) errors.odometer = odometerError;
+      }
+      setFieldErrors(errors);
+      if (Object.keys(errors).length > 0) {
+        setOrderWarning("");
+        setPriceWarning("");
+        setTankWarning("");
+        scrollToAlert(formRef.current);
+        return;
+      }
+
+      if (!confirmedPrice) {
+        const warning = getPricePerLiterWarning(liters, cost, currency, currentFuelPriceLbp);
+        if (warning) {
+          setPriceWarning(warning);
+          scrollToAlert(formRef.current);
+          return;
+        }
+      }
+      setPriceWarning("");
+
+      if (!confirmedTank) {
+        const warning = getTankCapacityWarning(liters, selectedCar?.fuel_tank_capacity_liters);
+        if (warning) {
+          setTankWarning(warning);
+          scrollToAlert(formRef.current);
+          return;
+        }
+      }
+      setTankWarning("");
+
+      if (odometer !== "" && !confirmedOrder) {
+        const warning = getOdometerOrderWarning(odometer, date, entries);
+        if (warning) {
+          setOrderWarning(warning);
+          scrollToAlert(formRef.current);
+          return;
+        }
+      }
+      setOrderWarning("");
+
+      if (odometer === "" && !confirmedSkip) {
+        setSkipFor(skipKey);
+        return;
+      }
+      setSkipFor(null);
+
+      const carId = selectedCarId;
+      const row = {
+        user_id: user.id,
+        car_id: carId,
+        filled_at: date,
+        liters: Number(liters),
+        cost_amount: Number(cost),
+        cost_currency: currency,
+      };
+      // Only sent when given: a fill-up without a reading is stored exactly as before.
+      if (odometer !== "") row.odometer_km = Number(odometer);
+
+      setSaving(true);
       const { data, error } = await supabase
         .from("fuel_logs")
         .insert(row)
@@ -490,6 +499,7 @@ function FuelLogPage() {
       setDate(todayLocal());
       setSaved(true);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }

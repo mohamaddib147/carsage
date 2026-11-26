@@ -6,7 +6,7 @@
 // Supabase is mocked; that another USER can't reach these rows is proven against the
 // live project by backend/scripts/verify_rls.py (section 11).
 
-import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -996,5 +996,46 @@ describe("MaintenancePage — messages scroll into view on a phone", () => {
     await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
 
     expect(scroll.mock.contexts[0]).toHaveAttribute("role", "alert");
+  });
+});
+
+describe("MaintenancePage — double tap guard (PLAN-07)", () => {
+  it("inserts once for two submits in one tick, and saves again after a validation stop, a failure and a success", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase();
+    const original = supabase.from.getMockImplementation();
+    // The first item insert fails, every later one succeeds.
+    supabase.from.mockImplementation((table) =>
+      table === "maintenance_items"
+        ? {
+            ...original(table),
+            insert: (row) => {
+              calls.itemInserts.push(row);
+              return Promise.resolve({ error: calls.itemInserts.length === 1 ? { code: "XX000", message: "boom" } : null });
+            },
+          }
+        : original(table),
+    );
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "+ Custom item" }));
+    const saveButton = screen.getByRole("button", { name: "Save item" });
+    await user.click(saveButton); // validation stop
+    await user.type(screen.getByLabelText("Name *"), "Car wash");
+    await user.type(screen.getByLabelText("Every (months)"), "1");
+    // Both submits inside one act(), so React cannot re-render (and disable the button) in between.
+    await act(async () => {
+      fireEvent.submit(saveButton.closest("form")); // the one insert fails
+      fireEvent.submit(saveButton.closest("form"));
+    });
+    expect(calls.itemInserts).toHaveLength(1);
+
+    await user.click(saveButton);
+    await screen.findByText("Car wash added.");
+    expect(calls.itemInserts).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: "Insurance renewal" }));
+    await user.click(screen.getByRole("button", { name: "Save item" }));
+    await waitFor(() => expect(calls.itemInserts).toHaveLength(3));
   });
 });

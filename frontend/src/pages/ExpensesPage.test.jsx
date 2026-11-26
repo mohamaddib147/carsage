@@ -8,7 +8,7 @@
 // reach these rows is proven against the live project by backend/scripts/verify_rls.py.
 
 import { readFileSync } from "node:fs";
-import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -670,5 +670,87 @@ describe("ExpensesPage — messages scroll into view on a phone", () => {
     await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
 
     expect(scroll.mock.contexts[0]).toHaveAttribute("role", "alert");
+  });
+});
+
+describe("ExpensesPage — double tap guard (PLAN-07)", () => {
+  /**
+   * Fires the same event twice inside one act(), so React cannot re-render (and disable the button) in between.
+   * @param {(target: Element) => void} fire - fireEvent.click or fireEvent.submit.
+   * @param {Element} target - the button or form.
+   * @returns {Promise<void>}
+   */
+  const twice = (fire, target) => act(async () => { fire(target); fire(target); });
+
+  /**
+   * Makes the first car_expenses write of one kind fail and every later one succeed. Call after mockDatabase().
+   * @param {"insert" | "delete"} kind - which write.
+   * @param {{ inserts: object[], deletes: string[][] }} calls - mockDatabase()'s recorded calls.
+   * @returns {void}
+   */
+  function failFirstWrite(kind, calls) {
+    const original = supabase.from.getMockImplementation();
+    const errorFor = (list) => (list.length === 1 ? { code: "XX000", message: "boom" } : null);
+    const writes = {
+      insert: (row) => {
+        calls.inserts.push(row);
+        const error = errorFor(calls.inserts);
+        return { select: () => ({ single: () => Promise.resolve({ data: error ? null : { id: "exp-new" }, error }) }) };
+      },
+      delete: () => ({
+        eq: (column, id) => {
+          calls.deletes.push([column, id]);
+          return Promise.resolve({ error: errorFor(calls.deletes) });
+        },
+      }),
+    };
+    supabase.from.mockImplementation((table) => (table === "car_expenses" ? { ...original(table), [kind]: writes[kind] } : original(table)));
+  }
+
+  it("inserts once for two submits in one tick, and saves again after a validation stop, a failure and a success", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase();
+    failFirstWrite("insert", calls);
+    renderPage();
+    const fill = async () => {
+      await user.selectOptions(screen.getByLabelText("Category *"), "parking");
+      await user.type(screen.getByLabelText("Amount *"), "5");
+    };
+    const addButton = await screen.findByRole("button", { name: "Add Expense" });
+
+    await user.click(addButton); // validation stop
+    await fill();
+    await twice(fireEvent.submit, addButton.closest("form")); // the one insert fails
+    expect(calls.inserts).toHaveLength(1);
+
+    await user.click(addButton);
+    await screen.findByText("Parking expense added.");
+    expect(calls.inserts).toHaveLength(2);
+
+    await fill();
+    await user.click(addButton);
+    await waitFor(() => expect(calls.inserts).toHaveLength(3));
+  });
+
+  it("deletes once for two taps on the confirm in one tick, with no error, and releases after a failure and a success", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ expensesByCar: { "car-1": [expense("e1", "2026-10-05", "parking", 5)] } });
+    failFirstWrite("delete", calls);
+    renderPage();
+    /** Opens the row's delete confirm. @returns {Promise<void>} */
+    const open = async () => user.click(await screen.findByRole("button", { name: "Delete the Parking expense of 5 Oct 2026" }));
+
+    await open();
+    await user.click(screen.getByRole("button", { name: "Delete" })); // fails
+    await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(2)); // the open confirm and the error
+
+    await twice(fireEvent.click, screen.getByRole("button", { name: "Delete" }));
+    expect(calls.deletes).toHaveLength(2);
+    expect(await screen.findByRole("status")).toHaveTextContent("Parking expense of 5 Oct 2026 deleted.");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    await open(); // the mocked reload still lists the row
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(calls.deletes).toHaveLength(3));
   });
 });
