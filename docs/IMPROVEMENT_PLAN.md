@@ -50,6 +50,12 @@ Each one has my recommendation and what it costs. Nothing that depends on a deci
 
 ## Summary: the five things that would most improve the app
 
+**Progress:**
+
+- PLAN-01: replaced. Tailwind is kept, with automatic source scanning turned off (merged on dev). Do not remove Tailwind.
+- PLAN-02: done (merged on dev).
+- PLAN-03: done (merged on dev).
+
 1. **Get CSS room back without raising the budget (PLAN-01).** The stylesheet is 72.75 kB against a 73 kB budget, so almost no visual change can ship. Tailwind is still wired in from the abandoned component-library experiment and writes about 30 utility classes into the stylesheet that nothing uses. Removing it frees 6.00 kB minified and 1.22 kB gzip. Everything visual in this plan waits on this one item. The hand-written CSS itself has no dead classes (381 checked, 0 dead), so there is no second easy win.
 2. **Give users control of what they have stored (PLAN-05, PLAN-06).** A mistyped fill-up can never be removed and quietly corrupts the cost totals, the real fuel economy and the trip estimates built on it. Trips are worse in a different way: every estimate saves the user's start and destination addresses, and no screen shows or deletes them. These are the two places where the app keeps data the user cannot manage.
 3. **Cap the one endpoint that costs money (PLAN-10) and make its failures readable (PLAN-11).** The AI and camera endpoints have daily limits enforced in the database. The Trip Planner estimate, which calls a billed Google API on every press, has none. Its errors also all look the same and are never logged, which is the likely reason one 400 was seen in QA and never reproduced.
@@ -159,12 +165,14 @@ Nothing visual can ship until the stylesheet has room. PLAN-01 gets that room by
 - **depends on:** nothing
 - **decision needed:** yes (it ends the shadcn CLI route for good; see Decision 2)
 - **suggested model:** Sonnet (mechanical, but verify carefully)
+- **skills:** ponytail:ponytail-audit, code-review
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-01): Remove the unused Tailwind layer to free 6.00 kB of CSS
+SKILLS: use ponytail:ponytail-audit, code-review. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -197,12 +205,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on chore/remove-unused-tailwind, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -232,12 +240,14 @@ Then stop and wait for my OK.
 - **depends on:** nothing
 - **decision needed:** no
 - **suggested model:** Sonnet
+- **skills:** ponytail:ponytail-audit, code-review
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-02): Make the bundle check fail when Supabase is missing from the build
+SKILLS: use ponytail:ponytail-audit, code-review. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -264,12 +274,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on chore/bundle-check-honest, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -298,12 +308,14 @@ Then stop and wait for my OK.
 - **depends on:** nothing
 - **decision needed:** no
 - **suggested model:** Sonnet
+- **skills:** ponytail:ponytail-audit, code-review
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-03): Shrink the 249 kB Mercedes logo and stop shipping a test file to production
+SKILLS: use ponytail:ponytail-audit, code-review. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -330,12 +342,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on chore/asset-weight, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -364,12 +376,14 @@ Then stop and wait for my OK.
 - **depends on:** nothing (skip it if PLAN-01 ships)
 - **decision needed:** yes (only run it if you refuse PLAN-01)
 - **suggested model:** Opus (cascade order is subtle)
+- **skills:** ponytail:ponytail-audit, code-review
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-04): Trim-and-merge pass on index.css, only if PLAN-01 is refused or more room is needed
+SKILLS: use ponytail:ponytail-audit, code-review. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -396,12 +410,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on chore/css-merge-pass, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -434,12 +448,14 @@ Users can add records they can never remove, and one kind of record they can nev
 - **depends on:** nothing (PLAN-15 should run after this, because the policies change)
 - **decision needed:** yes (a migration on the live database, and it reverses the earlier no-delete rule; see Decision 4)
 - **suggested model:** Opus (database policy and money totals)
+- **skills:** mattpocock-skills:tdd, supabase:supabase
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-05): Let a user delete their own fill-up
+SKILLS: use mattpocock-skills:tdd, supabase:supabase. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -468,12 +484,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on feat/fuel-log-delete, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. This item needs a database change. Write the SQL as a new dated file in docs/db_migrations/, show me the full SQL and how to undo it, and STOP. Do not apply it yourself. Go on only after I tell you it has been run. Everything else on Supabase stays read-only (SELECT, schema inspection, get_advisors).
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -503,12 +519,14 @@ Then stop and wait for my OK.
 - **depends on:** PLAN-01 (needs CSS room)
 - **decision needed:** yes (show and delete, or stop saving trips at all; see Decision 5)
 - **suggested model:** Opus (touches stored personal data)
+- **skills:** mattpocock-skills:tdd, supabase:supabase
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-06): Show recent trips with a delete button (trips are saved today but never shown)
+SKILLS: use mattpocock-skills:tdd, supabase:supabase. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -539,12 +557,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on feat/trip-planner-recent-trips, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -574,12 +592,14 @@ Then stop and wait for my OK.
 - **depends on:** nothing
 - **decision needed:** no
 - **suggested model:** Sonnet
+- **skills:** mattpocock-skills:tdd
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-07): Stop a double tap from saving the same record twice
+SKILLS: use mattpocock-skills:tdd. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -606,12 +626,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on fix/double-submit-guard, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -640,12 +660,14 @@ Then stop and wait for my OK.
 - **depends on:** nothing
 - **decision needed:** no
 - **suggested model:** Sonnet
+- **skills:** mattpocock-skills:tdd
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-08): A VIN pasted with a space loses its last character
+SKILLS: use mattpocock-skills:tdd. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -670,12 +692,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on fix/vin-paste-whitespace, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -703,12 +725,14 @@ Then stop and wait for my OK.
 - **depends on:** nothing
 - **decision needed:** no
 - **suggested model:** Sonnet
+- **skills:** mattpocock-skills:tdd, design:ux-copy
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-09): Say "Receipts" when an expense can hold three
+SKILLS: use mattpocock-skills:tdd, design:ux-copy. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -732,12 +756,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on fix/receipts-plural, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -769,12 +793,14 @@ The AI and camera endpoints have daily caps. The one endpoint that costs real mo
 - **depends on:** nothing
 - **decision needed:** yes (the numbers, and two new rows in a live table; see Decision 6)
 - **suggested model:** Opus (money and limits)
+- **skills:** mattpocock-skills:tdd, engineering:testing-strategy
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-10): Daily caps on Trip Planner estimates and the car spec lookup
+SKILLS: use mattpocock-skills:tdd, engineering:testing-strategy. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -804,12 +830,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on feat/usage-caps-trip-and-specs, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. This item needs a database change. Write the SQL as a new dated file in docs/db_migrations/, show me the full SQL and how to undo it, and STOP. Do not apply it yourself. Go on only after I tell you it has been run. Everything else on Supabase stays read-only (SELECT, schema inspection, get_advisors).
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -839,12 +865,14 @@ Then stop and wait for my OK.
 - **depends on:** nothing
 - **decision needed:** no
 - **suggested model:** Opus (error handling logic)
+- **skills:** mattpocock-skills:tdd, mattpocock-skills:diagnosing-bugs
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-11): Tell a bad address apart from a maps outage, and log which it was
+SKILLS: use mattpocock-skills:tdd, mattpocock-skills:diagnosing-bugs. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -872,12 +900,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on fix/maps-error-status, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -905,12 +933,14 @@ Then stop and wait for my OK.
 - **depends on:** nothing
 - **decision needed:** no
 - **suggested model:** Opus (matching logic, safety-adjacent)
+- **skills:** mattpocock-skills:tdd, engineering:testing-strategy
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-12): Only attach a DIY video that is plausibly about the problem
+SKILLS: use mattpocock-skills:tdd, engineering:testing-strategy. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -936,12 +966,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on fix/advisor-video-relevance, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -969,12 +999,14 @@ Then stop and wait for my OK.
 - **depends on:** nothing
 - **decision needed:** no
 - **suggested model:** Sonnet
+- **skills:** mattpocock-skills:tdd, engineering:testing-strategy
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-13): Do not say "waking up the server" during a normal photo scan
+SKILLS: use mattpocock-skills:tdd, engineering:testing-strategy. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -998,12 +1030,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on fix/cold-start-banner-scans, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1035,12 +1067,14 @@ The code review found no injection, no leaked secret, no raw error text and no r
 - **depends on:** nothing
 - **decision needed:** no
 - **suggested model:** Opus (security)
+- **skills:** security-review
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-14): Add security headers to the Netlify site
+SKILLS: use security-review. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1067,12 +1101,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on feat/security-headers, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1102,12 +1136,14 @@ Then stop and wait for my OK.
 - **depends on:** PLAN-05 if you approve it (run after the policy change, so one run covers both)
 - **decision needed:** yes (it creates and deletes data on the live project; see Decision 7)
 - **suggested model:** Opus (security)
+- **skills:** security-review, supabase:supabase
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-15): Run the live RLS re-test once and record the result
+SKILLS: use security-review, supabase:supabase. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1136,12 +1172,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on chore/verify-rls-run, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1171,12 +1207,14 @@ Then stop and wait for my OK.
 - **depends on:** nothing
 - **decision needed:** yes (only you can change these; leaked-password protection may need a paid Supabase plan)
 - **suggested model:** Sonnet (it is a guided checklist; I do the clicks)
+- **skills:** security-review, supabase:supabase
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-16): Dashboard settings checklist: passwords, Google key limits, spending cap
+SKILLS: use security-review, supabase:supabase. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1201,12 +1239,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on docs/security-settings-checklist, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1234,12 +1272,14 @@ Then stop and wait for my OK.
 - **depends on:** nothing
 - **decision needed:** no
 - **suggested model:** Opus (auth)
+- **skills:** security-review, mattpocock-skills:diagnosing-bugs
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-17): Find out why the logout request shows ERR_ABORTED, and whether the session is really ended
+SKILLS: use security-review, mattpocock-skills:diagnosing-bugs. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1264,12 +1304,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on fix/logout-request-aborted, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1302,12 +1342,14 @@ The logged-out screens are in good shape: axe (WCAG 2.0, 2.1 and 2.2 A and AA) f
 - **depends on:** PLAN-01 (needs CSS room)
 - **decision needed:** no
 - **suggested model:** Sonnet
+- **skills:** design:accessibility-review, browser-automation
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-18): Add a skip-to-content link
+SKILLS: use design:accessibility-review, browser-automation. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1333,12 +1375,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on feat/skip-link, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1367,12 +1409,14 @@ Then stop and wait for my OK.
 - **depends on:** nothing
 - **decision needed:** no
 - **suggested model:** Sonnet
+- **skills:** design:accessibility-review, browser-automation
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-19): Give every screen its own page title (UI_TICKETS T9)
+SKILLS: use design:accessibility-review, browser-automation. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1396,12 +1440,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on feat/route-titles, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1429,12 +1473,14 @@ Then stop and wait for my OK.
 - **depends on:** PLAN-01 (needs CSS room)
 - **decision needed:** no
 - **suggested model:** Sonnet
+- **skills:** design:accessibility-review, browser-automation
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-20): Show a focus ring on the photo pickers (UI_TICKETS T19)
+SKILLS: use design:accessibility-review, browser-automation. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1457,12 +1503,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on fix/file-input-focus-ring, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1490,12 +1536,14 @@ Then stop and wait for my OK.
 - **depends on:** PLAN-01 (needs CSS room)
 - **decision needed:** yes (a border on secondary buttons is a visible design change)
 - **suggested model:** Opus (contrast maths across nine themes)
+- **skills:** design:accessibility-review, browser-automation
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-21): Test outline and secondary buttons on every car theme, then fix what fails
+SKILLS: use design:accessibility-review, browser-automation. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1520,12 +1568,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on fix/outline-button-contrast, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1554,12 +1602,14 @@ Then stop and wait for my OK.
 - **depends on:** PLAN-01 (needs CSS room)
 - **decision needed:** no
 - **suggested model:** Sonnet
+- **skills:** design:accessibility-review, browser-automation
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-22): Check and fix the layout jump on the reset page and on a signed-out redirect
+SKILLS: use design:accessibility-review, browser-automation. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1583,12 +1633,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on fix/logged-out-layout-shift, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1620,12 +1670,14 @@ These are the still-open tickets from `docs/UI_TICKETS.md` that are worth doing.
 - **depends on:** PLAN-01
 - **decision needed:** no (the ticket was approved on 2026-10-21; wording of the two verdict labels stays as it is unless I say otherwise)
 - **suggested model:** Opus (safety-advice hierarchy)
+- **skills:** design:design-critique, browser-automation
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-23): Make the advisor's verdict the most visible thing in each reply (UI_TICKETS T16, part 1)
+SKILLS: use design:design-critique, browser-automation. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1651,12 +1703,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on ui/advisor-verdict-banner, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1685,12 +1737,14 @@ Then stop and wait for my OK.
 - **depends on:** PLAN-01; do PLAN-05 first if approved (it adds a delete button to the same rows)
 - **decision needed:** yes (photo-adjacent markup, as T17 says)
 - **suggested model:** Sonnet
+- **skills:** design:design-critique, browser-automation
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-24): Fuel Log on a phone: readable history and one privacy notice (UI_TICKETS T17)
+SKILLS: use design:design-critique, browser-automation. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1714,12 +1768,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on ui/fuel-log-mobile, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1748,12 +1802,14 @@ Then stop and wait for my OK.
 - **depends on:** PLAN-01
 - **decision needed:** no (approved 2026-10-21)
 - **suggested model:** Sonnet
+- **skills:** design:design-critique, browser-automation
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-25): Car Profile: title first, "Not set" for blanks, delete in its own danger area (UI_TICKETS T12)
+SKILLS: use design:design-critique, browser-automation. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1777,12 +1833,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on ui/car-profile-layout, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1810,12 +1866,14 @@ Then stop and wait for my OK.
 - **depends on:** PLAN-01; coordinate with PLAN-06
 - **decision needed:** no (approved 2026-10-21)
 - **suggested model:** Sonnet
+- **skills:** design:design-critique, browser-automation
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-26): Trip Planner on desktop: results beside the form (UI_TICKETS T14)
+SKILLS: use design:design-critique, browser-automation. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1839,12 +1897,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on ui/trip-planner-two-columns, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1872,12 +1930,14 @@ Then stop and wait for my OK.
 - **depends on:** nothing
 - **decision needed:** yes (wording is yours to approve)
 - **suggested model:** Sonnet
+- **skills:** design:ux-copy, design:design-critique, browser-automation
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-27): Bring the footer, the search description and the README up to date with what the app does
+SKILLS: use design:ux-copy, design:design-critique, browser-automation. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1902,12 +1962,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on copy/footer-meta-readme, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -1939,12 +1999,14 @@ The suites are large and green (1869 frontend, 806 backend, 2026-11-16) and well
 - **depends on:** nothing
 - **decision needed:** no
 - **suggested model:** Sonnet
+- **skills:** engineering:testing-strategy, mattpocock-skills:tdd
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-28): Test the two photo scan components that have none
+SKILLS: use engineering:testing-strategy, mattpocock-skills:tdd. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1967,12 +2029,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on test/photo-scan-components, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -2001,12 +2063,14 @@ Then stop and wait for my OK.
 - **depends on:** PLAN-02 (without it the bundle check passes on an empty build)
 - **decision needed:** yes (see Decision 9; it adds a workflow file and needs two repository variables you set)
 - **suggested model:** Sonnet
+- **skills:** engineering:testing-strategy, mattpocock-skills:tdd
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-29): Run tests, lint and the bundle check on every push
+SKILLS: use engineering:testing-strategy, mattpocock-skills:tdd. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -2032,12 +2096,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on chore/ci-workflow, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -2066,12 +2130,14 @@ Then stop and wait for my OK.
 - **depends on:** nothing
 - **decision needed:** yes (it needs a dedicated test account that you create, and it writes to production; see Decision 11)
 - **suggested model:** Opus (touches live data)
+- **skills:** engineering:testing-strategy, mattpocock-skills:tdd
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-30): One real end-to-end journey with a dedicated test account (optional)
+SKILLS: use engineering:testing-strategy, mattpocock-skills:tdd. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -2097,12 +2163,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on test/e2e-smoke, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. SELECT, schema inspection and get_advisors only. No migrations, inserts, updates or deletes.
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
@@ -2135,12 +2201,14 @@ This is Decision 1. The recommendation is not to build it. The item is here so t
 - **depends on:** PLAN-01 (for the opt-in switch styles); your answers to Decision 1
 - **decision needed:** yes (see Decision 1)
 - **suggested model:** Opus (database, scheduled job, personal data)
+- **skills:** mattpocock-skills:tdd, supabase:supabase, security-review
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-31): Daily email for maintenance that is due soon or overdue
+SKILLS: use mattpocock-skills:tdd, supabase:supabase, security-review. If one is not installed, say so in the report and carry on.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -2171,12 +2239,12 @@ STANDING RULES
 - No push, no merge, no pull request. One focused commit on feat/car-63-email-reminders, then stop. This overrides the "commit and push" step in CLAUDE.md. There is no Jira ticket for this item unless I give you one; do not create or change one.
 - Do not touch anything on port 5173 (my dev server). Use another port for anything you start, and stop every process you start.
 - Styling is plain CSS only. No animation library, no UI library, no new icon library, no outside fonts or images. Icons are the copied Lucide SVGs in frontend/src/components/icons.jsx and iconsMore.jsx.
-- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 72.75 / 12.39 (if PLAN-01 has shipped, CSS should be near 66.75 / 11.17). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
+- Bundle budget: with a real frontend/.env present, run `npm run build` then `npm run check:bundle` in frontend/ before and after. Budgets: entry 470 kB min / 134 kB gzip, initial 516 / 150, CSS 73 / 13. Measured on 2026-11-16: entry 460.90 / 131.22, initial 509.90 / 148.57, CSS 66.83 / 11.22 kB (measured later, with Tailwind kept and its source scanning off). Report both sets of numbers. Never raise a budget; if the change does not fit, stop and tell me.
 - Supabase project ehjvbkhoafldqfsivtrn is the LIVE production database. This item needs a database change. Write the SQL as a new dated file in docs/db_migrations/, show me the full SQL and how to undo it, and STOP. Do not apply it yourself. Go on only after I tell you it has been run. Everything else on Supabase stays read-only (SELECT, schema inspection, get_advisors).
 - Never type or print credentials or the contents of any .env file. If a logged-in view is needed, open a browser window on a spare port and ask me to log in. Create no data; if you must, label it "QA test" and delete it through the app.
 - Every new file starts with a header comment saying what it is for. Every new or changed function and component has a docstring (what it does, parameters, return value).
 - Add or update one line per new or changed file in docs/FILE_INDEX.md. Search that file, never read it whole (it is over 230 kB).
-- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline on 2026-11-16: 1869 frontend and 806 backend tests passing. Never commit on a red run.
+- Tests cover the normal case, invalid input and one edge case. Run the full suites: `npm test` and `npm run lint` in frontend/, and `.venv\Scripts\python -m pytest -q` in backend/. Baseline: 1875 frontend tests passing (2026-11-26) and 806 backend tests passing (2026-11-16). Never commit on a red run.
 - Commit message: plain and factual, written as the developer. No mention of AI or Claude, no co-author line. Do not change git config.
 - Never build anything from CLAUDE.md's out-of-scope list (document vault, booking, live maps, OBD, voice, exports, fleets, native app). Do not change Privacy or Terms wording. Landing layout shift at 390 px stays under 0.1.
 - If the `graphify` command exists, run `graphify query "<question>"` before searching or reading source, and `graphify update .` after changing code. If it does not exist, say so in the report and carry on.
