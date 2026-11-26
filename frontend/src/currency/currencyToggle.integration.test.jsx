@@ -122,6 +122,7 @@ describe("the currency toggle across screens", () => {
       "2,745,918 LBP/20 L ($30.61/20 L)",
       "-", // CAR-61 Odometer: this fill-up has no reading
       "-", // CAR-61 km/L
+      "Delete", // PLAN-05 row action
     ]);
 
     // switching back to USD on the Fuel Log flips it too
