@@ -238,6 +238,7 @@ function MaintenancePage() {
   const [busy, setBusy] = useState(false);
   // PLAN-07: `busy` only disables the button after a re-render; this ref stops a second call in the same tick.
   const addingRef = useRef(false);
+  const markingRef = useRef(false);
   const scrolledTo = useRef("");
 
   const selectedCar = cars.find((car) => car.id === selectedCarId) ?? null;
@@ -448,27 +449,30 @@ function MaintenancePage() {
    * @param {Event} event - the form's submit event, or the "Save anyway" click.
    * @param {object} item - the maintenance item.
    * @param {{ confirmedOrder?: boolean }} [options]
+   * @returns {Promise<void>}
    */
   async function handleMarkDone(event, item, { confirmedOrder = false } = {}) {
     event.preventDefault();
-    const form = event.currentTarget.closest?.("form") ?? event.currentTarget;
-    const errors = getCompletionErrors(panelValues, today, item.interval_km != null);
-    setPanelErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      scrollToAlert(form);
-      return;
-    }
-    if (!confirmedOrder && getOdometerOrderWarning(panelValues.odometer, panelValues.doneOn, loaded.readings, { allowEqual: true })) {
-      setOrderFor(orderKey(item));
-      scrollToAlert(form);
-      return;
-    }
-    setOrderFor(null);
-    const odometer = String(panelValues.odometer ?? "").trim();
-    const note = String(panelValues.note ?? "").trim();
-    setBusy(true);
-    setActionError("");
+    if (markingRef.current) return;
+    markingRef.current = true;
     try {
+      const form = event.currentTarget.closest?.("form") ?? event.currentTarget;
+      const errors = getCompletionErrors(panelValues, today, item.interval_km != null);
+      setPanelErrors(errors);
+      if (Object.keys(errors).length > 0) {
+        scrollToAlert(form);
+        return;
+      }
+      if (!confirmedOrder && getOdometerOrderWarning(panelValues.odometer, panelValues.doneOn, loaded.readings, { allowEqual: true })) {
+        setOrderFor(orderKey(item));
+        scrollToAlert(form);
+        return;
+      }
+      setOrderFor(null);
+      const odometer = String(panelValues.odometer ?? "").trim();
+      const note = String(panelValues.note ?? "").trim();
+      setBusy(true);
+      setActionError("");
       // One insert: the item's schedule restarts from its latest completion.
       const { data, error } = await supabase
         .from("maintenance_records")
@@ -506,6 +510,7 @@ function MaintenancePage() {
           : `Saved, but ${failed === 1 ? "1 photo couldn't" : `${failed} photos couldn't`} be attached. You can add ${failed === 1 ? "it" : "them"} from History.`,
       );
     } finally {
+      markingRef.current = false;
       setBusy(false);
     }
   }

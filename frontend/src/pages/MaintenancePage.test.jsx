@@ -1039,3 +1039,67 @@ describe("MaintenancePage — double tap guard (PLAN-07)", () => {
     await waitFor(() => expect(calls.itemInserts).toHaveLength(3));
   });
 });
+
+describe("MaintenancePage — Mark as done double tap guard (PLAN-07)", () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => "blob:preview");
+    URL.revokeObjectURL = vi.fn();
+    addPhoto.mockResolvedValue({ id: "p", storage_path: "x", slot: 1 });
+  });
+
+  it("saves once (one photo upload) for two submits in one tick, and saves again after a validation stop, the 'Save anyway' prompt, a success and a failure", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ itemsByCar: { "car-1": [item()] }, readingsByCar: { "car-1": [reading("car-1", 89100)] } });
+    const original = supabase.from.getMockImplementation();
+    // The first insert of the low "Save anyway" reading fails; every other insert succeeds.
+    let lowReadingFailures = 0;
+    supabase.from.mockImplementation((table) =>
+      table === "maintenance_records"
+        ? {
+            ...original(table),
+            insert: (row) => {
+              calls.recordInserts.push(row);
+              const error = row.odometer_km === 100 && ++lowReadingFailures === 1 ? { code: "XX000", message: "boom" } : null;
+              return { select: () => ({ single: () => Promise.resolve({ data: error ? null : { id: "rec-new" }, error }) }) };
+            },
+          }
+        : original(table),
+    );
+    renderPage();
+    /** Replaces the odometer reading (empty = leaves it blank). @param {string} value @returns {Promise<void>} */
+    const typeKm = async (value) => {
+      const field = screen.getByLabelText("Odometer (km) *");
+      await user.clear(field);
+      if (value) await user.type(field, value);
+    };
+    /** Clicks a button by its exact name. @param {string} name @returns {Promise<void>} */
+    const press = (name) => user.click(screen.getByRole("button", { name }));
+
+    await user.click(await screen.findByRole("button", { name: "Mark as done" }));
+    await user.upload(screen.getByLabelText("Add a photo for Oil change"), new File([new Uint8Array(10)], "a.jpg", { type: "image/jpeg" }));
+    await typeKm("");
+    await press("Save"); // validation stop
+    await typeKm("89200");
+    const form = screen.getByRole("form", { name: "Mark Oil change as done" });
+    // Both submits inside one act(), so React cannot re-render (and disable the button) in between.
+    await act(async () => {
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+    });
+    await screen.findByText("Oil change marked as done.");
+    expect.soft(calls.recordInserts).toHaveLength(1);
+    expect.soft(addPhoto).toHaveBeenCalledTimes(1);
+
+    await press("Mark as done");
+    await typeKm("100");
+    await press("Save"); // the prompt pauses the save
+    expect(calls.recordInserts).toHaveLength(1);
+    await press("Save anyway"); // this insert fails
+    expect(calls.recordInserts).toHaveLength(2);
+
+    await press("Save"); // after the failure: the prompt again
+    await press("Save anyway");
+    await screen.findByText("Oil change marked as done.");
+    expect(calls.recordInserts).toHaveLength(3);
+  });
+});
