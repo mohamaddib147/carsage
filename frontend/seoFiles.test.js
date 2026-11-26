@@ -3,13 +3,14 @@
 // to Netlify's SPA catch-all redirect (_redirects: "/* /index.html 200"),
 // which would otherwise silently serve the app shell's HTML at both URLs
 // with a 200 status, exactly the bug this replaces. Vite copies everything
-// in public/ into dist/ untouched, so a file here is what gets deployed.
+// in public/ into dist/ untouched, so a file there is what gets deployed. That
+// is also why this test lives here and not in public/: it would be deployed too.
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const PUBLIC_DIR = path.resolve(__dirname);
+const PUBLIC_DIR = path.resolve(__dirname, "public");
 
 describe("robots.txt", () => {
   const filePath = path.join(PUBLIC_DIR, "robots.txt");

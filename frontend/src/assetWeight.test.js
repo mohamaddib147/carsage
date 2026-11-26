@@ -59,6 +59,15 @@ describe("no unreferenced image in src/assets (CAR-82)", () => {
     expect(assets).toEqual(expect.arrayContaining(["logo.svg", "logo-on-dark.svg", "background-texture-icon.svg", "Mercedes-Benz-Logo.png", "favicon-icon.svg"]));
   });
 
+  // PLAN-03: a 249 kB 3840x2160 PNG once shipped for a 32px badge. SVGs are excluded: the texture and logos are larger on purpose.
+  it.each(assets.filter((name) => /\.(png|jpe?g|gif|webp|avif)$/i.test(name)))("%s, a raster image, is 15 kB or less", (name) => {
+    expect(statSync(join("src/assets", name)).size).toBeLessThanOrEqual(15000);
+  });
+
+  it("the Mercedes badge stays its own file (Vite embeds anything under 4 kB in the chunk every make downloads)", () => {
+    expect(readFileSync("src/theme/BrandBadge.jsx", "utf8")).toContain("Mercedes-Benz-Logo.png?no-inline\"");
+  });
+
   it.each(assets)("%s is imported by code or used in a stylesheet (or is the documented favicon copy)", (name) => {
     if (NOT_IMPORTED_ON_PURPOSE.has(name)) return;
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

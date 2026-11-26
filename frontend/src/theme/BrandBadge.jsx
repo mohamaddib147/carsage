@@ -12,7 +12,8 @@
 // neither, or renders nothing for an unrecognized/missing make, so it
 // never implies a false or missing match.
 
-import mercedesBenzLogo from "../assets/Mercedes-Benz-Logo.png";
+// ?no-inline: at this size Vite would otherwise embed it in the shared chunk, so every make would download it.
+import mercedesBenzLogo from "../assets/Mercedes-Benz-Logo.png?no-inline";
 import { getBrandTheme, DEFAULT_THEME } from "./carBrandThemes.js";
 import { getBrandIcon } from "./carBrandIcons.js";
 
