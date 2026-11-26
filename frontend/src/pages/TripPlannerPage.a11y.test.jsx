@@ -29,9 +29,17 @@ vi.mock("../lib/apiClient.js", () => ({
   apiFetch: vi.fn(),
 }));
 
+/**
+ * Answers the cars read with `cars`, and the Recent trips read (PLAN-06) with no trips.
+ * @param {object[]} cars - the user's cars.
+ * @returns {void}
+ */
 function mockCars(cars) {
   const order = vi.fn().mockResolvedValue({ data: cars, error: null });
-  supabase.from.mockReturnValue({ select: vi.fn(() => ({ eq: vi.fn(() => ({ order })) })) });
+  const limit = () => Promise.resolve({ data: [], error: null });
+  supabase.from.mockImplementation((table) => ({
+    select: vi.fn(() => ({ eq: vi.fn(() => (table === "trips" ? { order: () => ({ limit }) } : { order })) })),
+  }));
 }
 
 // Every row of the result: light and current-traffic fuel cost, a heavy-traffic duration with its badge, distance, full tank cost.

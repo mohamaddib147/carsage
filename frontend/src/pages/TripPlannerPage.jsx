@@ -65,8 +65,16 @@
 // traffic explainer only talk about "rated" efficiency when rated was used.
 // A response without `efficiency_source` (older shape) shows no basis line
 // and the original rated wording.
+//
+// PLAN-06: a "Recent trips" list under the results shows the selected car's
+// five newest saved trips, read straight from Supabase (row-level security
+// limits it to the user). Each row has a Delete with the same inline confirm
+// as the Fuel Log, and choosing a row only refills Starting Location and
+// Destination: it never re-runs the estimate (a paid Google call) or sends any
+// other request. A fresh estimate is added to the top from its own response.
 
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useScrollToAlert } from "../lib/scrollToAlert.js";
 import { Link } from "react-router-dom";
 import FormattedNumberInput from "../components/FormattedNumberInput.jsx";
@@ -78,7 +86,8 @@ import RouteMapImage from "../components/RouteMapImage.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
 import { apiFetch } from "../lib/apiClient.js";
-import { LIMITS, getFuelPriceError } from "../lib/limits.js";
+import { LIMITS, describeActionError, describeApiFetchError, getFuelPriceError } from "../lib/limits.js";
+import { formatFillDate, todayLocal } from "../lib/fuelLog.js";
 import { getTankCapacityError } from "../lib/tankCapacity.js";
 import { getTrafficLevel } from "../lib/trafficLevel.js";
 import {
@@ -140,6 +149,24 @@ function priceBucketForFuelType(fuelType) {
   return "95_octane";
 }
 
+// PLAN-06: what the Recent trips list reads, and how many rows it shows.
+const TRIP_COLUMNS = "id, origin, destination, distance_km, estimated_cost, created_at";
+const RECENT_TRIP_COUNT = 5;
+const DELETE_FAILED = "Could not delete this trip. Please try again.";
+
+/**
+ * PLAN-06: a saved trip's created_at as "20 Nov 2026, 12:05" in the browser's own time zone. The time keeps two
+ * trips to the same place on the same day apart, in both the row and its Delete button's name.
+ * @param {string} timestamp - an ISO timestamp (timestamptz from Supabase).
+ * @returns {string} "" if it isn't a real time.
+ */
+function formatTripTime(timestamp) {
+  const when = new Date(timestamp);
+  if (Number.isNaN(when.getTime())) return "";
+  const time = when.toTimeString().slice(0, 5);
+  return `${formatFillDate(todayLocal(when))}, ${time}`;
+}
+
 // How each price bucket is named on screen.
 const FUEL_GRADE_LABELS = { "95_octane": "95 octane", "98_octane": "98 octane", diesel: "diesel" };
 
@@ -160,7 +187,8 @@ function tankInputFor(car) {
  * there's no saved default location on a user's profile yet), call the
  * FastAPI cost-estimate endpoint for
  * the user's car, and show the resulting fuel cost, duration, and
- * distance — or a clear error if the trip couldn't be planned.
+ * distance — or a clear error if the trip couldn't be planned. PLAN-06: below
+ * that, the selected car's five newest saved trips, each reusable or deletable.
  * @returns {JSX.Element}
  */
 function TripPlannerPage() {
@@ -190,8 +218,22 @@ function TripPlannerPage() {
   const [tankSizeInput, setTankSizeInput] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const fuelPriceEditedRef = useRef(false);
+  const planButtonRef = useRef(null);
+
+  // PLAN-06: the Recent trips list, tagged with the car it was read for (like the Fuel Log's fill-ups), plus the
+  // row whose "Delete this trip?" confirm is open and the outcome shown above the list.
+  const [recent, setRecent] = useState({ carId: "", trips: [], error: "" });
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteNotice, setDeleteNotice] = useState("");
+  const recentRef = useRef(null);
+  const deleteNoticeRef = useRef(null);
 
   const selectedCar = cars.find((car) => car.id === selectedCarId) ?? null;
+  // null = this car's trips are still loading.
+  const recentTrips = recent.carId === selectedCarId ? recent.trips : null;
+  const recentError = recent.carId === selectedCarId ? recent.error : "";
 
   useEffect(() => {
     if (!user) return;
@@ -247,6 +289,34 @@ function TripPlannerPage() {
     };
   }, [accessToken]);
 
+  // PLAN-06: load the selected car's newest trips. The cleanup flags this run as stale, so a reply that arrives
+  // after the user picked another car is ignored.
+  useEffect(() => {
+    if (!selectedCarId) return undefined;
+    let stale = false;
+
+    async function loadRecentTrips() {
+      const { data, error } = await supabase
+        .from("trips")
+        .select(TRIP_COLUMNS)
+        .eq("car_id", selectedCarId)
+        .order("created_at", { ascending: false })
+        .limit(RECENT_TRIP_COUNT);
+
+      if (stale) return;
+      setRecent({
+        carId: selectedCarId,
+        trips: error ? [] : (data ?? []),
+        error: error ? describeActionError(error, "Could not load your recent trips. Please try again.") : "",
+      });
+    }
+
+    loadRecentTrips();
+    return () => {
+      stale = true;
+    };
+  }, [selectedCarId]);
+
   // An invalid tank size or fuel price must never be hidden inside the closed section.
   useEffect(() => {
     if (getTankCapacityError(tankSizeInput) || getFuelPriceError(fuelPriceInput)) {
@@ -257,12 +327,67 @@ function TripPlannerPage() {
   /** CAR-49: switching cars fully replaces the Tank Size text with the new
    * car's capacity (or empties it) in the same update — never appends to
    * or keeps anything typed for the previous car. CAR-55: also makes the
-   * picked car the active one for site-wide brand theming.
-   * @param {string} carId */
+   * picked car the active one for site-wide brand theming. PLAN-06: also closes
+   * any open delete confirm and clears its message, which belonged to the old car.
+   * @param {string} carId
+   * @returns {void} */
   function handleCarChange(carId) {
     setSelectedCarId(carId);
     setTankSizeInput(tankInputFor(cars.find((car) => car.id === carId)));
     setActiveCarId(carId, cars.find((car) => car.id === carId)?.make);
+    setConfirmDeleteId(null);
+    setDeleteError("");
+    setDeleteNotice("");
+  }
+
+  /**
+   * PLAN-06: deletes one trip the user has confirmed, then drops it from the list on screen (only if that list is
+   * still this car's). Row-level security filters a refused delete instead of raising an error, so the deleted row
+   * is asked back and an empty reply counts as a refusal; either way the row stays and a plain message is shown
+   * above the list. On success, keyboard focus moves to the "deleted" message, since the focused button has just
+   * left the page with its row. Copied from the Fuel Log's delete.
+   * @param {{ id: string, destination: string }} trip - the trip to delete.
+   * @returns {Promise<void>}
+   */
+  async function handleDeleteTrip(trip) {
+    const carId = selectedCarId;
+    setDeleteError("");
+    setDeleteNotice("");
+    setDeleting(true);
+    try {
+      const { data, error } = await supabase.from("trips").delete().eq("id", trip.id).select("id");
+      if (error || !data?.length) {
+        setDeleteError(describeActionError(error, DELETE_FAILED));
+        scrollToAlert(recentRef.current);
+        return;
+      }
+      // shortcut: the list shows one row fewer until the next load instead of reading a sixth trip back in; fine for
+      // a "recent" list, refetch here if it ever has to stay at five.
+      flushSync(() => {
+        setRecent((previous) =>
+          previous.carId === carId
+            ? { ...previous, trips: previous.trips.filter((row) => row.id !== trip.id) }
+            : previous,
+        );
+        setConfirmDeleteId(null);
+        setDeleteNotice(`Trip to ${trip.destination} deleted.`);
+      });
+      deleteNoticeRef.current?.focus();
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  /**
+   * PLAN-06: fills Starting Location and Destination from a recent trip and moves focus to Plan Trip. It does not
+   * plan the trip: each estimate is a paid Google call, so the user presses Plan Trip themselves.
+   * @param {{ origin: string | null, destination: string }} trip - the chosen trip (origin is empty on old rows).
+   * @returns {void}
+   */
+  function chooseTrip(trip) {
+    setOrigin(trip.origin ?? "");
+    setDestination(trip.destination);
+    planButtonRef.current?.focus();
   }
 
   // Prefills the fuel price for the selected car's fuel grade, but never
@@ -275,7 +400,13 @@ function TripPlannerPage() {
     if (price != null) setFuelPriceInput(String(price));
   }, [fuelPrices, selectedCar]);
 
-  /** @param {import('react').FormEvent} event */
+  /**
+   * Validates the form, asks the backend for the estimate (which also saves the trip), and shows the result.
+   * PLAN-06: the saved trip is added to the top of Recent trips from this same response (its time is the browser's
+   * "now"; the stored created_at shows on the next load), only if the list is still the car it was planned for.
+   * @param {import('react').FormEvent} event
+   * @returns {Promise<void>}
+   */
   async function handleSubmit(event) {
     event.preventDefault();
     setSubmitError("");
@@ -311,26 +442,39 @@ function TripPlannerPage() {
         ? parsedFuelPrice
         : undefined;
 
+    // Captured before the request, so edits or a car switch while it runs can't relabel the result or the new row.
+    const carId = selectedCarId;
+    const route = { origin: origin.trim(), destination: destination.trim() };
     setSubmitting(true);
     try {
       const data = await apiFetch("/trip-planner/estimate", {
         method: "POST",
         accessToken: session.access_token,
         body: {
-          car_id: selectedCarId,
-          destination: destination.trim(),
-          origin: origin.trim() || undefined,
+          car_id: carId,
+          destination: route.destination,
+          origin: route.origin || undefined,
           fuel_price_per_liter_lbp: fuelPriceOverride,
         },
       });
       setResult(data);
-      setSubmittedRoute({
-        origin: origin.trim(),
-        destination: destination.trim(),
-        polyline: data.route_polyline ?? null,
-      });
+      setSubmittedRoute({ ...route, polyline: data.route_polyline ?? null });
+      if (data.id) {
+        const saved = {
+          id: data.id,
+          ...route,
+          distance_km: data.distance_km,
+          estimated_cost: data.estimated_cost_lbp,
+          created_at: new Date().toISOString(),
+        };
+        setRecent((previous) =>
+          previous.carId === carId
+            ? { ...previous, trips: [saved, ...previous.trips].slice(0, RECENT_TRIP_COUNT) }
+            : previous,
+        );
+      }
     } catch (error) {
-      setSubmitError(error.message);
+      setSubmitError(describeApiFetchError(error));
       scrollToAlert();
     } finally {
       setSubmitting(false);
@@ -522,6 +666,7 @@ function TripPlannerPage() {
           )}
 
           <button
+            ref={planButtonRef}
             className="btn-primary btn-block"
             type="submit"
             disabled={submitting}
@@ -541,16 +686,17 @@ function TripPlannerPage() {
               polyline={submittedRoute.polyline}
             />
           )}
+          {/* The route this result was planned for, not the live fields (a chosen recent trip refills those). */}
           <p className="trip-result-card__route">
-            {origin ? (
+            {submittedRoute?.origin ? (
               <>
-                {origin}
+                {submittedRoute.origin}
                 <span className="sr-only"> to </span>
                 <ArrowRight size={16} className="icon--route" />
-                {destination}
+                {submittedRoute.destination}
               </>
             ) : (
-              destination
+              submittedRoute?.destination
             )}
           </p>
           <EfficiencyBasis result={result} />
@@ -657,6 +803,86 @@ function TripPlannerPage() {
           )}
         </div>
       )}
+
+      {/* PLAN-06: last on the page, so its rows loading in never move anything above them. */}
+      <section className="dashboard-section trip-recent" aria-labelledby="trip-recent-heading" ref={recentRef}>
+        <h2 id="trip-recent-heading">Recent trips</h2>
+        {deleteError && <p role="alert" className="auth-form__error">{deleteError}</p>}
+        {deleteNotice && <p role="status" className="fuel-log-saved" tabIndex={-1} ref={deleteNoticeRef}>{deleteNotice}</p>}
+
+        {recentTrips === null ? (
+          <p>Loading recent trips...</p>
+        ) : recentError ? (
+          <p role="alert" className="auth-form__error">{recentError}</p>
+        ) : recentTrips.length === 0 ? (
+          <p>No trips planned yet for this car.</p>
+        ) : (
+          <>
+            <p className="form-field__hint" id="trip-recent-hint">Choose a trip to fill in its route again.</p>
+            <ul className="trip-recent__list">
+              {recentTrips.map((trip) => {
+                const when = formatTripTime(trip.created_at);
+                return (
+                  <li key={trip.id} className="trip-recent__item">
+                    <button
+                      type="button"
+                      className="trip-recent__use"
+                      aria-describedby="trip-recent-hint"
+                      onClick={() => chooseTrip(trip)}
+                    >
+                      <span className="trip-recent__route">
+                        {trip.origin ? `${trip.origin} to ${trip.destination}` : trip.destination}
+                      </span>
+                      <span className="trip-recent__meta">
+                        {trip.distance_km != null && `${trip.distance_km} km · `}
+                        {trip.estimated_cost != null && (
+                          <>
+                            <Price amount={Number(trip.estimated_cost)} currency="LBP" />
+                            {" · "}
+                          </>
+                        )}
+                        {when}
+                      </span>
+                    </button>
+                    <div className="trip-recent__actions">
+                      {confirmDeleteId === trip.id ? (
+                        <span role="alert" className="costs-confirm">
+                          Delete this trip?{" "}
+                          <button type="button" className="maintenance-danger-btn" disabled={deleting} onClick={() => handleDeleteTrip(trip)}>
+                            Delete
+                          </button>{" "}
+                          {/* Focus starts on the safe choice; "Keep it" hands it back to this row's Delete button. */}
+                          <button
+                            type="button"
+                            className="maintenance-link-btn"
+                            autoFocus
+                            onClick={(event) => {
+                              const actions = event.currentTarget.closest(".trip-recent__actions");
+                              flushSync(() => setConfirmDeleteId(null));
+                              actions.querySelector("button")?.focus();
+                            }}
+                          >
+                            Keep it
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="maintenance-link-btn maintenance-link-btn--danger"
+                          aria-label={`Delete the trip to ${trip.destination} on ${when}`}
+                          onClick={() => setConfirmDeleteId(trip.id)}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+      </section>
     </PageShell>
   );
 }

@@ -14,7 +14,8 @@
 // fuel_tank_capacity_liters — no hardcoded default; switching cars
 // changes it; a car with no tank size gets a clear "not set" message), and
 // the polish pass (Fuel Price / Tank Size tucked into a collapsed
-// "Advanced options" section, shown with thousand separators).
+// "Advanced options" section, shown with thousand separators). PLAN-06's
+// Recent trips list has its own file (TripPlannerPage.recentTrips.test.jsx).
 //
 // apiFetch now fires twice per successful flow (a GET for fuel prices
 // on mount, then the POST estimate on submit) — tests that don't care
@@ -56,12 +57,17 @@ vi.mock("../lib/apiClient.js", () => ({
 }));
 
 /** Wires supabase.from("cars").select().eq().order() to resolve to the
- * given list of the user's cars (CAR-37 loads all of them, not just one). */
+ * given list of the user's cars (CAR-37 loads all of them, not just one).
+ * PLAN-06: the Recent trips read (from("trips")...limit()) gets no trips; its
+ * own behavior is tested in TripPlannerPage.recentTrips.test.jsx.
+ * @param {object[]} carsArray - the user's cars.
+ * @returns {void} */
 function mockCarsLookup(carsArray) {
   const order = vi.fn().mockResolvedValue({ data: carsArray, error: null });
   const eq = vi.fn(() => ({ order }));
   const select = vi.fn(() => ({ eq }));
-  supabase.from.mockReturnValue({ select });
+  const noTrips = { select: () => ({ eq: () => ({ order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }) }) }) };
+  supabase.from.mockImplementation((table) => (table === "trips" ? noTrips : { select }));
 }
 
 /** Routes apiFetch by path: GET /trip-planner/fuel-prices resolves to
