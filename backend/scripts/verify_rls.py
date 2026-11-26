@@ -11,7 +11,9 @@ uses — that:
   8. anonymous visitors (public anon key only) can do nothing,
   9. fuel_prices is service-role only,
  10. fuel_logs (CAR-53): owner-only read/insert, no cross-user car references, no
-     edit/delete, nothing for anonymous visitors, and the database's own input limits.
+     edit by anyone, nothing for anonymous visitors, and the database's own input limits.
+     PLAN-05: the owner may delete their own fill-up (checked on a throwaway row, so the
+     seeded one stays for later checks); user B and anonymous visitors cannot.
      CAR-61 adds the optional odometer_km column: null still accepted, 1-2,000,000
      whole km only, and the same owner-only / no-edit rules apply to it.
  11. maintenance_items / maintenance_records (CAR-62): owner-only read; an item only
@@ -275,12 +277,21 @@ try:
     check("B hands HIS fuel log to A", affected(r) in (0, None) or r.status_code >= 400, f"-> {r.status_code}")
     r = as_(B, "DELETE", f"fuel_logs?id=eq.{A['fuel']}")
     check("B deletes A's fuel log", affected(r) in (0, None), f"-> {r.status_code}")
-    still = svc("GET", f"fuel_logs?id=eq.{A['fuel']}&select=liters,cost_amount").json()
-    check("A's fuel log is intact after B's attempts (verified with the service role)", len(still) == 1 and float(still[0]["liters"]) == 30, str(still))
     r = as_(A, "PATCH", f"fuel_logs?id=eq.{A['fuel']}", json={"liters": 1})
-    check("even the OWNER cannot edit a fuel log (add and view only)", affected(r) in (0, None), f"-> {r.status_code}")
-    r = as_(A, "DELETE", f"fuel_logs?id=eq.{A['fuel']}")
-    check("even the OWNER cannot delete a fuel log (add and view only)", affected(r) in (0, None), f"-> {r.status_code}")
+    check("even the OWNER cannot edit a fuel log (delete and re-add instead)", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(None, "PATCH", f"fuel_logs?id=eq.{A['fuel']}", json={"liters": 1})
+    check("anon edits a fuel log", affected(r) in (0, None), f"-> {r.status_code}")
+    r = as_(None, "DELETE", f"fuel_logs?id=eq.{A['fuel']}")
+    check("anon deletes a fuel log", affected(r) in (0, None), f"-> {r.status_code}")
+    still = svc("GET", f"fuel_logs?id=eq.{A['fuel']}&select=liters,cost_amount").json()
+    check("A's fuel log is intact after B's, the owner's and anon's edit/delete attempts (service role)", len(still) == 1 and float(still[0]["liters"]) == 30, str(still))
+    # PLAN-05: the owner's own delete, on a throwaway row so A['fuel'] stays for the checks below.
+    r = as_(A, "POST", "fuel_logs", json={"user_id": A["id"], "car_id": A["car"], "filled_at": "2026-09-23", "liters": 12, "cost_amount": 18, "cost_currency": "USD"})
+    tmp_fuel = r.json()[0]["id"] if r.status_code == 201 else None
+    r = as_(A, "DELETE", f"fuel_logs?id=eq.{tmp_fuel}")
+    works("A deletes HIS OWN fill-up (PLAN-05)", tmp_fuel is not None and affected(r) == 1, f"-> {r.status_code}")
+    gone = svc("GET", f"fuel_logs?id=eq.{tmp_fuel}&select=id").json() if tmp_fuel else None
+    works("A's deleted fill-up is really gone (service role)", gone == [], str(gone))
     r = as_(None, "GET", "fuel_logs?select=*")
     check("anon reads fuel_logs", affected(r) in (0, None), f"-> {r.status_code}")
     r = as_(None, "POST", "fuel_logs", json={"user_id": A["id"], "car_id": A["car"], "filled_at": "2026-09-21", "liters": 10, "cost_amount": 10, "cost_currency": "USD"})

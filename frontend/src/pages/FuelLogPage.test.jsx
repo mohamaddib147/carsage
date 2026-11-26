@@ -66,9 +66,11 @@ vi.mock("../lib/supabaseClient.js", () => ({
  * `logsByCar[carId]` is the reply to that car's list query — a {data, error}
  * object, or a Promise for a reply that arrives late. `insertReply(row)` builds
  * the reply to an insert (default: echoes the row back with an id).
+ * `deleteReply(id)` builds the reply to a delete (default: the deleted row's id
+ * comes back, as PostgREST returns it when row-level security allows the delete).
  */
-function mockDatabase({ cars = [CAR_1], logsByCar = {}, insertReply } = {}) {
-  const calls = { carsEq: [], logQueries: [], inserts: [] };
+function mockDatabase({ cars = [CAR_1], logsByCar = {}, insertReply, deleteReply } = {}) {
+  const calls = { carsEq: [], logQueries: [], inserts: [], deletes: [] };
   let nextId = 1;
 
   supabase.from.mockImplementation((table) => {
@@ -97,6 +99,14 @@ function mockDatabase({ cars = [CAR_1], logsByCar = {}, insertReply } = {}) {
             { data: { id: `new-${nextId++}`, ...row, created_at: "2026-09-21T12:00:00Z" }, error: null };
           return { select: vi.fn(() => ({ single: vi.fn(() => Promise.resolve(reply)) })) };
         }),
+        delete: vi.fn(() => ({
+          eq: vi.fn((column, id) => ({
+            select: vi.fn((columns) => {
+              calls.deletes.push({ column, id, columns });
+              return Promise.resolve(deleteReply?.(id) ?? { data: [{ id }], error: null });
+            }),
+          })),
+        })),
       };
     }
     throw new Error(`unexpected table ${table}`);
@@ -157,9 +167,9 @@ function tableRows() {
   return allCells().map((cells) => cells.slice(0, 5));
 }
 
-/** The body rows' CAR-61 cells: [Odometer, km/L]. */
+/** The body rows' CAR-61 cells: [Odometer, km/L] (the Delete column after them is left out). */
 function odometerCells() {
-  return allCells().map((cells) => cells.slice(5));
+  return allCells().map((cells) => cells.slice(5, 7));
 }
 
 async function fillForm(user, { liters, cost }) {
@@ -939,8 +949,9 @@ describe("FuelLogPage — odometer readings and real km/L (CAR-61)", () => {
     renderPage();
     await screen.findByRole("table");
 
+    // "Actions" (screen-reader only) is PLAN-05's Delete column, last as on the Expenses table.
     expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
-      "Date", "Liters", "Cost", "Price per liter", "Price per 20 L", "Odometer", "km/L",
+      "Date", "Liters", "Cost", "Price per liter", "Price per 20 L", "Odometer", "km/L", "Actions",
     ]);
   });
 
@@ -1593,5 +1604,130 @@ describe("FuelLogPage — skip-the-odometer prompt (dashboard fix)", () => {
     renderPage();
 
     expect(await screen.findByText(/fuel economy and service reminders need it/)).toBeInTheDocument();
+  });
+});
+
+describe("FuelLogPage — deleting a fill-up (PLAN-05)", () => {
+  // Three odometer readings: 84,250 -> 84,610 km on 40 L (9.0 km/L), then -> 85,110 km on 50 L.
+  // Together: 860 km / 90 L = 9.6 km/L; without the newest, the average falls back to 9.0.
+  const RATED_CAR = { ...CAR_1, fuel_efficiency: 12 };
+  const ODO_1 = { id: "odo-1", filled_at: "2026-10-01", liters: "35", cost_amount: "50", cost_currency: "USD", created_at: "2026-10-01T09:00:00Z", odometer_km: 84250 };
+  const ODO_2 = { id: "odo-2", filled_at: "2026-10-09", liters: "40", cost_amount: "57", cost_currency: "USD", created_at: "2026-10-09T09:00:00Z", odometer_km: 84610 };
+  const ODO_3 = { id: "odo-3", filled_at: "2026-10-20", liters: "50", cost_amount: "70", cost_currency: "USD", created_at: "2026-10-20T09:00:00Z", odometer_km: 85110 };
+  const LEGACY = { ...ROW_A, odometer_km: null };
+
+  /** The "Your real average" block under the chart (throws if it is not shown). */
+  function averageBlock() {
+    return screen.getByText(/Your real average/).closest(".fuel-log-real-average");
+  }
+
+  /** The first cell (the date) of each body row. */
+  function rowDates() {
+    return allCells().map((cells) => cells[0]);
+  }
+
+  it("deletes a fill-up after the user confirms, and the list and real km/L update without a reload (normal case)", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ cars: [RATED_CAR], logsByCar: { "car-1": { data: [ODO_3, ODO_2, ODO_1], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    expect(averageBlock()).toHaveTextContent("Your real average: 9.6 km/L");
+
+    await user.click(screen.getByRole("button", { name: "Delete the fill-up of 20 Oct 2026" }));
+    const confirm = screen.getByRole("alert");
+    expect(confirm).toHaveTextContent("Delete this fill-up?");
+    // Nothing is deleted until the user confirms.
+    expect(calls.deletes).toEqual([]);
+    await user.click(within(confirm).getByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByText("Fill-up of 20 Oct 2026 deleted.")).toBeInTheDocument();
+    // Scoped by id, and the deleted row is asked back so a refusal can be told apart from success.
+    expect(calls.deletes).toEqual([{ column: "id", id: "odo-3", columns: "id" }]);
+    expect(rowDates()).toEqual(["9 Oct 2026", "1 Oct 2026"]);
+    expect(averageBlock()).toHaveTextContent("Your real average: 9.0 km/L");
+    expect(odometerCells()).toEqual([["84,610 km", "9.0"], ["84,250 km", "-"]]);
+    // Removed from the list held on screen; the log was not read again.
+    expect(calls.logQueries).toHaveLength(1);
+  });
+
+  it("keeps the fill-up when the user chooses 'Keep it'", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [ROW_B, ROW_A], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    await user.click(screen.getByRole("button", { name: "Delete the fill-up of 21 Sep 2026" }));
+    await user.click(screen.getByRole("button", { name: "Keep it" }));
+
+    expect(calls.deletes).toEqual([]);
+    expect(rowDates()).toEqual(["21 Sep 2026", "1 Sep 2026"]);
+    expect(screen.queryByText("Delete this fill-up?")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete the fill-up of 21 Sep 2026" })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["an error", { data: null, error: { code: "42501", message: "permission denied for table fuel_logs" } }, "You don't have permission to do that."],
+    // Row-level security filters a refused delete: no error, but no row comes back either.
+    ["no deleted row (filtered by row-level security)", { data: [], error: null }, "Could not delete this fill-up. Please try again."],
+  ])("keeps the row and shows a plain message when the server refuses with %s (invalid case)", async (_label, reply, message) => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ logsByCar: { "car-1": { data: [ROW_B, ROW_A], error: null } }, deleteReply: () => reply });
+
+    renderPage();
+    await screen.findByRole("table");
+    await user.click(screen.getByRole("button", { name: "Delete the fill-up of 21 Sep 2026" }));
+    await user.click(within(screen.getByRole("alert")).getByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(calls.deletes).toHaveLength(1);
+    expect(rowDates()).toEqual(["21 Sep 2026", "1 Sep 2026"]);
+    expect(screen.queryByText(/deleted\.$/)).not.toBeInTheDocument();
+    // The raw database text never reaches the screen.
+    expect(screen.queryByText(/permission denied for table/)).not.toBeInTheDocument();
+  });
+
+  it("keeps keyboard focus in place: on 'Keep it' when the confirm opens, back on Delete after 'Keep it', on the message after a delete", async () => {
+    const user = userEvent.setup();
+    mockDatabase({ logsByCar: { "car-1": { data: [ROW_B, ROW_A], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    screen.getByRole("button", { name: "Delete the fill-up of 21 Sep 2026" }).focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "Keep it" })).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "Delete the fill-up of 21 Sep 2026" })).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    await user.click(within(screen.getByRole("alert")).getByRole("button", { name: "Delete" }));
+    expect(await screen.findByText("Fill-up of 21 Sep 2026 deleted.")).toHaveFocus();
+  });
+
+  it("deleting the only odometer reading leaves no reading to check a new one against (edge case)", async () => {
+    const user = userEvent.setup();
+    const calls = mockDatabase({ cars: [RATED_CAR], logsByCar: { "car-1": { data: [ODO_1, LEGACY], error: null } } });
+
+    renderPage();
+    await screen.findByRole("table");
+    expect(odometerCells()).toEqual([["84,250 km", "-"], ["-", "-"]]);
+
+    await user.click(screen.getByRole("button", { name: "Delete the fill-up of 1 Oct 2026" }));
+    await user.click(within(screen.getByRole("alert")).getByRole("button", { name: "Delete" }));
+    await screen.findByText("Fill-up of 1 Oct 2026 deleted.");
+
+    expect(rowDates()).toEqual(["1 Sep 2026"]);
+    expect(odometerCells()).toEqual([["-", "-"]]);
+    expect(screen.queryByText(/Your real average/)).not.toBeInTheDocument();
+
+    // A reading far below the deleted 84,250 km saves with no "lower than a previous reading" warning.
+    await fillForm(user, { liters: "30", cost: "45" });
+    await user.type(screen.getByLabelText("Odometer (km)"), "500");
+    await user.click(screen.getByRole("button", { name: "Add Fill-Up" }));
+
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(calls.inserts[0]).toMatchObject({ odometer_km: 500 });
+    expect(screen.queryByRole("button", { name: "Save anyway" })).not.toBeInTheDocument();
   });
 });

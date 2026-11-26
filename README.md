@@ -183,6 +183,7 @@ CarSage uses a Supabase project (PostgreSQL + Auth). The database is described b
 | 25 | `2026-10-21_remove_registration_scan_limit.sql` | Data only: deletes the `registration_scan` row from `api_limits` (that feature was removed). Run in the SQL editor, so it has no migration-history version. |
 | 26 | `2026-10-24_expense_receipts_up_to_three.sql` | An expense can have up to 3 receipt photos (it was 1): drops the unique constraint on `car_expense_receipts.expense_id`, makes `(expense_id, storage_path)` unique, and recreates the insert policy so the database still refuses a 4th receipt on one expense. Run in the SQL editor, so it has no migration-history version. It can be rolled back only while no expense has more than one receipt. |
 | 27 | `2026-10-24_vin_format_check.sql` | A VIN on `cars` is empty or exactly 17 letters and digits with no I, O or Q (either case): a `check` constraint added `NOT VALID`, so new and updated rows are checked and existing rows are not scanned. Run in the SQL editor, so it has no migration-history version. Roll back by dropping `cars_vin_format_check`. |
+| 28 | `2026-11-26_fuel_logs_owner_delete.sql` | The owner of a fill-up may delete it: a delete policy on `fuel_logs` scoped to the caller's own rows, and the matching delete grant. Fill-ups are still never edited (delete and re-add). Run in the SQL editor, so it has no migration-history version. Roll back by dropping the policy and revoking the grant. |
 
    The file names sort in the order they must be run. Files 1 to 11 are verbatim copies of the migration history; files 12 to 27 were checked against what is applied to the project.
 4. **Copy your keys** (Project Settings → API): the project URL, the `anon` key (frontend) and the `service_role` key (backend only) into the two `.env` files.
@@ -220,6 +221,7 @@ The `fuel_prices` table starts empty; the backend fills it the first time fuel p
    - Pick the car (if you have several); every car keeps its own log.
    - Enter the **Date** (today by default), the **Liters** and the **Cost**, choose whether the cost is in USD or LBP (it starts on the currency you picked in the header), and choose **Add Fill-Up**. All three are required and must be greater than 0; the date can't be in the future.
    - The list shows that car's fill-ups newest first, with the price per liter and per 20 liters of each. A car with no fill-ups yet shows an **Add your first fill-up** prompt.
+   - A fill-up can't be edited. To fix a mistake, choose **Delete** on its row, confirm, and add it again; the figures update straight away.
 8. **Log out** from the header when you are done.
 
 ## API reference

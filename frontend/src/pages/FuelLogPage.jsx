@@ -32,8 +32,13 @@
 // "Skip the odometer? Fuel economy and service reminders need it." with a "Save without odometer" button, the last
 // step of the same confirm chain (scrolled into view when it appears, since the submit button is further down), and
 // the field's hint says why the reading matters.
+//
+// PLAN-05: each row has a Delete button with the same inline confirm as the Expenses table ("Delete this fill-up?",
+// Delete / Keep it). Fill-ups are still never edited: a mistake is deleted and re-added. A deleted row leaves the
+// list held on screen, so the chart, the per-liter figures and the real km/L recompute without a reload.
 
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useScrollToAlert } from "../lib/scrollToAlert.js";
 import { Link } from "react-router-dom";
 import {
@@ -86,6 +91,7 @@ import { useActiveCar } from "../theme/ActiveCarContext.jsx";
 import { Camera } from "../components/iconsMore.jsx";
 
 const ENTRY_COLUMNS = "id, filled_at, liters, cost_amount, cost_currency, created_at, odometer_km";
+const DELETE_FAILED = "Could not delete this fill-up. Please try again.";
 
 /**
  * "Your real average: 9.0 km/L (rated: 12.0 km/L)" under the chart, plus whether
@@ -142,7 +148,8 @@ function carLabel(car) {
 
 /**
  * Fuel Log screen: the user's cars (switchable), an add-a-fill-up form, and the
- * selected car's fill-ups with the price per liter of each.
+ * selected car's fill-ups with the price per liter of each; each fill-up can be
+ * deleted after a confirm (PLAN-05), never edited.
  * @returns {JSX.Element}
  */
 function FuelLogPage() {
@@ -196,6 +203,13 @@ function FuelLogPage() {
   const formRef = useRef(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  // PLAN-05: the row whose "Delete this fill-up?" confirm is open, and the outcome shown above the table.
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteNotice, setDeleteNotice] = useState("");
+  const historyRef = useRef(null);
+  const deleteNoticeRef = useRef(null);
 
   const [scanPumpLoading, setScanPumpLoading] = useState(false);
   const [scanPumpError, setScanPumpError] = useState("");
@@ -310,16 +324,57 @@ function FuelLogPage() {
     };
   }, [user]);
 
-  /** Switching cars drops any message about the previous car's form; what was
-   * typed stays. CAR-55: also makes the picked car the active one for
-   * site-wide brand theming. */
+  /** Switching cars drops any message about the previous car's form or list (and an open
+   * delete confirm); what was typed stays. CAR-55: also makes the picked car the active one
+   * for site-wide brand theming.
+   * @param {string} carId - the picked car's id.
+   */
   function handleCarChange(carId) {
     setSelectedCarId(carId);
     setFieldErrors({});
     setSaveError("");
     setSaved(false);
     setOrderWarning("");
+    setConfirmDeleteId(null);
+    setDeleteError("");
+    setDeleteNotice("");
     setActiveCarId(carId, cars.find((car) => car.id === carId)?.make);
+  }
+
+  /**
+   * PLAN-05: deletes one fill-up the user has confirmed, then drops it from the list held on screen (only if that
+   * list is still this car's), so every figure recomputes without a reload. Row-level security filters a refused
+   * delete instead of raising an error, so the deleted row is asked back and an empty reply counts as a refusal;
+   * either way the row stays and a plain message is shown above the table. On success, keyboard focus moves to the
+   * "deleted" message, since the focused button has just left the page with its row.
+   * @param {{ id: string, filled_at: string }} entry - the fill-up to delete.
+   * @returns {Promise<void>}
+   */
+  async function handleDelete(entry) {
+    const carId = selectedCarId;
+    setDeleteError("");
+    setDeleteNotice("");
+    setDeleting(true);
+    try {
+      const { data, error } = await supabase.from("fuel_logs").delete().eq("id", entry.id).select("id");
+      if (error || !data?.length) {
+        setDeleteError(describeActionError(error, DELETE_FAILED));
+        scrollToAlert(historyRef.current);
+        return;
+      }
+      flushSync(() => {
+        setLoaded((previous) =>
+          previous.carId === carId
+            ? { ...previous, entries: previous.entries.filter((row) => row.id !== entry.id) }
+            : previous,
+        );
+        setConfirmDeleteId(null);
+        setDeleteNotice(`Fill-up of ${formatFillDate(entry.filled_at)} deleted.`);
+      });
+      deleteNoticeRef.current?.focus();
+    } finally {
+      setDeleting(false);
+    }
   }
 
   /** @param {import('react').FormEvent} event */
@@ -849,8 +904,10 @@ function FuelLogPage() {
         </section>
       )}
 
-      <section className="dashboard-section" aria-label="Fill-up history">
+      <section className="dashboard-section" aria-label="Fill-up history" ref={historyRef}>
         <h2>Fill-ups{label ? ` for ${label}` : ""}</h2>
+        {deleteError && <p role="alert" className="auth-form__error">{deleteError}</p>}
+        {deleteNotice && <p role="status" className="fuel-log-saved" tabIndex={-1} ref={deleteNoticeRef}>{deleteNotice}</p>}
 
         {entries === null ? (
           <p>Loading fill-ups...</p>
@@ -886,6 +943,7 @@ function FuelLogPage() {
                   <th scope="col">Price per 20 L</th>
                   <th scope="col">Odometer</th>
                   <th scope="col">km/L</th>
+                  <th scope="col"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -935,6 +993,38 @@ function FuelLogPage() {
                           >
                             - (check reading)
                           </span>
+                        )}
+                      </td>
+                      <td>
+                        {confirmDeleteId === entry.id ? (
+                          <span role="alert" className="costs-confirm">
+                            Delete this fill-up?{" "}
+                            <button type="button" className="maintenance-danger-btn" disabled={deleting} onClick={() => handleDelete(entry)}>
+                              Delete
+                            </button>{" "}
+                            {/* Focus starts on the safe choice; "Keep it" hands it back to this row's Delete button. */}
+                            <button
+                              type="button"
+                              className="maintenance-link-btn"
+                              autoFocus
+                              onClick={(event) => {
+                                const cell = event.currentTarget.closest("td");
+                                flushSync(() => setConfirmDeleteId(null));
+                                cell.querySelector("button")?.focus();
+                              }}
+                            >
+                              Keep it
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="maintenance-link-btn maintenance-link-btn--danger"
+                            aria-label={`Delete the fill-up of ${formatFillDate(entry.filled_at)}`}
+                            onClick={() => setConfirmDeleteId(entry.id)}
+                          >
+                            Delete
+                          </button>
                         )}
                       </td>
                     </tr>
