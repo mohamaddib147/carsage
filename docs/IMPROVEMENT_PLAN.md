@@ -1678,14 +1678,15 @@ These are the still-open tickets from `docs/UI_TICKETS.md` that are worth doing.
 - **depends on:** PLAN-01
 - **decision needed:** no (the ticket was approved on 2026-10-21; wording of the two verdict labels stays as it is unless I say otherwise)
 - **suggested model:** Opus (safety-advice hierarchy)
-- **skills:** design:design-critique, browser-automation
+- **skills:** design:design-critique, browser-automation, impeccable
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-23): Make the advisor's verdict the most visible thing in each reply (UI_TICKETS T16, part 1)
-SKILLS: use design:design-critique, browser-automation. If one is not installed, say so in the report and carry on.
+SKILLS: use design:design-critique, browser-automation, impeccable. If one is not installed, say so in the report and carry on.
+Use Impeccable's critique and polish only; do not sign in, do not run live mode.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1745,14 +1746,15 @@ Then stop and wait for my OK.
 - **depends on:** PLAN-01; do PLAN-05 first if approved (it adds a delete button to the same rows)
 - **decision needed:** yes (photo-adjacent markup, as T17 says)
 - **suggested model:** Sonnet
-- **skills:** design:design-critique, browser-automation
+- **skills:** design:design-critique, browser-automation, impeccable
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-24): Fuel Log on a phone: readable history and one privacy notice (UI_TICKETS T17)
-SKILLS: use design:design-critique, browser-automation. If one is not installed, say so in the report and carry on.
+SKILLS: use design:design-critique, browser-automation, impeccable. If one is not installed, say so in the report and carry on.
+Use Impeccable's critique and polish only; do not sign in, do not run live mode.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1810,14 +1812,15 @@ Then stop and wait for my OK.
 - **depends on:** PLAN-01
 - **decision needed:** no (approved 2026-10-21)
 - **suggested model:** Sonnet
-- **skills:** design:design-critique, browser-automation
+- **skills:** design:design-critique, browser-automation, impeccable
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-25): Car Profile: title first, "Not set" for blanks, delete in its own danger area (UI_TICKETS T12)
-SKILLS: use design:design-critique, browser-automation. If one is not installed, say so in the report and carry on.
+SKILLS: use design:design-critique, browser-automation, impeccable. If one is not installed, say so in the report and carry on.
+Use Impeccable's critique and polish only; do not sign in, do not run live mode.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1874,14 +1877,15 @@ Then stop and wait for my OK.
 - **depends on:** PLAN-01; coordinate with PLAN-06
 - **decision needed:** no (approved 2026-10-21)
 - **suggested model:** Sonnet
-- **skills:** design:design-critique, browser-automation
+- **skills:** design:design-critique, browser-automation, impeccable
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-26): Trip Planner on desktop: results beside the form (UI_TICKETS T14)
-SKILLS: use design:design-critique, browser-automation. If one is not installed, say so in the report and carry on.
+SKILLS: use design:design-critique, browser-automation, impeccable. If one is not installed, say so in the report and carry on.
+Use Impeccable's critique and polish only; do not sign in, do not run live mode.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
@@ -1938,14 +1942,15 @@ Then stop and wait for my OK.
 - **depends on:** nothing
 - **decision needed:** yes (wording is yours to approve)
 - **suggested model:** Sonnet
-- **skills:** design:ux-copy, design:design-critique, browser-automation
+- **skills:** design:ux-copy, impeccable, browser-automation
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
 
 TASK (PLAN-27): Bring the footer, the search description and the README up to date with what the app does
-SKILLS: use design:ux-copy, design:design-critique, browser-automation. If one is not installed, say so in the report and carry on.
+SKILLS: use design:ux-copy, impeccable, browser-automation. If one is not installed, say so in the report and carry on.
+Use Impeccable's critique and polish only; do not sign in, do not run live mode.
 
 GATES. Do these first, in order. If any one fails, STOP and tell me which.
 1. Work in C:\Users\user\Desktop\carsage\carsage. `git rev-parse --show-toplevel` must print that folder, not a parent folder (the home folder is a separate git repository).
