@@ -207,6 +207,8 @@ function TripPlannerPage() {
   // QA fix: scrolls the first message into view when a tap on Plan Trip stops with one (see lib/scrollToAlert.js).
   const scrollToAlert = useScrollToAlert();
   const [submitting, setSubmitting] = useState(false);
+  // PLAN-07: `submitting` only disables the button after a re-render; this ref stops a second call in the same tick.
+  const submittingRef = useRef(false);
   const [result, setResult] = useState(null);
   // The route the current result was actually computed for — captured at
   // submit time so the decorative map (CAR-48) can't drift from the result
@@ -225,6 +227,7 @@ function TripPlannerPage() {
   const [recent, setRecent] = useState({ carId: "", trips: [], error: "" });
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const deletingRef = useRef(false);
   const [deleteError, setDeleteError] = useState("");
   const [deleteNotice, setDeleteNotice] = useState("");
   const recentRef = useRef(null);
@@ -350,6 +353,8 @@ function TripPlannerPage() {
    * @returns {Promise<void>}
    */
   async function handleDeleteTrip(trip) {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
     const carId = selectedCarId;
     setDeleteError("");
     setDeleteNotice("");
@@ -374,6 +379,7 @@ function TripPlannerPage() {
       });
       deleteNoticeRef.current?.focus();
     } finally {
+      deletingRef.current = false;
       setDeleting(false);
     }
   }
@@ -409,44 +415,46 @@ function TripPlannerPage() {
    */
   async function handleSubmit(event) {
     event.preventDefault();
-    setSubmitError("");
-    setResult(null);
-
-    if (!destination.trim()) {
-      setDestinationError("Destination is required.");
-      scrollToAlert(event.currentTarget);
-      return;
-    }
-    setDestinationError("");
-
-    // CAR-27: the backend has no saved default location on a user's
-    // profile yet, so it can't calculate a route without an explicit
-    // origin — validate that here instead of letting the request 400.
-    if (!origin.trim()) {
-      setOriginError("Starting location is required.");
-      scrollToAlert(event.currentTarget);
-      return;
-    }
-    setOriginError("");
-
-    // Same 1 - 10,000,000 bound the server enforces; show it instead of sending.
-    if (getFuelPriceError(fuelPriceInput)) {
-      setAdvancedOpen(true);
-      scrollToAlert(event.currentTarget);
-      return;
-    }
-
-    const parsedFuelPrice = Number(fuelPriceInput);
-    const fuelPriceOverride =
-      Number.isFinite(parsedFuelPrice) && parsedFuelPrice > 0
-        ? parsedFuelPrice
-        : undefined;
-
-    // Captured before the request, so edits or a car switch while it runs can't relabel the result or the new row.
-    const carId = selectedCarId;
-    const route = { origin: origin.trim(), destination: destination.trim() };
-    setSubmitting(true);
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     try {
+      setSubmitError("");
+      setResult(null);
+
+      if (!destination.trim()) {
+        setDestinationError("Destination is required.");
+        scrollToAlert(event.currentTarget);
+        return;
+      }
+      setDestinationError("");
+
+      // CAR-27: the backend has no saved default location on a user's
+      // profile yet, so it can't calculate a route without an explicit
+      // origin — validate that here instead of letting the request 400.
+      if (!origin.trim()) {
+        setOriginError("Starting location is required.");
+        scrollToAlert(event.currentTarget);
+        return;
+      }
+      setOriginError("");
+
+      // Same 1 - 10,000,000 bound the server enforces; show it instead of sending.
+      if (getFuelPriceError(fuelPriceInput)) {
+        setAdvancedOpen(true);
+        scrollToAlert(event.currentTarget);
+        return;
+      }
+
+      const parsedFuelPrice = Number(fuelPriceInput);
+      const fuelPriceOverride =
+        Number.isFinite(parsedFuelPrice) && parsedFuelPrice > 0
+          ? parsedFuelPrice
+          : undefined;
+
+      // Captured before the request, so edits or a car switch while it runs can't relabel the result or the new row.
+      const carId = selectedCarId;
+      const route = { origin: origin.trim(), destination: destination.trim() };
+      setSubmitting(true);
       const data = await apiFetch("/trip-planner/estimate", {
         method: "POST",
         accessToken: session.access_token,
@@ -477,6 +485,7 @@ function TripPlannerPage() {
       setSubmitError(describeApiFetchError(error));
       scrollToAlert();
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }

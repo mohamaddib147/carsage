@@ -24,7 +24,7 @@
 // response shape it doesn't recognize); tests that DO care about the
 // prefill/override behavior mock each path distinctly via mockApiFetch.
 
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1666,5 +1666,36 @@ describe("TripPlannerPage — messages scroll into view on a phone", () => {
     expect(scroll).toHaveBeenCalledTimes(1);
     expect(scroll.mock.contexts[0]).toBe(error);
     expect(scroll).toHaveBeenCalledWith({ block: "center" });
+  });
+});
+
+describe("TripPlannerPage — double tap guard (PLAN-07)", () => {
+  it("asks for one estimate for two submits in one tick, and plans again after a validation stop, a failure and a success", async () => {
+    const user = userEvent.setup();
+    mockCarsLookup([{ id: "car-1" }]);
+    let estimates = 0;
+    apiFetch.mockImplementation((path) => {
+      if (path !== "/trip-planner/estimate") return Promise.resolve({ prices: {}, lbp_per_usd: 89000 });
+      return ++estimates === 1 ? Promise.reject(new Error("boom")) : Promise.resolve(ESTIMATE_90K);
+    });
+    renderPage();
+    await user.type(await screen.findByLabelText(/Starting Location/), "Beirut");
+    const planButton = screen.getByRole("button", { name: "Plan Trip" });
+    await user.click(planButton); // validation stop: no destination
+    await user.type(screen.getByLabelText("Destination *"), "Byblos");
+
+    // Both submits inside one act(), so React cannot re-render (and disable the button) in between.
+    await act(async () => {
+      fireEvent.submit(planButton.closest("form")); // the one estimate fails
+      fireEvent.submit(planButton.closest("form"));
+    });
+    expect(estimates).toBe(1);
+
+    await user.click(planButton);
+    await screen.findByText("Distance");
+    expect(estimates).toBe(2);
+
+    await user.click(planButton);
+    await waitFor(() => expect(estimates).toBe(3));
   });
 });

@@ -184,6 +184,8 @@ function CarOnboardingPage() {
   // QA fix: scrolls the first message into view when a tap on Add Car stops with one (see lib/scrollToAlert.js).
   const scrollToAlert = useScrollToAlert();
   const [submitting, setSubmitting] = useState(false);
+  // PLAN-07: `submitting` only disables the button after a re-render; this ref stops a second call in the same tick.
+  const submittingRef = useRef(false);
   const [specNotice, setSpecNotice] = useState("");
   // True while the spec lookup request is in flight (drives the "Looking up specs" status).
   const [specLoading, setSpecLoading] = useState(false);
@@ -354,20 +356,26 @@ function CarOnboardingPage() {
     return () => clearTimeout(timer);
   }, [form.make, form.model, form.year]);
 
-  /** @param {import('react').FormEvent} event */
+  /**
+   * Validates the form, saves the new car (then its photo, if one was picked) and opens its profile.
+   * @param {import('react').FormEvent} event - the form's submit event.
+   * @returns {Promise<void>}
+   */
   async function handleSubmit(event) {
     event.preventDefault();
-    setSubmitError("");
-
-    const errors = validate(form);
-    setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      scrollToAlert(event.currentTarget);
-      return;
-    }
-
-    setSubmitting(true);
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     try {
+      setSubmitError("");
+
+      const errors = validate(form);
+      setFieldErrors(errors);
+      if (Object.keys(errors).length > 0) {
+        scrollToAlert(event.currentTarget);
+        return;
+      }
+
+      setSubmitting(true);
       const { data, error } = await supabase
         .from("cars")
         .insert({
@@ -415,6 +423,7 @@ function CarOnboardingPage() {
 
       navigate(`/cars/${data.id}`, { replace: true });
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
