@@ -15,6 +15,7 @@ Each one has my recommendation and what it costs. Nothing that depends on a deci
 2. **Remove Tailwind to free the CSS budget (PLAN-01)?**
    - **Recommendation: yes.** It is the only way found to get real CSS room without raising the budget: 6.00 kB minified and 1.22 kB gzip back, from code nothing uses.
    - **Cost:** 2 to 3 hours. It ends the option of installing shadcn components with the CLI. CLAUDE.md already forbids UI libraries, so nothing planned is lost.
+   - **REPLACED: Tailwind is kept, with automatic source scanning turned off (merged on dev). PLAN-01 must not be run. PLAN-04 is only needed if more CSS room is required.**
 3. **If you refuse 2: raise the CSS budget, or run the slow merge pass (PLAN-04)?**
    - **Recommendation: neither, take 2.** A raise is the easy answer and I am not assuming you will give it. PLAN-04 costs 4 to 6 hours for about 0.2 to 0.4 kB gzip and carries the highest regression risk in this plan.
 4. **Let users delete a fill-up (PLAN-05)?** It needs a new DELETE policy on the live `fuel_logs` table and reverses the earlier "fill-ups are never deleted" rule that `verify_rls.py` asserts.
@@ -57,6 +58,7 @@ Each one has my recommendation and what it costs. Nothing that depends on a deci
 - PLAN-03: done (merged on dev).
 
 1. **Get CSS room back without raising the budget (PLAN-01).** The stylesheet is 72.75 kB against a 73 kB budget, so almost no visual change can ship. Tailwind is still wired in from the abandoned component-library experiment and writes about 30 utility classes into the stylesheet that nothing uses. Removing it frees 6.00 kB minified and 1.22 kB gzip. Everything visual in this plan waits on this one item. The hand-written CSS itself has no dead classes (381 checked, 0 dead), so there is no second easy win.
+   - **REPLACED: Tailwind is kept, with automatic source scanning turned off (merged on dev). PLAN-01 must not be run. PLAN-04 is only needed if more CSS room is required.**
 2. **Give users control of what they have stored (PLAN-05, PLAN-06).** A mistyped fill-up can never be removed and quietly corrupts the cost totals, the real fuel economy and the trip estimates built on it. Trips are worse in a different way: every estimate saves the user's start and destination addresses, and no screen shows or deletes them. These are the two places where the app keeps data the user cannot manage.
 3. **Cap the one endpoint that costs money (PLAN-10) and make its failures readable (PLAN-11).** The AI and camera endpoints have daily limits enforced in the database. The Trip Planner estimate, which calls a billed Google API on every press, has none. Its errors also all look the same and are never logged, which is the likely reason one 400 was seen in QA and never reproduced.
 4. **Prove the security that the code claims (PLAN-15, PLAN-14, PLAN-16, PLAN-29, PLAN-02).** The code review found no injection, no leaked secret, no raw error text and no unauthenticated route. But the proof is missing: the live row-level-security test has never run, all 1869 frontend tests fake the database, the site sends no security headers, three dashboard settings are unconfirmed, nothing runs the tests automatically, and the bundle check passes on a build that cannot run.
@@ -156,6 +158,8 @@ Nothing visual can ship until the stylesheet has room. PLAN-01 gets that room by
 
 ### PLAN-01 · Repo health / CSS budget · Remove the unused Tailwind layer to free 6.00 kB of CSS
 
+> **REPLACED: Tailwind is kept, with automatic source scanning turned off (merged on dev). PLAN-01 must not be run. PLAN-04 is only needed if more CSS room is required.**
+
 - **problem:** Tailwind was wired in for shadcn and Aceternity components that were never added (Aceternity is now banned by CLAUDE.md). Tailwind still scans the source and writes about 30 utility classes into the stylesheet because ordinary words in the code look like class names (flex, hidden, container, table, filter, ring). Nothing uses them. They cost 6.00 kB minified and 1.22 kB gzip, which is 24 times the headroom left.
 - **evidence:** Build of 2026-11-16: CSS 72,751 B (12,391 gzip); everything from `@layer properties` to the end is Tailwind output: 6,003 B (1,223 gzip). Without it: 66,748 B / 11,168 gzip. Only two emitted names are used as a `className` in JSX (`sr-only`, `hidden`) and both are also defined in `frontend/src/index.css`. `frontend/src/lib/utils.js` (`cn`) has no importer. `frontend/src/tailwind.css` is imported by `frontend/src/main.jsx`; the plugin is in `frontend/vite.config.js`; `frontend/components.json` is the shadcn config. Dead-class scan of `index.css`: 381 classes, 0 dead (14 are built at run time from a modifier), so the hand-written CSS has no cheap deletions.
 - **user impact:** Nobody sees a change. Every later visual item becomes possible: headroom goes from 0.25 kB min / 0.61 kB gzip to about 6.25 / 1.83 without raising the budget. First-time visitors download 1.2 kB less.
@@ -164,12 +168,15 @@ Nothing visual can ship until the stylesheet has room. PLAN-01 gets that room by
 - **budget cost:** CSS about -6.0 kB min / -1.2 kB gzip. JS none (`cn` is tree-shaken today).
 - **depends on:** nothing
 - **decision needed:** yes (it ends the shadcn CLI route for good; see Decision 2)
+- **status:** REPLACED: Tailwind is kept, with automatic source scanning turned off (merged on dev). PLAN-01 must not be run. PLAN-04 is only needed if more CSS room is required.
 - **suggested model:** Sonnet (mechanical, but verify carefully)
 - **skills:** ponytail:ponytail-audit, code-review
 - **PROMPT:**
 
 ````text
 You are working on CarSage (React and Vite frontend, FastAPI backend, Supabase). This prompt is complete on its own: assume you remember nothing from any earlier session.
+
+DO NOT RUN THIS PROMPT. REPLACED: Tailwind is kept, with automatic source scanning turned off (merged on dev). PLAN-01 must not be run. PLAN-04 is only needed if more CSS room is required. If you were given this prompt, change nothing, say this, and stop.
 
 TASK (PLAN-01): Remove the unused Tailwind layer to free 6.00 kB of CSS
 SKILLS: use ponytail:ponytail-audit, code-review. If one is not installed, say so in the report and carry on.
@@ -374,6 +381,7 @@ Then stop and wait for my OK.
 - **risk:** High for the gain: merging selectors changes rule order, and order decides which rule wins. Every screen needs a before and after screenshot at both widths.
 - **budget cost:** CSS about -1.5 to -2.5 kB min / -0.2 to -0.4 kB gzip (estimate)
 - **depends on:** nothing (skip it if PLAN-01 ships)
+- **dependency update:** Tailwind is kept, with automatic source scanning turned off (merged on dev). PLAN-01 must not be run. PLAN-04 is only needed if more CSS room is required.
 - **decision needed:** yes (only run it if you refuse PLAN-01)
 - **suggested model:** Opus (cascade order is subtle)
 - **skills:** ponytail:ponytail-audit, code-review
